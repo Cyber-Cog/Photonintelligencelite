@@ -1,0 +1,22 @@
+[
+  {
+    "severity": "minor",
+    "where": "Landing",
+    "text": "Marketing page is long; module catalog (Disconnected strings etc.) not listed above the fold"
+  },
+  {
+    "severity": "minor",
+    "where": "Raw data",
+    "text": "Empty table messaging could confuse after a successful demo"
+  },
+  {
+    "severity": "major",
+    "where": "Setup",
+    "text": "Long single page (1621px overflow) — mapping + plant + architecture compete; easy to miss required fields"
+  },
+  {
+    "severity": "minor",
+    "where": "Setup",
+    "text": "Primary action may sit below the fold on long Setup forms"
+  }
+]

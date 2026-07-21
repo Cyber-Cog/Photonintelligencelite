@@ -1,0 +1,79 @@
+# Named, overridable algorithm thresholds. Defaults ported from the existing PIC codebase's
+# env-overridable constants (see docs/algorithm_parity.md for the source of each value).
+# Per-job overrides are validated against this schema and always recorded in the
+# result's `thresholds_used` field — never silently applied.
+
+disconnected_strings:
+  irradiance_min_w_m2: 150.0
+  irradiance_max_w_m2: 1200.0
+  leakage_irradiance_max_w_m2: 200.0
+  leakage_current_min_a: 20.0
+  isc_stc_a: 10.0
+  top_percentile: 0.25
+  const_delta_tolerance: 0.01
+  const_consecutive_threshold: 30
+  const_flat_ratio_min: 0.995
+  const_unique_max: 3
+  persistence_minutes: 360
+  recovery_minutes: 15
+  current_drop_pct: 0.30
+  missing_string_tolerance: 0.85
+  rolling_median_window: 5
+  energy_voltage_min_v: 50.0
+  energy_peer_relative_band: 0.45
+  min_energy_dt_sec: 30
+  max_energy_dt_sec: 900
+
+module_damage:
+  bypass_pct_lo: 0.03
+  bypass_pct_hi: 0.08
+  damage_pct_min: 0.08
+  damage_pct_max: 0.30
+  min_persist_samples: 4
+  default_dc_kw_per_scb: 33.6
+
+clipping_power:
+  rated_hit_ratio: 0.97
+  gti_floor_w_m2: 150.0
+  healthy_gti_min_w_m2: 200.0
+  healthy_gti_max_w_m2: 700.0
+  healthy_max_of_rated: 0.85
+  noise_frac_of_rated: 0.03
+  static_std_frac_rated: 0.015
+  derate_rated_max: 0.95
+  roll_window_minutes: 10
+  min_active_frac: 0.03
+  min_active_abs_kw: 5.0
+  max_dt_hours: 0.0833333
+  persist_min_samples: 3
+  hour_start: 7
+  hour_end: 18
+  min_coverage_frac: 0.40
+  min_healthy_samples: 20
+
+clipping_current:
+  # v1 — new algorithm, not present in the ported PIC codebase. Detects sustained
+  # DC-current saturation at a configured equipment limit under adequate irradiance.
+  current_limit_hit_ratio: 0.97
+  irradiance_min_w_m2: 400.0
+  persist_min_samples: 3
+  min_active_frac: 0.03
+  version_note: v1 — validate thresholds against real plant data before production use
+
+string_outlier:
+  # Promoted from PIC's fault_engine.py placeholders (low_current_fault, scb_unbalance)
+  low_current_fraction_of_median: 0.5
+  scb_imbalance_fraction: 0.3
+  min_persist_samples: 3
+
+inverter_efficiency:
+  default_target_efficiency_pct: 98.5
+  efficiency_clamp_min_pct: 0.0
+  efficiency_clamp_max_pct: 200.0
+
+box_plot:
+  efficiency_clamp_min_pct: 0.0
+  efficiency_clamp_max_pct: 200.0
+
+kpis:
+  default_pr_benchmark_pct: 80.0

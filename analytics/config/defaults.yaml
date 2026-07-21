@@ -1,0 +1,42 @@
+# Plant-type default overrides layered on top of thresholds.yaml, and deployment limits.
+# Deployment limits here are the *local* defaults; environment variables (see backend/app/config.py)
+# override them per-deployment (e.g. tighter caps on free Render) but never override algorithm
+# thresholds above.
+
+plant_type_overrides:
+  fixed_tilt:
+    monofacial: {}
+    bifacial:
+      module_damage.bypass_pct_lo: 0.025
+  tracker:
+    monofacial:
+      clipping_power.rated_hit_ratio: 0.96
+    bifacial:
+      clipping_power.rated_hit_ratio: 0.96
+      module_damage.bypass_pct_lo: 0.025
+
+deployment_limits:
+  max_compressed_upload_mb: 100
+  max_decompressed_upload_mb: 250
+  job_timeout_sec: 900          # placeholder until Phase 4 benchmark sets the measured value
+  job_timeout_safety_cap_sec: 1800
+  max_rows: 20000000
+  max_columns: 500
+  max_decompression_ratio: 40
+  report_ttl_minutes: 60
+  poll_interval_sec: 2.5
+  analysis_window_min_days: 1
+  analysis_window_max_days: 31
+
+free_tier_deployment_limits:
+  max_compressed_upload_mb: 25
+  max_decompressed_upload_mb: 60
+  job_timeout_sec: 900          # placeholder until Phase 4 benchmark sets the measured value
+  job_timeout_safety_cap_sec: 1500
+  max_rows: 3000000
+  max_columns: 300
+  max_decompression_ratio: 40
+  report_ttl_minutes: 60
+  poll_interval_sec: 2.5
+  analysis_window_min_days: 1
+  analysis_window_max_days: 31

@@ -1,0 +1,175 @@
+# Canonical field -> vendor column aliases (case-insensitive, whitespace/punctuation-normalized
+# before matching). Official Complete Analysis Pack headers are listed first where applicable
+# (see analytics.common.complete_analysis_pack.SCADA_COLUMNS / docs/COMPLETE_DATA_FORMAT.md).
+# Seeded from the existing PIC codebase's signal vocabulary
+# (common/helpers.py VALID_SIGNALS, common/templates.py TEMPLATE_COLUMNS) plus common
+# OEM export conventions (Sungrow, Huawei, ABB/FIMER, SMA, TBEA). Refine as real SCADA
+# exports are supplied — see docs/PRD.md Locked Decisions.
+
+timestamp:
+  - Timestamp
+  - timestamp
+  - date
+  - datetime
+  - date time
+  - date and time
+  - time
+  - timestamp utc
+  - time stamp
+  - record time
+  - data time
+  - date_time
+
+ac_power_kw:
+  - AC Power (kW)
+  - power
+  - power (kw)
+  - power kw
+  - pac
+  - ac power
+  - ac power kw
+  - ac power (kw)
+  - acpower mw
+  - acpower_mw
+  - active power
+  - output power
+  - p
+  - p(kw)
+  - p_ac
+  - active_power_kw
+  - inverter power
+  - kw
+  - real power
+
+dc_power_kw:
+  - DC Power (kW)
+  - dc power
+  - dc power kw
+  - dc power (kw)
+  - dcpower mw
+  - dcpower_mw
+  - pdc
+  - p_dc
+  - dc_power_kw
+  - input power
+
+dc_current_a:
+  - DC Current (A)
+  - current
+  - idc
+  - i
+  - current(a)
+  - dc current
+  - dc current a
+  - dc current (a)
+  - i_dc
+  - string current
+  - scb current
+  - mppt current
+  - input current
+
+dc_voltage_v:
+  - DC Voltage (V)
+  - voltage
+  - vdc
+  - v
+  - voltage(v)
+  - dc voltage
+  - dc voltage v
+  - dc voltage (v)
+  - v_dc
+  - string voltage
+  - scb voltage
+  - mppt voltage
+  - input voltage
+
+poa_w_m2:
+  - Irradiance (W/m2)
+  - poa
+  - poa wm2
+  - poa_w_m2
+  - poa w m2
+  - poa_wm2
+  - irradiance
+  - irradiance w m2
+  - irradiance (w/m2)
+  - poa irradiance
+  - gti
+  - plane of array irradiance
+  - tilted irradiance
+  - irradiance poa
+
+ghi_w_m2:
+  - GHI (W/m2)
+  - ghi
+  - ghi w m2
+  - ghi (w/m2)
+  - global horizontal irradiance
+  - horizontal irradiance
+  - irradiance ghi
+
+module_temp_c:
+  - Module Temp (C)
+  - module temperature
+  - module temp
+  - module temp c
+  - module temp (c)
+  - moduletemp_c
+  - moduletemp c
+  - panel temperature
+  - cell temperature
+  - module_temp_c
+
+ambient_temp_c:
+  - Ambient Temp (C)
+  - ambient temperature
+  - ambient temp
+  - ambient temp c
+  - ambient temp (c)
+  - ambienttemp_c
+  - ambienttemp c
+  - air temperature
+  - amb temp
+
+energy_kwh:
+  - energy
+  - energy(kwh)
+  - energy mwh
+  - energy_mwh
+  - kwh
+  - export energy
+  - cumulative energy
+  - daily energy
+  - energy_kwh
+
+device_id:
+  - Equipment ID
+  - equipment id
+  - equipment_id
+  - device id
+  - device_id
+  - id
+  - unit id
+  - asset id
+
+inverter_id:
+  - inverter
+  - inverter id
+  - inverter_id
+  - inv id
+  - inv
+
+scb_id:
+  - scb
+  - scb id
+  - scb_id
+  - combiner box
+  - combiner box id
+  - mppt id
+  - mppt
+
+string_id:
+  - string
+  - string id
+  - string_id
+  - str id

@@ -1,0 +1,45 @@
+## Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+## Bundled local Postgres (binaries + data dir from start.bat)
+.tools/
+
+## Node / frontend
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+## Env
+.env
+.env.local
+!.env.example
+
+## Data / temp artifacts (never commit operational SCADA data)
+uploads/
+outputs/
+tmp/
+*.csv
+*.csv.gz
+!tests/fixtures/**/*.csv
+!tests/fixtures/**/*.csv.gz
+
+## Database
+*.sqlite3
+pgdata/
+
+## OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+## Logs
+logs/
+*.log

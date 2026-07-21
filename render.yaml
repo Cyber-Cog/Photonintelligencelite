@@ -1,0 +1,60 @@
+# Render Blueprint — PIC Lite API (free tier).
+# Deploy: Render Dashboard → New → Blueprint → connect this repo → apply render.yaml.
+#
+# You paste secrets in the Render dashboard (keys marked sync: false). Do not commit them.
+# Full connect checklist: docs/deployment.md
+#
+# After first deploy, copy the public service URL (https://….onrender.com) for:
+#   - Vercel env VITE_API_BASE_URL
+#   - Render env CORS_ORIGINS / PUBLIC_APP_URL (once you know the Vercel URL)
+
+services:
+  - type: web
+    name: pic-lite-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      # --- Fixed free-tier defaults (committed) ---
+      - key: PIC_LITE_FREE_TIER
+        value: "true"
+      - key: JOB_ROOT
+        value: /tmp/pic-lite-jobs
+      - key: LOG_LEVEL
+        value: INFO
+      # Cap workers on 512 MB free instances
+      - key: MAX_CONCURRENT_JOBS
+        value: "1"
+      # HTTPS cross-origin (Vercel UI → this API): SameSite=None; Secure cookies
+      - key: COOKIE_SECURE
+        value: "true"
+      # No SMTP on free tier — auto-verify signups (set false if you add SMTP)
+      - key: AUTH_AUTO_VERIFY
+        value: "true"
+
+      # --- You set these in the Render dashboard (sync: false) ---
+      # Neon pooled connection string (postgresql://… is OK — app normalizes to +psycopg)
+      - key: DATABASE_URL
+        sync: false
+      # Exact Vercel origin(s), comma-separated, no trailing slash
+      # e.g. https://pic-lite.vercel.app
+      - key: CORS_ORIGINS
+        sync: false
+      # Same as the Vercel app URL (used in email/verify links)
+      - key: PUBLIC_APP_URL
+        sync: false
+      # Long random string (e.g. openssl rand -hex 32)
+      - key: SESSION_SECRET
+        sync: false
+      # First superadmin account (created/repaired on API startup)
+      - key: PIC_SUPERADMIN_EMAIL
+        sync: false
+      - key: PIC_SUPERADMIN_PASSWORD
+        sync: false
+      # Optional:
+      # - key: PIC_SUPERADMIN_NAME
+      #   value: Superadmin
+      # - key: JOB_TIMEOUT_SEC
+      #   sync: false

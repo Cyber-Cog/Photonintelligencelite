@@ -1,0 +1,58 @@
+# Local full stack (Postgres + API + Vite). For free-tier cloud, use Neon + Render + Vercel
+# instead — see docs/deployment.md. Copy .env.example → .env before `docker compose up`.
+name: pic-lite
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: pic_lite
+      POSTGRES_PASSWORD: pic_lite
+      POSTGRES_DB: pic_lite
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pic_lite"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://pic_lite:pic_lite@db:5432/pic_lite
+      JOB_ROOT: /srv/uploads
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./analytics:/srv/analytics
+      - ./backend:/srv/backend
+      - uploads:/srv/uploads
+
+  web:
+    build:
+      context: ./frontend
+    env_file:
+      - .env
+    environment:
+      VITE_API_BASE_URL: http://localhost:8000
+    ports:
+      - "5173:5173"
+    depends_on:
+      - api
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+
+volumes:
+  pgdata:
+  uploads:

@@ -1,0 +1,29 @@
+{
+  "disconnected_string": {
+    "equipment_id": "INV-01-SCB-01-STR-01",
+    "start_hour_offset": 33,
+    "duration_hours": 9
+  },
+  "module_damage": {
+    "equipment_id": "INV-01-SCB-02",
+    "voltage_drop_pct": 0.15,
+    "start_hour_offset": 9,
+    "duration_hours": 56
+  },
+  "bypass_diode": {
+    "equipment_id": "INV-02-SCB-01",
+    "voltage_drop_pct": 0.05,
+    "start_hour_offset": 9,
+    "duration_hours": 56
+  },
+  "string_outlier": {
+    "equipment_id": "INV-02-SCB-03-STR-02",
+    "current_fraction": 0.55,
+    "start_hour_offset": 0,
+    "duration_hours": 72
+  },
+  "low_efficiency_inverter": "INV-02",
+  "high_current_scb": "INV-02-SCB-02",
+  "generated_at": "2026-07-20T06:13:04.391706Z",
+  "seed": 20260101
+}
