@@ -11,6 +11,7 @@ import {
   ApiError,
   authApi,
   getCsrfToken,
+  pingApiHealth,
   setCsrfToken as storeCsrfToken,
   type AuthUser,
 } from "@/api/client";
@@ -18,6 +19,10 @@ import {
 interface AuthContextValue {
   user: AuthUser | null;
   loading: boolean;
+  /** True while bootstrap is retrying a unreachable API. */
+  connecting: boolean;
+  connectAttempt: number;
+  apiUnreachable: boolean;
   csrfToken: string | null;
   smtpConfigured: boolean;
   authAutoVerify: boolean;
@@ -40,6 +45,9 @@ function syncCsrf(token: string | null) {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [connecting, setConnecting] = useState(true);
+  const [connectAttempt, setConnectAttempt] = useState(0);
+  const [apiUnreachable, setApiUnreachable] = useState(false);
   const [csrfToken, setCsrfTokenState] = useState<string | null>(getCsrfToken());
   const [smtpConfigured, setSmtpConfigured] = useState(false);
   const [authAutoVerify, setAuthAutoVerify] = useState(true);
@@ -49,16 +57,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refresh = useCallback(async () => {
+    setConnecting(true);
+    setApiUnreachable(false);
+    setConnectAttempt(0);
     try {
-      const me = await authApi.me();
+      const me = await authApi.meConnecting((p) => setConnectAttempt(p.attempt));
       setUser(me.user);
       setCsrfToken(me.csrf_token || getCsrfToken());
       setSmtpConfigured(me.smtp_configured);
       setAuthAutoVerify(me.auth_auto_verify);
-    } catch {
+      setApiUnreachable(false);
+    } catch (err) {
       setUser(null);
       setCsrfToken(getCsrfToken());
+      if (err instanceof ApiError && err.status === 0) {
+        setApiUnreachable(true);
+      }
     } finally {
+      setConnecting(false);
       setLoading(false);
     }
   }, [setCsrfToken]);
@@ -67,11 +83,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void refresh();
   }, [refresh]);
 
+  // Soft keep-alive while a tab is open (complements GitHub Actions / daily cron).
+  useEffect(() => {
+    pingApiHealth();
+    const id = window.setInterval(() => pingApiHealth(), 4 * 60 * 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
   const login = useCallback(
     async (email: string, password: string) => {
       const res = await authApi.login(email, password);
       setUser(res.user);
       setCsrfToken(res.csrf_token);
+      setApiUnreachable(false);
     },
     [setCsrfToken],
   );
@@ -81,6 +105,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await authApi.signup(email, password, name);
       setUser(res.user);
       setCsrfToken(res.csrf_token);
+      setApiUnreachable(false);
       return { verificationLink: res.verification_link, message: res.message };
     },
     [setCsrfToken],
@@ -115,6 +140,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       user,
       loading,
+      connecting,
+      connectAttempt,
+      apiUnreachable,
       csrfToken,
       smtpConfigured,
       authAutoVerify,
@@ -129,6 +157,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [
       user,
       loading,
+      connecting,
+      connectAttempt,
+      apiUnreachable,
       csrfToken,
       smtpConfigured,
       authAutoVerify,

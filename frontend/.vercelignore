@@ -1,0 +1,16 @@
+.venv
+.tools
+.git
+.cursor
+frontend/node_modules
+node_modules
+**/node_modules
+**/__pycache__
+**/.pytest_cache
+frontend/dist
+uploads
+uat-artifacts
+*.png
+.env
+.env.*
+frontend/.env.local

@@ -10,17 +10,18 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "clsx": "^2.1.1",
+    "plotly.js-dist-min": "^2.35.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^6.28.0",
     "react-plotly.js": "^2.6.0",
-    "plotly.js-dist-min": "^2.35.2",
-    "clsx": "^2.1.1"
+    "react-router-dom": "^6.28.0"
   },
   "devDependencies": {
+    "@types/node": "^22.20.1",
+    "@types/plotly.js": "^2.35.2",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
-    "@types/plotly.js": "^2.35.2",
     "@types/react-plotly.js": "^2.6.3",
     "@typescript-eslint/eslint-plugin": "^8.15.0",
     "@typescript-eslint/parser": "^8.15.0",

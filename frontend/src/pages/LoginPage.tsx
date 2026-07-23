@@ -69,6 +69,11 @@ export function LoginPage() {
         <button type="submit" className="btn-primary w-full" disabled={busy}>
           {busy ? "Signing in…" : "Log in"}
         </button>
+        {busy ? (
+          <p className="text-center text-xs text-stone-500 dark:text-stone-400">
+            Connecting to API if needed — this can take a couple of minutes on a cold start.
+          </p>
+        ) : null}
       </form>
       <p className="mt-6 text-sm text-stone-500">
         No account?{" "}

@@ -52,51 +52,52 @@ has `render.yaml`, `vercel.json`, and Dockerfiles.
 3. Deploy, then open `https://<your-service>.onrender.com/api/health` — expect OK/JSON.
 4. Copy the public API base URL (no path), e.g. `https://pic-lite-api.onrender.com`.
 
-### 3. Vercel (UI)
+### 3. Vercel (UI + same-origin `/api` proxy)
 
-1. Import this repo. Root can stay the repo root (`vercel.json` already `cd`s into `frontend/`),
-   **or** set Root Directory to `frontend/` (then ignore root `vercel.json` build paths).
-2. Environment variable:
-
-   | Variable | Value |
-   |----------|--------|
-   | `VITE_API_BASE_URL` | Render API URL from step 2 (no trailing slash) |
-
-3. Deploy. Copy the production URL (e.g. `https://….vercel.app`).
+1. Import this repo. Root stays the repo root (`vercel.json` builds `frontend/`).
+2. **Do not set** `VITE_API_BASE_URL` on Vercel (or remove it). The browser calls
+   same-origin `/api/*`; `vercel.json` rewrites those to the Render API.
+3. Deploy. Production URL e.g. `https://pic-lite.vercel.app`.
+4. Keep-alive (free-tier sleep):
+   - GitHub Actions workflow `.github/workflows/keepalive.yml` pings Render every 5 minutes
+   - Daily Vercel cron hits `/api/keepalive` (Hobby cannot run sub-daily crons)
+   - Open browser tabs also soft-ping `/api/health` every 4 minutes
 
 ### 4. Wire origins (second Render pass)
 
 1. On Render, set `CORS_ORIGINS` and `PUBLIC_APP_URL` to the **exact** Vercel origin
    (scheme + host, no trailing slash). Redeploy/restart if needed.
-2. Confirm login from the Vercel site works (cookie must be set for the Render host with
-   `Secure` + `SameSite=None`).
+2. Login cookies: with same-origin proxy, the browser stores session cookies on the
+   Vercel host. Keep `COOKIE_SECURE=true` on Render (HTTPS).
 
 ### 5. Verify
 
-1. `GET https://<render>/api/health`
-2. Open the Vercel app → **Sign up** or log in as superadmin → Upload / Admin.
+1. `GET https://pic-lite.vercel.app/api/health` — expect JSON in a few seconds when warm
+2. Open the Vercel app → **Sign up** or log in as superadmin → Upload / Admin / Run demo
 3. Optional later: run `scripts/benchmark_ingest.py` against Render and set `JOB_TIMEOUT_SEC`
    (see below).
 
 Free tier targets **one month of 15-minute data**, not dense 1-minute multi-inverter data
 (Render free tier: 512 MB RAM, ephemeral disk — see docs/PRD.md §0).
 
-### Cross-origin cookies (why `COOKIE_SECURE=true`)
+### Why the API stays on Render (not Vercel serverless)
 
-Vercel (UI) and Render (API) are **different origins**. Credentialed `fetch` only keeps
-session cookies if they are `SameSite=None; Secure`. The API sets that automatically when
-`COOKIE_SECURE=true` (see `backend/app/auth/sessions.py`). Local Docker keeps `false` / `Lax`.
+Analyses use an in-process worker pool and can run longer than Hobby serverless limits.
+Vercel hosts the UI and reverse-proxies `/api`; Render keeps the long-lived FastAPI process.
+If you later move the API off Render, use the Postgres **external** connection string
+(internal `*.render.internal` hostnames will not work from Vercel/Fly).
 
-**Optional same-origin proxy:** you can instead proxy `/api/*` through Vercel to Render and
-point the UI at `""` / same origin so `SameSite=Lax` works — not configured by default;
-prefer `COOKIE_SECURE=true` + explicit `VITE_API_BASE_URL`.
+### Cross-origin cookies (legacy direct `VITE_API_BASE_URL`)
 
-### No self-ping
+If you point the browser at Render directly, set `COOKIE_SECURE=true` so cookies use
+`SameSite=None; Secure`. Prefer the same-origin proxy above instead.
 
-Do **not** add a keepalive/self-ping cron against the Render URL. This is an explicit
-product decision (docs/PRD.md §0) — Render treats such synthetic traffic as abnormal, and
-the UI's own 2-3 second status poll during an active job plus the stale-job reclaim sweep
-(`backend/app/services/cleanup_service.py`) are the whole mechanism.
+### Keep-alive
+
+Render free tier sleeps when idle. This repo keeps the API warm via GitHub Actions
+(every 5 minutes) plus a daily Vercel cron backup. The UI also retries network failures
+for up to 2 minutes with a “Connecting to API…” banner — it does **not** claim a fixed
+30–60s wake time.
 
 ### Setting `JOB_TIMEOUT_SEC`
 

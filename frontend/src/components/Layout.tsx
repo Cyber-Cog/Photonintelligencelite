@@ -101,13 +101,33 @@ function ProfileMenu() {
 
 export function Layout({ children }: { children: ReactNode }) {
   const { theme, toggleTheme } = useTheme();
-  const { user, loading } = useAuth();
+  const { user, loading, connecting, connectAttempt, apiUnreachable, refresh } = useAuth();
   const location = useLocation();
   const isLanding = location.pathname === "/";
 
   return (
     <div className="relative flex min-h-screen flex-col bg-stone-50 text-stone-900 dark:bg-stone-950 dark:text-stone-100">
       {!isLanding && <div className="hero-mesh" aria-hidden />}
+      {connecting ? (
+        <div
+          className="border-b border-amber-200/80 bg-amber-50 px-4 py-2 text-center text-sm text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100"
+          role="status"
+          aria-live="polite"
+        >
+          Connecting to API…{connectAttempt > 1 ? ` (attempt ${connectAttempt})` : ""}
+        </div>
+      ) : null}
+      {!connecting && apiUnreachable ? (
+        <div
+          className="flex flex-wrap items-center justify-center gap-3 border-b border-rose-200/80 bg-rose-50 px-4 py-2 text-center text-sm text-rose-900 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-100"
+          role="alert"
+        >
+          <span>Can't reach the API right now.</span>
+          <button type="button" className="btn-secondary px-2.5 py-1 text-xs" onClick={() => void refresh()}>
+            Retry
+          </button>
+        </div>
+      ) : null}
       <header className={`app-header ${isLanding ? "app-header-landing" : ""}`}>
         <div className="mx-auto flex h-14 max-w-6xl items-center gap-3 px-4 sm:gap-4 sm:px-6">
           <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-5">

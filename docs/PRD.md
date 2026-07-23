@@ -21,7 +21,7 @@
 | OEM alias priority | Seeded from the existing PIC mapping dictionaries plus common vendor aliases (Sungrow, Huawei, ABB/FIMER, SMA, TBEA naming conventions where documented). Refined once real SCADA export samples are supplied. |
 | File size cap | `MAX_COMPRESSED_UPLOAD_MB` / `MAX_DECOMPRESSED_UPLOAD_MB` — 100 MB / 250 MB local; 25 MB / 60 MB on free Render (env-overridable). Supersedes the flat "100–200 MB" figure in §7.2/§8.1/§13/§24 wherever it conflicts. |
 | Job timeout | `JOB_TIMEOUT_SEC` is **measured**, not guessed: set to 3× the measured full-pipeline wall-clock time for the bundled demo dataset on the deployed free-tier instance, with a documented upper safety cap. Supersedes the flat "300s" default suggested during planning. |
-| Keepalive | **No self-ping / keepalive cron.** Superseded wherever background "ping to avoid cold start" ideas might otherwise be implied — this is explicitly rejected because Render flags such traffic as abnormal. The UI's 2–3s status poll during active jobs, plus stale-job reclaim for orphaned jobs, is the whole mechanism. |
+| Keepalive | **GitHub Actions every 5 minutes** (+ daily Vercel cron backup + soft browser ping while a tab is open) keeps the free-tier Render API warm. Vercel Hobby cannot schedule sub-daily crons. Same-origin `/api` proxy on Vercel removes cross-origin cookie friction. UI retries network failures for up to 2 minutes with a “Connecting to API…” banner — never a fixed “30–60s” claim. |
 
 ---
 

@@ -141,10 +141,16 @@ Postgres retains only: job status/timings/non-sensitive error summary rows, and 
 column-mapping templates (keyed by detected OEM signature). No raw or canonical time-series
 data is ever written to Postgres or to logs.
 
-## 8. No self-ping / keepalive
+## 8. Free-tier keep-warm (Render sleep)
 
-The system does not run any keepalive or self-ping cron against the deployed free-tier API.
-Render flags such synthetic traffic as abnormal. The 2–3 second UI status poll during an
-active job provides natural keep-warm traffic; the stale-job reclaim sweep guarantees no job
-is left stuck if the instance sleeps mid-run. Cold starts are surfaced to the user as an
-explicit "Starting analysis service…" state rather than hidden.
+Render free web services sleep when idle. PIC Lite keeps the API responsive with:
+
+1. GitHub Actions (`.github/workflows/keepalive.yml`) every 5 minutes against `/api/health`
+2. A daily Vercel cron hitting `/api/keepalive` (Hobby cannot run sub-daily crons)
+3. Soft `/api/health` pings from open browser tabs every 4 minutes
+
+The UI also retries unreachable-API network errors for up to 2 minutes with honest progress
+(“Connecting to API… attempt N”). Same-origin Vercel rewrites (`vercel.json`) proxy `/api/*`
+to Render so cookies stay on the app host.
+
+Stale-job reclaim still covers jobs interrupted by an unexpected sleep/restart.

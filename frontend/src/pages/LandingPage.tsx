@@ -104,6 +104,7 @@ export function LandingPage() {
   const { armAfterDemo } = useDemoTour();
   const [demoLoading, setDemoLoading] = useState(false);
   const [demoError, setDemoError] = useState<string | null>(null);
+  const [demoAttempt, setDemoAttempt] = useState(0);
   const [demoHighlight, setDemoHighlight] = useState(false);
   const demoButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -152,8 +153,9 @@ export function LandingPage() {
   const handleDemo = async () => {
     setDemoLoading(true);
     setDemoError(null);
+    setDemoAttempt(0);
     try {
-      const res = await startDemo();
+      const res = await startDemo((p) => setDemoAttempt(p.attempt));
       setJob(res.job_id, null);
       armAfterDemo(res.job_id);
       navigate(`/jobs/${res.job_id}/processing`);
@@ -196,7 +198,11 @@ export function LandingPage() {
                 disabled={demoLoading}
               >
                 {demoLoading ? <Spinner className="h-4 w-4" /> : null}
-                Run demo
+                {demoLoading
+                  ? demoAttempt > 1
+                    ? `Connecting… (${demoAttempt})`
+                    : "Starting demo…"
+                  : "Run demo"}
               </button>
               <button type="button" className="btn-ghost landing-cta-btn px-4 py-2.5 text-sm" onClick={() => void goTemplate("excel")}>
                 Download template
@@ -326,7 +332,11 @@ export function LandingPage() {
                 disabled={demoLoading}
               >
                 {demoLoading ? <Spinner className="h-4 w-4" /> : null}
-                Run demo
+                {demoLoading
+                  ? demoAttempt > 1
+                    ? `Connecting… (${demoAttempt})`
+                    : "Starting demo…"
+                  : "Run demo"}
               </button>
               <button type="button" className="btn-secondary landing-cta-btn text-sm" onClick={() => void goTemplate("excel")}>
                 Download template

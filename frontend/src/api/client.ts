@@ -8,16 +8,17 @@ import type {
   ValidationResponse,
 } from "@/types";
 
-/** Same-origin on Vite :5173 (proxied); otherwise env or localhost API. */
+/**
+ * API base URL.
+ * - Empty string = same-origin (Vite `/api` proxy locally; Vercel rewrites `/api` → Render).
+ * - Set `VITE_API_BASE_URL` only when calling the API on a different origin (e.g. local UI → :8000).
+ */
 function resolveApiBase(): string {
-  if (typeof window !== "undefined") {
-    const { hostname, port } = window.location;
-    if ((hostname === "localhost" || hostname === "127.0.0.1") && port === "5173") {
-      return "";
-    }
+  const raw = import.meta.env.VITE_API_BASE_URL;
+  if (typeof raw === "string" && raw.trim().length > 0) {
+    return raw.trim().replace(/\/$/, "");
   }
-  if (import.meta.env.VITE_API_BASE_URL) return import.meta.env.VITE_API_BASE_URL;
-  return import.meta.env.DEV ? "" : "http://localhost:8000";
+  return "";
 }
 
 const BASE_URL = resolveApiBase();
@@ -42,9 +43,9 @@ export class ApiError extends Error {
 }
 
 /**
- * Cross-origin (Vercel UI → Render API): the CSRF cookie is set on the API host, so
- * ``document.cookie`` on the UI origin cannot read it. Keep a memory copy from login/me
- * response bodies and still prefer the same-origin cookie when present (local Vite proxy).
+ * CSRF: prefer readable same-origin cookie (`pic_csrf`). When the UI called the API
+ * cross-origin historically, the cookie lived on the API host — keep a memory copy from
+ * login/me JSON as a fallback.
  */
 let memoryCsrf: string | null = null;
 
@@ -60,7 +61,38 @@ export function getCsrfToken(): string | null {
 }
 
 const API_UNREACHABLE =
-  "Can't reach the API. On free tier the server may take ~30–60s to wake — wait and try again.";
+  "Can't reach the API right now. Check your connection and try again.";
+
+export type ConnectProgress = { attempt: number; elapsedMs: number };
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Retry network failures with backoff for up to `maxMs` (default 2 minutes). */
+export async function withConnectRetry<T>(
+  run: () => Promise<T>,
+  opts?: { maxMs?: number; onProgress?: (p: ConnectProgress) => void },
+): Promise<T> {
+  const maxMs = opts?.maxMs ?? 120_000;
+  const started = Date.now();
+  let attempt = 0;
+  let delay = 1_500;
+  for (;;) {
+    attempt += 1;
+    opts?.onProgress?.({ attempt, elapsedMs: Date.now() - started });
+    try {
+      return await run();
+    } catch (err) {
+      const isNetwork = err instanceof ApiError && err.status === 0;
+      const elapsed = Date.now() - started;
+      if (!isNetwork || elapsed >= maxMs) throw err;
+      const wait = Math.min(delay, Math.max(0, maxMs - elapsed));
+      await sleep(wait);
+      delay = Math.min(Math.round(delay * 1.6), 8_000);
+    }
+  }
+}
 
 function authHeaders(json = true): HeadersInit {
   const headers: Record<string, string> = {};
@@ -165,29 +197,37 @@ export async function uploadFile(file: File, onProgress?: (pct: number) => void)
   return uploadFiles([file], onProgress);
 }
 
+type MeResponse = {
+  user: AuthUser | null;
+  csrf_token: string | null;
+  smtp_configured: boolean;
+  auth_auto_verify: boolean;
+};
+
 export const authApi = {
-  me: () =>
-    apiFetch<{
-      user: AuthUser | null;
-      csrf_token: string | null;
-      smtp_configured: boolean;
-      auth_auto_verify: boolean;
-    }>("/api/auth/me"),
+  me: () => apiFetch<MeResponse>("/api/auth/me"),
+  /** Session bootstrap — retries network failures for up to 2 minutes. */
+  meConnecting: (onProgress?: (p: ConnectProgress) => void) =>
+    withConnectRetry(() => apiFetch<MeResponse>("/api/auth/me"), { onProgress }),
   signup: (email: string, password: string, name: string) =>
-    apiFetch<{
-      user: AuthUser;
-      csrf_token: string;
-      message?: string | null;
-      verification_link?: string | null;
-    }>("/api/auth/signup", {
-      method: "POST",
-      body: JSON.stringify({ email, password, name }),
-    }),
+    withConnectRetry(() =>
+      apiFetch<{
+        user: AuthUser;
+        csrf_token: string;
+        message?: string | null;
+        verification_link?: string | null;
+      }>("/api/auth/signup", {
+        method: "POST",
+        body: JSON.stringify({ email, password, name }),
+      }),
+    ),
   login: (email: string, password: string) =>
-    apiFetch<{ user: AuthUser; csrf_token: string; message?: string | null }>("/api/auth/login", {
-      method: "POST",
-      body: JSON.stringify({ email, password }),
-    }),
+    withConnectRetry(() =>
+      apiFetch<{ user: AuthUser; csrf_token: string; message?: string | null }>("/api/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ email, password }),
+      }),
+    ),
   logout: () => apiFetch<{ message: string }>("/api/auth/logout", { method: "POST", headers: authHeaders() }),
   verifyEmail: (token: string) =>
     apiFetch<{ message: string }>("/api/auth/verify-email", {
@@ -403,8 +443,18 @@ export async function getResults(jobId: string) {
   return apiFetch<ResultsResponse>(`/api/jobs/${jobId}/results`);
 }
 
-export async function startDemo() {
-  return apiFetch<{ job_id: string; state: string }>("/api/demo", { method: "POST" });
+export async function startDemo(onProgress?: (p: ConnectProgress) => void) {
+  return withConnectRetry(
+    () => apiFetch<{ job_id: string; state: string }>("/api/demo", { method: "POST" }),
+    { onProgress },
+  );
+}
+
+/** Soft ping used while the app is open to reduce free-tier sleep. */
+export function pingApiHealth(): void {
+  void fetch(`${BASE_URL}/api/health`, { credentials: "include", cache: "no-store" }).catch(() => {
+    // ignore — keep-alive is best-effort
+  });
 }
 
 export function reportUrl(jobId: string, format: "pdf" | "xlsx") {
