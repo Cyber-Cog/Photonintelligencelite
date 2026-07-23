@@ -19,7 +19,7 @@ import {
 interface AuthContextValue {
   user: AuthUser | null;
   loading: boolean;
-  /** True while bootstrap is retrying a unreachable API. */
+  /** True while bootstrap is retrying a unreachable API (shown after a short grace period). */
   connecting: boolean;
   connectAttempt: number;
   apiUnreachable: boolean;
@@ -27,7 +27,11 @@ interface AuthContextValue {
   smtpConfigured: boolean;
   authAutoVerify: boolean;
   refresh: () => Promise<void>;
-  login: (email: string, password: string) => Promise<void>;
+  login: (
+    email: string,
+    password: string,
+    onProgress?: (p: { attempt: number; elapsedMs: number }) => void,
+  ) => Promise<void>;
   signup: (email: string, password: string, name: string) => Promise<{ verificationLink?: string | null; message?: string | null }>;
   logout: () => Promise<void>;
   updateProfile: (name: string) => Promise<void>;
@@ -45,7 +49,8 @@ function syncCsrf(token: string | null) {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
-  const [connecting, setConnecting] = useState(true);
+  const [bootstrapping, setBootstrapping] = useState(true);
+  const [showConnectingBanner, setShowConnectingBanner] = useState(false);
   const [connectAttempt, setConnectAttempt] = useState(0);
   const [apiUnreachable, setApiUnreachable] = useState(false);
   const [csrfToken, setCsrfTokenState] = useState<string | null>(getCsrfToken());
@@ -57,11 +62,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refresh = useCallback(async () => {
-    setConnecting(true);
+    setBootstrapping(true);
+    setShowConnectingBanner(false);
     setApiUnreachable(false);
     setConnectAttempt(0);
+    // Warm APIs finish `/me` in <1s — don't flash the amber banner for that.
+    const bannerTimer = window.setTimeout(() => setShowConnectingBanner(true), 2_500);
     try {
-      const me = await authApi.meConnecting((p) => setConnectAttempt(p.attempt));
+      const me = await authApi.meConnecting((p) => {
+        setConnectAttempt(p.attempt);
+        if (p.attempt > 1 || p.elapsedMs >= 2_500) setShowConnectingBanner(true);
+      });
       setUser(me.user);
       setCsrfToken(me.csrf_token || getCsrfToken());
       setSmtpConfigured(me.smtp_configured);
@@ -74,7 +85,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setApiUnreachable(true);
       }
     } finally {
-      setConnecting(false);
+      window.clearTimeout(bannerTimer);
+      setShowConnectingBanner(false);
+      setBootstrapping(false);
       setLoading(false);
     }
   }, [setCsrfToken]);
@@ -91,8 +104,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(
-    async (email: string, password: string) => {
-      const res = await authApi.login(email, password);
+    async (
+      email: string,
+      password: string,
+      onProgress?: (p: { attempt: number; elapsedMs: number }) => void,
+    ) => {
+      const res = await authApi.login(email, password, onProgress);
       setUser(res.user);
       setCsrfToken(res.csrf_token);
       setApiUnreachable(false);
@@ -135,6 +152,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
     await authApi.changePassword(currentPassword, newPassword);
   }, []);
+
+  const connecting = bootstrapping && showConnectingBanner;
 
   const value = useMemo(
     () => ({

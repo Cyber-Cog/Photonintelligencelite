@@ -1,11 +1,11 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ApiError } from "@/api/client";
 import { BrandWordmark } from "@/components/BrandWordmark";
 import { useAuth } from "@/context/AuthContext";
 
 export function LoginPage() {
-  const { login } = useAuth();
+  const { login, connecting } = useAuth();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const next = params.get("next") || "/upload";
@@ -13,13 +13,28 @@ export function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [loginAttempt, setLoginAttempt] = useState(0);
+  const [loginElapsedSec, setLoginElapsedSec] = useState(0);
+
+  useEffect(() => {
+    if (!busy) {
+      setLoginElapsedSec(0);
+      return;
+    }
+    const started = Date.now();
+    const id = window.setInterval(() => {
+      setLoginElapsedSec(Math.floor((Date.now() - started) / 1000));
+    }, 500);
+    return () => window.clearInterval(id);
+  }, [busy]);
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setBusy(true);
     setError(null);
+    setLoginAttempt(0);
     try {
-      await login(email.trim(), password);
+      await login(email.trim(), password, (p) => setLoginAttempt(p.attempt));
       navigate(next.startsWith("/") ? next : "/upload");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not log in.");
@@ -27,6 +42,8 @@ export function LoginPage() {
       setBusy(false);
     }
   };
+
+  const showSlowHint = busy && (loginAttempt > 1 || loginElapsedSec >= 3 || connecting);
 
   return (
     <div className="tool-enter mx-auto max-w-md py-10">
@@ -67,11 +84,17 @@ export function LoginPage() {
         </div>
         {error ? <p className="text-sm text-rose-600 dark:text-rose-400">{error}</p> : null}
         <button type="submit" className="btn-primary w-full" disabled={busy}>
-          {busy ? "Signing in…" : "Log in"}
+          {busy
+            ? loginAttempt > 1
+              ? `Waking API… (${loginAttempt})`
+              : "Signing in…"
+            : "Log in"}
         </button>
-        {busy ? (
+        {showSlowHint ? (
           <p className="text-center text-xs text-stone-500 dark:text-stone-400">
-            Connecting to API… retries automatically if the network drops.
+            {loginAttempt > 1
+              ? "Free-tier API may be waking from sleep — this can take up to a couple of minutes."
+              : "Still signing in… retries automatically if the network drops."}
           </p>
         ) : null}
       </form>

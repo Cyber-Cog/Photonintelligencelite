@@ -3,7 +3,9 @@ product tour that exercises every algorithm, not a canned screenshot (docs/PRD.m
 """
 from __future__ import annotations
 
+import logging
 import shutil
+import threading
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Request
@@ -13,16 +15,16 @@ from backend.app.auth.audit import record_audit
 from backend.app.auth.deps import get_optional_user
 from backend.app.auth.rate_limit import client_ip
 from backend.app.config import Settings, get_settings
-from backend.app.database import get_db
+from backend.app.database import SessionLocal, get_db
 from backend.app.models import Job, User
 from backend.app.schemas import DemoJobResponse
 from backend.app.services import validation_service
 from backend.app.services.job_service import get_runner
 from analytics.common.complete_analysis_pack import OFFICIAL_COLUMN_TO_CANONICAL
-from backend.app.services.mapping_service import save_template
 from backend.app.services.storage import job_paths
 
 router = APIRouter(prefix="/api", tags=["demo"])
+logger = logging.getLogger("pic_lite.demo")
 
 # Same headers as Complete Analysis Pack / demo CSV (single source of truth).
 DEMO_MAPPING = dict(OFFICIAL_COLUMN_TO_CANONICAL)
@@ -60,6 +62,46 @@ def _demo_csv_path() -> Path:
     return Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "demo_plant_scada.csv"
 
 
+_QUEUED_PROGRESS = (
+    "Queued — other analyses may be running in parallel; yours starts when a worker is free."
+)
+
+
+def _finish_demo_job(job_id: str, settings: Settings) -> None:
+    """Validate + auto-queue off the request thread so POST /api/demo returns in ~1s.
+
+    Free-tier hosts spend 15–30s on parse/standardize for the demo CSV; blocking the
+    HTTP response left the landing page on a spinner the whole time.
+    """
+    db = SessionLocal()
+    try:
+        job = db.get(Job, job_id)
+        if job is None:
+            return
+        validation_service.run_validation_stage(db, job, settings)
+        db.refresh(job)
+        if job.state == "normalizing":
+            job.state = "queued"
+            job.progress_message = _QUEUED_PROGRESS
+            db.add(job)
+            db.commit()
+            get_runner(settings).submit(job.id)
+    except Exception:  # noqa: BLE001
+        logger.exception("demo background prep failed job=%s", job_id)
+        try:
+            job = db.get(Job, job_id)
+            if job is not None:
+                job.state = "failed"
+                job.error_summary = "Demo preparation failed. Please try again."
+                job.progress_message = job.error_summary
+                db.add(job)
+                db.commit()
+        except Exception:  # noqa: BLE001
+            logger.exception("could not mark demo job failed job=%s", job_id)
+    finally:
+        db.close()
+
+
 @router.post("/demo", response_model=DemoJobResponse)
 def start_demo(
     request: Request,
@@ -67,7 +109,11 @@ def start_demo(
     settings: Settings = Depends(get_settings),
     user: User | None = Depends(get_optional_user),
 ):
-    """Public — no authentication required."""
+    """Public — no authentication required.
+
+    Returns as soon as the job row + CSV copy exist (state=validating). Heavy
+    validation runs in a background thread; the processing page polls progress.
+    """
     demo_csv = _demo_csv_path()
     if not demo_csv.exists():
         from tests.fixtures.synthetic_generator import write_demo_files
@@ -95,7 +141,8 @@ def start_demo(
     paths = job_paths(settings.job_root_path, job.id)
     shutil.copyfile(demo_csv, paths.raw_dir / "input.csv")
 
-    save_template(db, list(DEMO_MAPPING.keys()), DEMO_MAPPING)
+    # Skip MappingTemplate upsert — demo mapping is fixed on the job; avoids an
+    # extra DB round-trip on the critical path (and template learning is for uploads).
     job.mapping_json = {
         "column_to_canonical": {c: f for c, f in DEMO_MAPPING.items() if f != "timestamp"},
         "confidence_by_column": {c: 1.0 for c in DEMO_MAPPING},
@@ -103,19 +150,16 @@ def start_demo(
         "detected_oem_signature": "demo",
     }
     job.plant_config_json = {"plant": DEMO_PLANT, "threshold_overrides": {}}
+    job.state = "validating"
+    job.progress_message = "Preparing demo data…"
     db.add(job)
     db.commit()
 
-    validation_service.run_validation_stage(db, job, settings)
-    db.refresh(job)
-
-    if job.state == "normalizing":
-        job.state = "queued"
-        job.progress_message = (
-            "Queued — other analyses may be running in parallel; yours starts when a worker is free."
-        )
-        db.add(job)
-        db.commit()
-        get_runner(settings).submit(job.id)
+    threading.Thread(
+        target=_finish_demo_job,
+        args=(job.id, settings),
+        daemon=True,
+        name=f"demo-validate-{job.id[:8]}",
+    ).start()
 
     return DemoJobResponse(job_id=job.id, state=job.state)

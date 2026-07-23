@@ -204,14 +204,32 @@ type MeResponse = {
   auth_auto_verify: boolean;
 };
 
+/** Short-lived session cache — landing/nav remounts should not re-hit `/me` every few seconds. */
+const ME_TTL_MS = 45_000;
+let meCache: { at: number; data: MeResponse } | null = null;
+
+export function invalidateMeCache() {
+  meCache = null;
+}
+
+async function fetchMe(force = false): Promise<MeResponse> {
+  if (!force && meCache && Date.now() - meCache.at < ME_TTL_MS) {
+    return meCache.data;
+  }
+  const data = await apiFetch<MeResponse>("/api/auth/me");
+  meCache = { at: Date.now(), data };
+  return data;
+}
+
 export const authApi = {
-  me: () => apiFetch<MeResponse>("/api/auth/me"),
+  me: () => fetchMe(false),
   /** Session bootstrap — retries network failures for up to 2 minutes. */
   meConnecting: (onProgress?: (p: ConnectProgress) => void) =>
-    withConnectRetry(() => apiFetch<MeResponse>("/api/auth/me"), { onProgress }),
+    withConnectRetry(() => fetchMe(true), { onProgress }),
   signup: (email: string, password: string, name: string) =>
-    withConnectRetry(() =>
-      apiFetch<{
+    withConnectRetry(async () => {
+      invalidateMeCache();
+      return apiFetch<{
         user: AuthUser;
         csrf_token: string;
         message?: string | null;
@@ -219,16 +237,20 @@ export const authApi = {
       }>("/api/auth/signup", {
         method: "POST",
         body: JSON.stringify({ email, password, name }),
-      }),
-    ),
-  login: (email: string, password: string) =>
-    withConnectRetry(() =>
-      apiFetch<{ user: AuthUser; csrf_token: string; message?: string | null }>("/api/auth/login", {
+      });
+    }),
+  login: (email: string, password: string, onProgress?: (p: ConnectProgress) => void) =>
+    withConnectRetry(async () => {
+      invalidateMeCache();
+      return apiFetch<{ user: AuthUser; csrf_token: string; message?: string | null }>("/api/auth/login", {
         method: "POST",
         body: JSON.stringify({ email, password }),
-      }),
-    ),
-  logout: () => apiFetch<{ message: string }>("/api/auth/logout", { method: "POST", headers: authHeaders() }),
+      });
+    }, { onProgress }),
+  logout: () => {
+    invalidateMeCache();
+    return apiFetch<{ message: string }>("/api/auth/logout", { method: "POST", headers: authHeaders() });
+  },
   verifyEmail: (token: string) =>
     apiFetch<{ message: string }>("/api/auth/verify-email", {
       method: "POST",

@@ -260,15 +260,16 @@ def test_demo_not_auth_gated(client, monkeypatch, tmp_path):
         encoding="utf-8",
     )
     monkeypatch.setattr("backend.app.routers.demo._demo_csv_path", lambda: demo_csv)
-    # Avoid running full validation pipeline in unit test
+    # Avoid running full validation pipeline in unit test (runs in a background thread)
     monkeypatch.setattr(
         "backend.app.routers.demo.validation_service.run_validation_stage",
         lambda *a, **k: None,
     )
-    monkeypatch.setattr("backend.app.routers.demo.save_template", lambda *a, **k: None)
     res = client.post("/api/demo")
     assert res.status_code == 200
-    assert "job_id" in res.json()
+    body = res.json()
+    assert "job_id" in body
+    assert body["state"] == "validating"
 
 
 def test_random_job_not_leaked(client):

@@ -105,8 +105,21 @@ export function LandingPage() {
   const [demoLoading, setDemoLoading] = useState(false);
   const [demoError, setDemoError] = useState<string | null>(null);
   const [demoAttempt, setDemoAttempt] = useState(0);
+  const [demoElapsedSec, setDemoElapsedSec] = useState(0);
   const [demoHighlight, setDemoHighlight] = useState(false);
   const demoButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!demoLoading) {
+      setDemoElapsedSec(0);
+      return;
+    }
+    const started = Date.now();
+    const id = window.setInterval(() => {
+      setDemoElapsedSec(Math.floor((Date.now() - started) / 1000));
+    }, 500);
+    return () => window.clearInterval(id);
+  }, [demoLoading]);
 
   useEffect(() => {
     if (location.hash !== "#demo") return;
@@ -166,6 +179,13 @@ export function LandingPage() {
     }
   };
 
+  const demoButtonLabel = (() => {
+    if (!demoLoading) return "Run demo";
+    if (demoAttempt > 1) return `Waking API… (${demoAttempt})`;
+    if (demoElapsedSec >= 8) return "Still starting…";
+    return "Starting demo…";
+  })();
+
   return (
     <div className="flex w-full flex-col">
       {/* 1. Hook — brand + problem */}
@@ -198,11 +218,7 @@ export function LandingPage() {
                 disabled={demoLoading}
               >
                 {demoLoading ? <Spinner className="h-4 w-4" /> : null}
-                {demoLoading
-                  ? demoAttempt > 1
-                    ? `Connecting… (${demoAttempt})`
-                    : "Starting demo…"
-                  : "Run demo"}
+                {demoButtonLabel}
               </button>
               <button type="button" className="btn-ghost landing-cta-btn px-4 py-2.5 text-sm" onClick={() => void goTemplate("excel")}>
                 Download template
@@ -332,11 +348,7 @@ export function LandingPage() {
                 disabled={demoLoading}
               >
                 {demoLoading ? <Spinner className="h-4 w-4" /> : null}
-                {demoLoading
-                  ? demoAttempt > 1
-                    ? `Connecting… (${demoAttempt})`
-                    : "Starting demo…"
-                  : "Run demo"}
+                {demoButtonLabel}
               </button>
               <button type="button" className="btn-secondary landing-cta-btn text-sm" onClick={() => void goTemplate("excel")}>
                 Download template

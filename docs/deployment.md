@@ -94,10 +94,37 @@ If you point the browser at Render directly, set `COOKIE_SECURE=true` so cookies
 
 ### Keep-alive
 
-Render free tier sleeps when idle. This repo keeps the API warm via GitHub Actions
-(every 5 minutes) plus a daily Vercel cron backup. The UI also retries network failures
-for up to 2 minutes with a “Connecting to API…” banner — it does **not** claim a fixed
-30–60s wake time.
+Render free tier sleeps when idle (often ~15 min). This repo keeps the API warm via:
+
+1. **GitHub Actions** `.github/workflows/keepalive.yml` — every **5 minutes** (primary)
+2. **Vercel cron** `/api/keepalive` — once daily (Hobby limit; backup only)
+3. **Open browser tabs** soft-ping `/api/health` every 4 minutes
+
+Keep-alive removes multi-minute cold-start waits for login/demo **start**. It does **not**
+make free-tier CPU match a laptop — analysis (pandas/numpy) still runs slower on 512 MB free
+instances.
+
+### Why cloud feels slower than local
+
+| Factor | Local | Free cloud (current) |
+|--------|-------|----------------------|
+| API wake | Always on | Sleeps without keep-alive |
+| Network | localhost | Browser → Vercel proxy → Render → Neon |
+| CPU/RAM | Your laptop | Shared free instance (~0.1–0.5 CPU, 512 MB) |
+| Demo start | Sync validation ~1–3s | Was 15–25s blocking HTTP; now returns immediately and validates in background |
+
+Same-origin `/api` proxy (already in `vercel.json`) avoids CORS preflight. Put Neon Postgres in the
+**same region as Render** (typically Oregon / `us-west`). Prefer Neon’s pooled URL; Render
+internal DB hostnames only work if Postgres is also on Render.
+
+### Matching local speed (paid)
+
+Free tier **cannot** equal local after keep-alive alone. Closest options:
+
+- **Render Starter** (always-on) + Neon same region, or
+- **~$5 VPS** (Hetzner/DigitalOcean) running `docker compose` with API + Postgres together
+
+That removes sleep and puts CPU next to the data — the only path to “feels like local.”
 
 ### Setting `JOB_TIMEOUT_SEC`
 

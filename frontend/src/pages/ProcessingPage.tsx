@@ -7,14 +7,14 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Spinner } from "@/components/ui/Spinner";
 import type { JobStatusResponse } from "@/types";
 
-const POLL_INTERVAL_MS = 2500;
+const POLL_INTERVAL_MS = 2000;
 
 const STATE_LABELS: Record<string, string> = {
   uploaded: "Upload received",
   parsing: "Parsing file",
   mapping: "Awaiting column mapping",
-  validating: "Validating data",
-  normalizing: "Awaiting confirmation",
+  validating: "Preparing demo data",
+  normalizing: "Finalizing validation",
   queued: "Queued for analysis",
   running: "Running fault & loss algorithms",
   generating_charts: "Generating charts",
@@ -46,12 +46,29 @@ function progressPct(state: string): number {
   return Math.round(((idx + 1) / PROGRESS_ORDER.length) * 100);
 }
 
+function formatElapsed(sec: number): string {
+  if (sec < 60) return `${sec}s`;
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}m ${s.toString().padStart(2, "0")}s`;
+}
+
 export function ProcessingPage() {
   const { jobId } = useParams<{ jobId: string }>();
   const navigate = useNavigate();
   const [status, setStatus] = useState<JobStatusResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [elapsedSec, setElapsedSec] = useState(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const startedAtRef = useRef(Date.now());
+
+  useEffect(() => {
+    startedAtRef.current = Date.now();
+    const id = window.setInterval(() => {
+      setElapsedSec(Math.floor((Date.now() - startedAtRef.current) / 1000));
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [jobId]);
 
   useEffect(() => {
     if (!jobId) return;
@@ -102,6 +119,17 @@ export function ProcessingPage() {
   if (!jobId) return null;
 
   const failed = status?.state === "failed";
+  const stateLabel = status ? STATE_LABELS[status.state] ?? status.state : "Starting analysis service…";
+  const detail =
+    status?.state === "queued"
+      ? status.progress_message &&
+        !status.progress_message.startsWith("Another job is currently running")
+        ? status.progress_message
+        : FALLBACK_QUEUED_MESSAGE
+      : status?.progress_message ??
+        (elapsedSec >= 15
+          ? "Free-tier analysis is CPU-bound — this often takes a few minutes when warm."
+          : "This can take a moment on a cold service start.");
 
   return (
     <div className="tool-enter mx-auto flex max-w-xl flex-1 flex-col items-center justify-center">
@@ -112,18 +140,11 @@ export function ProcessingPage() {
             <div className="mb-4 flex justify-center">
               <Spinner className="h-8 w-8" />
             </div>
-            <p className="tool-eyebrow mb-1.5">In progress</p>
+            <p className="tool-eyebrow mb-1.5">In progress · {formatElapsed(elapsedSec)}</p>
             <h2 className="font-display text-xl font-semibold tracking-tight text-stone-900 dark:text-stone-50">
-              {status ? STATE_LABELS[status.state] ?? status.state : "Starting analysis service…"}
+              {stateLabel}
             </h2>
-            <p className="mt-1.5 text-sm text-stone-500">
-              {status?.state === "queued"
-                ? status.progress_message &&
-                  !status.progress_message.startsWith("Another job is currently running")
-                  ? status.progress_message
-                  : FALLBACK_QUEUED_MESSAGE
-                : (status?.progress_message ?? "This can take a moment on a cold service start.")}
-            </p>
+            <p className="mt-1.5 text-sm text-stone-500">{detail}</p>
             {status && (
               <div className="mx-auto mt-6 max-w-sm space-y-1">
                 <ProgressBar pct={progressPct(status.state)} />
