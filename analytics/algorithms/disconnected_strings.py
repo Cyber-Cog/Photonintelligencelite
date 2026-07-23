@@ -86,9 +86,26 @@ def run(context: AnalysisContext) -> ResultObject:
     rolling_median_window = int(t.get("rolling_median_window", 5))
 
     df = context.canonical.frame(columns=["timestamp_utc", "device_type", "inverter_id", "scb_id", "dc_current_a", "dc_voltage_v"])
-    df = df[df["device_type"] == "scb"].dropna(subset=["scb_id", "inverter_id", "dc_current_a"]).copy()
+    df = df[df["device_type"] == "scb"].dropna(subset=["scb_id", "dc_current_a"]).copy()
     if df.empty:
-        return ResultObject.unavailable(ALGORITHM_ID, VERSION, "No SCB-level DC current telemetry with a resolved inverter parent was found.")
+        return ResultObject.unavailable(ALGORITHM_ID, VERSION, "No SCB-level DC current telemetry was found.")
+
+    # Backfill parent inverter from architecture for standalone SMB/SCB equipment ids.
+    missing_inv = df["inverter_id"].isna()
+    if missing_inv.any() and context.plant.architecture:
+        from analytics.common.equipment_ids import resolve_inverter_from_architecture
+
+        df.loc[missing_inv, "inverter_id"] = df.loc[missing_inv, "scb_id"].map(
+            lambda sid: resolve_inverter_from_architecture(sid, context.plant.architecture)
+        )
+    df = df.dropna(subset=["inverter_id"]).copy()
+    if df.empty:
+        return ResultObject.unavailable(
+            ALGORITHM_ID,
+            VERSION,
+            "No SCB-level DC current telemetry with a resolved inverter parent was found. "
+            "Map SMB/SCB current and provide plant architecture (SMB → inverter).",
+        )
 
     # Spare SCB support (PIC parity): SCBs flagged spare in architecture do not carry live
     # strings, so excluding them prevents them being flagged as "disconnected".

@@ -134,7 +134,12 @@ def parse_validate_standardize(
         if chunk_report.has_blockers:
             continue
 
-        canonical_chunk = standardize(chunk, inputs.mapping, inputs.timestamp_column)
+        canonical_chunk = standardize(
+            chunk,
+            inputs.mapping,
+            inputs.timestamp_column,
+            architecture=inputs.plant.architecture or None,
+        )
         if canonical_chunk.empty:
             continue
         canonical_chunk = normalize_timezone(canonical_chunk, inputs.plant.timezone)

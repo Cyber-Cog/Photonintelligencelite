@@ -38,13 +38,19 @@ def try_tidy_long(matrix: list[list[str]], *, sheet_name: str) -> StrategyResult
     if ts_col is None:
         return None
 
-    # Require at least one power-like column for tidy confidence
+    # Require at least one power- or current-like column for tidy confidence.
+    # SMB/string current exports often have no AC power column.
     powerish = any(
         any(tok in normalize_header(h) for tok in ("power", "pac", "p_ac", "kw"))
         for h in header
         if h
     )
-    if not powerish and eq_col is None:
+    currentish = any(
+        any(tok in normalize_header(h) for tok in ("current", "idc", "i_dc", "amps"))
+        for h in header
+        if h
+    )
+    if not powerish and not currentish and eq_col is None:
         return None
 
     out = [header]

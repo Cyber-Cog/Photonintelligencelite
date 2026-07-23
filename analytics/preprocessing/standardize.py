@@ -7,7 +7,12 @@ from __future__ import annotations
 
 import pandas as pd
 
-from analytics.common.equipment_ids import derive_level, extract_parent_inverter, extract_parent_scb
+from analytics.common.equipment_ids import (
+    derive_level,
+    extract_parent_inverter,
+    extract_parent_scb,
+    resolve_inverter_from_architecture,
+)
 from analytics.core.context import CANONICAL_COLUMNS, ResolvedMapping
 from analytics.preprocessing.timestamps import parse_timestamp_series
 
@@ -67,8 +72,19 @@ def _coalesced_series(raw_df: pd.DataFrame, source_cols: list[str], canonical_fi
     return out
 
 
-def standardize(raw_df: pd.DataFrame, mapping: ResolvedMapping, timestamp_column: str) -> pd.DataFrame:
-    """Rename, coerce, and derive equipment hierarchy fields."""
+def standardize(
+    raw_df: pd.DataFrame,
+    mapping: ResolvedMapping,
+    timestamp_column: str,
+    *,
+    architecture: dict | None = None,
+) -> pd.DataFrame:
+    """Rename, coerce, and derive equipment hierarchy fields.
+
+    When ``architecture`` is provided (SCB/SMB → inverter map from Setup), missing
+    ``inverter_id`` values are backfilled so SCB-level algorithms (disconnected strings,
+    clipping by current) can run on OEM ids like ``SMB-01`` that do not embed a parent INV.
+    """
     inverse = _inverse_mapping(mapping.column_to_canonical)
 
     df = pd.DataFrame(index=raw_df.index)
@@ -117,6 +133,14 @@ def standardize(raw_df: pd.DataFrame, mapping: ResolvedMapping, timestamp_column
     needs_parent_inv = df["scb_id"].notna() & df["inverter_id"].isna()
     if needs_parent_inv.any():
         df.loc[needs_parent_inv, "inverter_id"] = df.loc[needs_parent_inv, "scb_id"].map(extract_parent_inverter)
+
+    # Architecture backfill for standalone SMB/SCB ids (no INV embedded in the name).
+    if architecture:
+        still_missing = df["scb_id"].notna() & df["inverter_id"].isna()
+        if still_missing.any():
+            df.loc[still_missing, "inverter_id"] = df.loc[still_missing, "scb_id"].map(
+                lambda sid: resolve_inverter_from_architecture(sid, architecture)
+            )
 
     is_inverter_row = df["device_type"] == "inverter"
     if is_inverter_row.any() and df.loc[is_inverter_row, "inverter_id"].isna().all():

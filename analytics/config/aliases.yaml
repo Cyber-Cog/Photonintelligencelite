@@ -59,14 +59,38 @@ dc_current_a:
   - idc
   - i
   - current(a)
+  - current (a)
   - dc current
   - dc current a
   - dc current (a)
+  - dc amps
   - i_dc
+  - i dc
+  - idc a
   - string current
+  - string current a
+  - string current (a)
+  - string i
   - scb current
+  - scb current a
+  - scb current (a)
+  - smb current
+  - smb current a
+  - smb current (a)
+  - smb_current
+  - smb idc
+  - smb i
+  - combiner current
+  - combiner box current
   - mppt current
+  - mppt current a
   - input current
+  - dc i
+  - i(a)
+  - istring
+  - i_string
+  - string_current
+  - scb_current
 
 dc_voltage_v:
   - DC Voltage (V)
@@ -74,14 +98,26 @@ dc_voltage_v:
   - vdc
   - v
   - voltage(v)
+  - voltage (v)
   - dc voltage
   - dc voltage v
   - dc voltage (v)
   - v_dc
+  - v dc
   - string voltage
+  - string voltage v
   - scb voltage
+  - scb voltage v
+  - smb voltage
+  - smb voltage v
+  - smb voltage (v)
+  - smb_voltage
+  - combiner voltage
+  - combiner box voltage
   - mppt voltage
   - input voltage
+  - string_voltage
+  - scb_voltage
 
 poa_w_m2:
   - Irradiance (W/m2)
@@ -163,8 +199,15 @@ scb_id:
   - scb
   - scb id
   - scb_id
+  - smb
+  - smb id
+  - smb_id
+  - smb no
+  - smb number
+  - combiner
   - combiner box
   - combiner box id
+  - combiner id
   - mppt id
   - mppt
 
@@ -173,3 +216,6 @@ string_id:
   - string id
   - string_id
   - str id
+  - str_id
+  - string no
+  - string number

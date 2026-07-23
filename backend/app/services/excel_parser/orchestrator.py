@@ -151,16 +151,54 @@ def try_promote_header_row(rows: list[list[str]]) -> list[list[str]]:
 
 def _run_strategies(matrix: list[list[str]], *, sheet_name: str) -> StrategyResult | None:
     best: StrategyResult | None = None
+    padded = pad_matrix(matrix)
+    input_width = len(padded[0]) if padded else 0
+
     for fn in _STRATEGIES:
         result = fn(matrix, sheet_name=sheet_name)
         if result is None:
             continue
+        # Wide reshape intentionally collapses INV blocks into a few tidy metrics.
+        # On very wide sheets that are NOT inverter-block layouts (e.g. hundreds of
+        # SMB/string current columns), early-accepting wide would silently drop most
+        # headers. Demote confidence so tidy_long (full header preserve) can win.
+        if (
+            result.report.strategy.startswith("wide")
+            and input_width >= 40
+            and _looks_like_per_device_metric_sheet(padded)
+        ):
+            mapped_n = len(result.report.columns_mapped or [])
+            if mapped_n < max(10, int(input_width * 0.08)):
+                result.report.confidence = min(result.report.confidence, 0.72)
+                result.report.warnings = list(result.report.warnings or []) + [
+                    f"Wide reshape kept {mapped_n} of ~{input_width} columns; "
+                    "preferring full-header preserve for SMB/string-style exports."
+                ]
         if best is None or result.report.confidence > best.report.confidence:
             best = result
-        # Early accept high-confidence structured layouts
+        # Early accept high-confidence structured layouts (true inverter reports)
         if result.report.confidence >= 0.85 and result.report.strategy.startswith("wide"):
             return result
     return best
+
+
+def _looks_like_per_device_metric_sheet(rows: list[list[str]]) -> bool:
+    """True when many columns look like SMB/SCB/string currents rather than INV*_P blocks."""
+    if not rows:
+        return False
+    header = rows[0]
+    smbish = 0
+    for h in header:
+        n = (h or "").strip().lower().replace("_", " ").replace("-", " ")
+        if not n:
+            continue
+        if any(tok in n for tok in ("smb", "scb", "string current", "combiner")) and (
+            "current" in n or "idc" in n or n.endswith(" i") or " voltage" in n or "vdc" in n
+        ):
+            smbish += 1
+        elif n.startswith("smb") or n.startswith("scb"):
+            smbish += 1
+    return smbish >= 5
 
 
 def _rank_sheets(probes) -> list[str]:

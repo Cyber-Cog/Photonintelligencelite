@@ -16,6 +16,22 @@ from analytics.common.config_loader import load_aliases
 HIGH_CONFIDENCE = 0.90
 MEDIUM_CONFIDENCE = 0.60
 
+# OEM columns like "SMB01 Current", "SCB_12_Idc", "String 3 Current (A)" that aliases.yaml
+# cannot enumerate exhaustively. Exact YAML aliases still win (confidence 1.0).
+_PATTERN_DC_CURRENT = re.compile(
+    r"^(?:(?:inv(?:erter)?\s*\d+\s*)?(?:smb|scb|string|str|combiner(?:\s*box)?|mppt)\s*\d*\s*"
+    r"(?:current|idc|i\s*dc|amps?)(?:\s*(?:a|amp|amps))?|"
+    r"(?:current|idc)\s*(?:smb|scb|string|str|combiner|mppt)\s*\d*)$"
+)
+_PATTERN_DC_VOLTAGE = re.compile(
+    r"^(?:(?:inv(?:erter)?\s*\d+\s*)?(?:smb|scb|string|str|combiner(?:\s*box)?|mppt)\s*\d*\s*"
+    r"(?:voltage|vdc|v\s*dc)(?:\s*(?:v|volt|volts))?|"
+    r"(?:voltage|vdc)\s*(?:smb|scb|string|str|combiner|mppt)\s*\d*)$"
+)
+_PATTERN_SCB_ID = re.compile(
+    r"^(?:smb|scb|combiner(?:\s*box)?)\s*(?:id|no|number|#)?\s*\d*$"
+)
+
 
 def _normalize(name: str) -> str:
     s = name.strip().lower()
@@ -56,8 +72,21 @@ def _is_ambiguous_column(column_name: str) -> bool:
     return n in AMBIGUOUS_COLUMN_DENYLIST or len(n) <= 2
 
 
+def _pattern_canonical(normalized: str) -> tuple[str, str] | None:
+    """Return (canonical_field, matched_pattern_label) for OEM numbered SMB/SCB headers."""
+    if _PATTERN_DC_CURRENT.match(normalized):
+        return "dc_current_a", "pattern:smb/scb/string current"
+    if _PATTERN_DC_VOLTAGE.match(normalized):
+        return "dc_voltage_v", "pattern:smb/scb/string voltage"
+    if _PATTERN_SCB_ID.match(normalized) and not normalized.endswith(("current", "voltage", "power")):
+        # Bare "smb" / "scb" are exact aliases; numbered ids like "smb 01" land here.
+        if re.search(r"\d", normalized):
+            return "scb_id", "pattern:smb/scb id"
+    return None
+
+
 def score_column(column_name: str) -> ColumnCandidate:
-    if _is_garbage_header(column_name) or _is_ambiguous_column(column_name):
+    if _is_garbage_header(column_name):
         return ColumnCandidate(column_name, None, 0.0, None)
 
     # Plant-level totals are not per-inverter AC/DC — never auto-map them into those slots.
@@ -68,8 +97,18 @@ def score_column(column_name: str) -> ColumnCandidate:
     lookup = _alias_lookup()
     normalized = n_raw
 
+    # Exact YAML aliases win first — including intentional short aliases like "i" / "v" / "p".
+    # Ambiguous-length blocking applies only to fuzzy matching below.
     if normalized in lookup:
         return ColumnCandidate(column_name, lookup[normalized], 1.0, normalized)
+
+    patterned = _pattern_canonical(normalized)
+    if patterned is not None:
+        field, label = patterned
+        return ColumnCandidate(column_name, field, 0.97, label)
+
+    if _is_ambiguous_column(column_name):
+        return ColumnCandidate(column_name, None, 0.0, None)
 
     # Fuzzy match against every known alias; scale similarity into our confidence bands so an
     # exact match beats near-exact and near-exact still clears the auto-confirm threshold.

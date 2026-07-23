@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from backend.app.services.excel_parser.headers import cell_to_str
+from backend.app.services.excel_parser.headers import cell_to_str, pad_matrix
 from backend.app.services.excel_parser.types import SheetProbe
 
 
@@ -26,20 +26,27 @@ def _probe_openpyxl(excel_path: Path, *, sample_rows: int, max_sheets: int) -> l
             ws = wb[name]
             rows: list[list[str]] = []
             n_cols = 0
-            # Only sample — never full-scan during probe (wide SCADA sheets can be 600+ cols).
+            # Sample rows only for ranking/dtypes — never truncate column width.
+            # openpyxl read_only may omit trailing empty cells per row; track max width
+            # across the sample and prefer declared dimensions when available.
             for i, row in enumerate(ws.iter_rows(values_only=True)):
                 vals = [cell_to_str(c) for c in row]
                 n_cols = max(n_cols, len(vals))
                 rows.append(vals)
                 if i + 1 >= sample_rows:
                     break
+            rows = pad_matrix(rows)
+            declared = _declared_max_column(ws)
+            n_cols = max(n_cols, declared, max((len(r) for r in rows), default=0))
+            if n_cols and rows:
+                rows = [list(r) + [""] * (n_cols - len(r)) for r in rows]
             # read_only max_row is often unset until a full pass; sample length is enough to rank.
             n_rows = int(ws.max_row or len(rows) or sample_rows)
             probes.append(
                 SheetProbe(
                     sheet_name=name,
                     n_rows=n_rows,
-                    n_cols=int(ws.max_column or n_cols),
+                    n_cols=n_cols,
                     sample_rows=rows,
                     merged_cell_count=0,  # read_only mode has no merged_cells
                     dtype_guesses=_guess_dtypes(rows),
@@ -50,6 +57,36 @@ def _probe_openpyxl(excel_path: Path, *, sample_rows: int, max_sheets: int) -> l
         wb.close()
 
 
+def _declared_max_column(ws) -> int:
+    """Best-effort sheet width. read_only often leaves max_column unset."""
+    try:
+        mc = getattr(ws, "max_column", None)
+        if mc:
+            return int(mc)
+    except Exception:  # noqa: BLE001
+        pass
+    dim = getattr(ws, "dimensions", None)
+    if isinstance(dim, str) and ":" in dim:
+        # e.g. "A1:YZ500" → parse end column letters
+        try:
+            end = dim.split(":")[1]
+            letters = "".join(ch for ch in end if ch.isalpha())
+            if letters:
+                return _col_letters_to_index(letters)
+        except Exception:  # noqa: BLE001
+            return 0
+    return 0
+
+
+def _col_letters_to_index(letters: str) -> int:
+    n = 0
+    for ch in letters.upper():
+        if not ("A" <= ch <= "Z"):
+            break
+        n = n * 26 + (ord(ch) - ord("A") + 1)
+    return n
+
+
 def _probe_xls(excel_path: Path, *, sample_rows: int, max_sheets: int) -> list[SheetProbe]:
     import pandas as pd
 
@@ -58,9 +95,7 @@ def _probe_xls(excel_path: Path, *, sample_rows: int, max_sheets: int) -> list[S
     for name in xl.sheet_names[:max_sheets]:
         df = pd.read_excel(xl, sheet_name=name, header=None, dtype=str, nrows=sample_rows)
         rows = [[cell_to_str(v) for v in row] for row in df.fillna("").to_numpy().tolist()]
-        # Full size via another cheap read of shape
-        full = pd.read_excel(xl, sheet_name=name, header=None, nrows=0)
-        # nrows=0 doesn't give shape — approximate from sample; caller may re-read
+        rows = pad_matrix(rows)
         probes.append(
             SheetProbe(
                 sheet_name=name,
@@ -71,7 +106,6 @@ def _probe_xls(excel_path: Path, *, sample_rows: int, max_sheets: int) -> list[S
                 dtype_guesses=_guess_dtypes(rows),
             )
         )
-        _ = full  # silence unused
     return probes
 
 
@@ -80,6 +114,7 @@ def _guess_dtypes(rows: list[list[str]]) -> list[str]:
         return []
     width = max(len(r) for r in rows)
     guesses: list[str] = []
+    # Dtype guesses sample the first columns only — headers themselves are never truncated.
     for j in range(min(width, 20)):
         vals = [r[j].strip() for r in rows[1:] if j < len(r) and r[j].strip()]
         if not vals:
@@ -100,7 +135,11 @@ def _guess_dtypes(rows: list[list[str]]) -> list[str]:
 
 
 def load_sheet_matrix(excel_path: Path, sheet_name: str | None = None) -> tuple[str, list[list[str]]]:
-    """Load full sheet as string matrix. Returns (sheet_name, rows)."""
+    """Load full sheet as string matrix. Returns (sheet_name, rows).
+
+    Header completeness guarantee: every column that appears in any row is preserved.
+    Row sampling is never applied here — only probe uses sample_rows for ranking.
+    """
     suffix = excel_path.suffix.lower()
     if suffix in {".xlsx", ".xlsm"}:
         from openpyxl import load_workbook
@@ -111,7 +150,23 @@ def load_sheet_matrix(excel_path: Path, sheet_name: str | None = None) -> tuple[
             if not name:
                 raise ValueError("Workbook has no sheets.")
             ws = wb[name]
-            rows = [[cell_to_str(c) for c in row] for row in ws.iter_rows(values_only=True)]
+            declared = _declared_max_column(ws)
+            rows: list[list[str]] = []
+            max_seen = 0
+            # Prefer explicit max_col so trailing header cells are not dropped when
+            # early data rows are shorter than the header row.
+            iter_kwargs = {}
+            if declared > 0:
+                iter_kwargs = {"min_col": 1, "max_col": declared}
+            for row in ws.iter_rows(values_only=True, **iter_kwargs):
+                vals = [cell_to_str(c) for c in row]
+                max_seen = max(max_seen, len(vals))
+                rows.append(vals)
+            width = max(declared, max_seen)
+            if width and rows:
+                rows = [list(r) + [""] * (width - len(r)) for r in rows]
+            else:
+                rows = pad_matrix(rows)
             return name, rows
         finally:
             wb.close()
@@ -123,6 +178,6 @@ def load_sheet_matrix(excel_path: Path, sheet_name: str | None = None) -> tuple[
         name = sheet_name or xl.sheet_names[0]
         df = pd.read_excel(xl, sheet_name=name, header=None, dtype=str)
         rows = [[cell_to_str(v) for v in row] for row in df.fillna("").to_numpy().tolist()]
-        return name, rows
+        return name, pad_matrix(rows)
 
     raise ValueError(f"Unsupported Excel type: {suffix}")
