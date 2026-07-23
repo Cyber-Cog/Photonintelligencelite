@@ -71,7 +71,7 @@ export function LoginPage() {
         </button>
         {busy ? (
           <p className="text-center text-xs text-stone-500 dark:text-stone-400">
-            Connecting to API if needed — this can take a couple of minutes on a cold start.
+            Connecting to API… retries automatically if the network drops.
           </p>
         ) : null}
       </form>
