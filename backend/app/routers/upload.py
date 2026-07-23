@@ -1,9 +1,14 @@
 """Upload endpoint: streamed save, Excel→CSV conversion, bounded gzip decompression,
 header inspection, and confidence-scored mapping suggestions. See docs/PRD.md §7.2, §7.4.
+
+Excel conversion runs off the request thread (like demo prep) so Vercel→Render proxies
+do not 502 when a wide workbook takes longer than the edge timeout (~30s).
 """
 from __future__ import annotations
 
+import logging
 import shutil
+import threading
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
@@ -15,7 +20,7 @@ from backend.app.auth.deps import enforce_csrf, require_verified_user
 from backend.app.auth.job_access import load_job_authorized
 from backend.app.auth.rate_limit import client_ip
 from backend.app.config import Settings, get_settings
-from backend.app.database import get_db
+from backend.app.database import SessionLocal, get_db
 from backend.app.models import Job, User
 from backend.app.schemas import ExcelParseReportOut, UploadResponse
 from backend.app.services.excel_parser import ExcelConversionError, parse_excel_to_csv
@@ -38,6 +43,7 @@ from backend.app.services.storage import (
 )
 
 router = APIRouter(prefix="/api", tags=["upload"])
+logger = logging.getLogger("pic_lite.upload")
 
 ALLOWED_EXTENSIONS = (".csv", ".csv.gz", ".xlsx", ".xlsm", ".xls")
 EXCEL_EXTENSIONS = (".xlsx", ".xlsm", ".xls")
@@ -81,19 +87,39 @@ def _clear_raw_dir(settings: Settings, job_id: str) -> None:
     paths.raw_dir.mkdir(parents=True, exist_ok=True)
 
 
+def _pending_upload_response(job: Job) -> UploadResponse:
+    """Returned while Excel→CSV still runs in the background."""
+    return UploadResponse(
+        job_id=job.id,
+        state=job.state,
+        detected_columns=[],
+        mapping_suggestions=[],
+        requires_manual_mapping=True,
+        parse_report=None,
+        looks_like_complete_pack=False,
+        pack_match_ratio=0.0,
+    )
+
+
 async def _ingest_uploads(
     all_files: list[UploadFile],
     *,
     paths,
     limits,
-) -> tuple[list[Path], ExcelParseReportOut | None, str | None]:
-    """Save/convert uploads into raw_dir; return (converted_paths, parse_report, progress)."""
+    defer_excel: bool = False,
+) -> tuple[list[Path], ExcelParseReportOut | None, str | None, bool]:
+    """Save/convert uploads into raw_dir.
+
+    Returns (converted_paths, parse_report, progress, excel_deferred).
+    When defer_excel=True, Excel files are saved raw and conversion is skipped.
+    """
     parse_report_out: ExcelParseReportOut | None = None
     converted_paths: list[Path] = []
     progress: str | None = None
+    excel_deferred = False
 
     async def _ingest_one(upload: UploadFile, idx: int) -> Path:
-        nonlocal parse_report_out
+        nonlocal parse_report_out, excel_deferred
         filename = sanitize_filename(upload.filename or f"upload_{idx}.csv")
         lower = filename.lower()
         is_gz = lower.endswith(".gz")
@@ -103,6 +129,10 @@ async def _ingest_uploads(
         if is_excel:
             excel_target = paths.raw_dir / f"upload_{idx}{Path(lower).suffix}"
             await save_upload_stream(upload, excel_target, max_bytes)
+            if defer_excel:
+                excel_deferred = True
+                # Placeholder path — background worker writes the real CSV.
+                return out_csv
             report_path = paths.raw_dir / f"parse_report_{idx}.json"
             _n, report = parse_excel_to_csv(
                 excel_target,
@@ -131,6 +161,9 @@ async def _ingest_uploads(
     for i, uf in enumerate(all_files):
         converted_paths.append(await _ingest_one(uf, i))
 
+    if excel_deferred:
+        return converted_paths, None, "Saving Excel — parsing will continue in the background…", True
+
     csv_path = paths.raw_dir / "input.csv"
     manifest_path = paths.raw_dir / "sources_manifest.json"
     if len(converted_paths) > 1:
@@ -146,7 +179,144 @@ async def _ingest_uploads(
             f"{parse_report_out.row_count:,} rows, {inv_n} inverter(s), "
             f"confidence {parse_report_out.confidence:.0%}."
         )
-    return converted_paths, parse_report_out, progress
+    return converted_paths, parse_report_out, progress, False
+
+
+def _convert_deferred_excels(paths, limits) -> tuple[ExcelParseReportOut | None, str | None]:
+    """Convert any raw upload_*.xlsx left on disk, then merge into input.csv."""
+    excel_files = sorted(
+        p
+        for p in paths.raw_dir.iterdir()
+        if p.is_file() and p.suffix.lower() in EXCEL_EXTENSIONS and p.name.startswith("upload_")
+    )
+    if not excel_files:
+        return None, None
+
+    parse_report_out: ExcelParseReportOut | None = None
+    converted: list[Path] = []
+    # Also keep any CSV parts already written (mixed excel+csv uploads).
+    existing_csvs = sorted(
+        p for p in paths.raw_dir.iterdir() if p.is_file() and p.suffix.lower() == ".csv" and p.name.startswith("part_")
+    )
+    converted.extend(existing_csvs)
+
+    multi = len(excel_files) + len(existing_csvs) > 1
+    for excel_target in excel_files:
+        # upload_0.xlsx → part_0.csv or input.csv
+        stem = excel_target.stem  # upload_0
+        idx_s = stem.split("_", 1)[-1]
+        out_csv = paths.raw_dir / (f"part_{idx_s}.csv" if multi else "input.csv")
+        report_path = paths.raw_dir / f"parse_report_{idx_s}.json"
+        _n, report = parse_excel_to_csv(
+            excel_target,
+            out_csv,
+            max_decompressed_bytes=limits.max_decompressed_upload_mb * 1024 * 1024,
+            max_rows=limits.max_rows,
+            report_path=report_path,
+        )
+        if parse_report_out is None:
+            parse_report_out = ExcelParseReportOut(**report.to_dict())
+        excel_target.unlink(missing_ok=True)
+        converted.append(out_csv)
+
+    csv_path = paths.raw_dir / "input.csv"
+    manifest_path = paths.raw_dir / "sources_manifest.json"
+    progress: str | None = None
+    unique = list(dict.fromkeys(converted))
+    if len(unique) > 1:
+        row_count, names = merge_csv_files(unique, csv_path, manifest_path)
+        for p in unique:
+            if p != csv_path:
+                p.unlink(missing_ok=True)
+        progress = f"Merged {len(names)} report(s) — {row_count:,} rows."
+    elif parse_report_out:
+        inv_n = len(parse_report_out.inverters_found)
+        progress = (
+            f"Parsed {parse_report_out.layout} ({parse_report_out.strategy}): "
+            f"{parse_report_out.row_count:,} rows, {inv_n} inverter(s), "
+            f"confidence {parse_report_out.confidence:.0%}."
+        )
+    return parse_report_out, progress
+
+
+def _finish_excel_parse(
+    job_id: str,
+    settings: Settings,
+    *,
+    prior_mapping: dict[str, str] | None = None,
+    progress_fallback: str = "Reviewing detected columns…",
+) -> None:
+    """Heavy Excel→CSV off the request thread so proxies do not time out."""
+    db = SessionLocal()
+    try:
+        job = db.get(Job, job_id)
+        if job is None:
+            return
+        paths = job_paths(settings.job_root_path, job_id)
+        limits = settings.limits
+        job.progress_message = "Parsing Excel workbook…"
+        db.add(job)
+        db.commit()
+
+        parse_report_out, progress = _convert_deferred_excels(paths, limits)
+        csv_path = paths.raw_dir / "input.csv"
+        if not csv_path.exists():
+            raise ExcelConversionError("Excel conversion finished but no CSV was produced.")
+
+        # Touch mapping helpers so we fail early if the CSV is unreadable.
+        _ = _build_upload_response(
+            db,
+            job,
+            csv_path=csv_path,
+            parse_report_out=parse_report_out,
+            prior_mapping=prior_mapping,
+        )
+
+        job.state = JobState.MAPPING.value
+        job.progress_message = progress or progress_fallback
+        job.error_summary = None
+        db.add(job)
+        db.commit()
+    except (UploadTooLargeError, DecompressionBombError) as exc:
+        logger.warning("excel parse size limit job=%s: %s", job_id, exc)
+        try:
+            job = db.get(Job, job_id)
+            if job is not None:
+                job.state = JobState.FAILED.value
+                job.error_summary = str(exc)
+                job.progress_message = str(exc)
+                db.add(job)
+                db.commit()
+        except Exception:  # noqa: BLE001
+            logger.exception("could not mark upload job failed job=%s", job_id)
+    except ExcelConversionError as exc:
+        logger.warning("excel parse failed job=%s: %s", job_id, exc)
+        try:
+            job = db.get(Job, job_id)
+            if job is not None:
+                job.state = JobState.FAILED.value
+                job.error_summary = str(exc)
+                job.progress_message = str(exc)
+                db.add(job)
+                db.commit()
+        except Exception:  # noqa: BLE001
+            logger.exception("could not mark upload job failed job=%s", job_id)
+    except Exception:  # noqa: BLE001
+        logger.exception("excel background parse failed job=%s", job_id)
+        try:
+            job = db.get(Job, job_id)
+            if job is not None:
+                job.state = JobState.FAILED.value
+                job.error_summary = (
+                    "Could not parse this Excel file. Try exporting as CSV, or use a smaller date range."
+                )
+                job.progress_message = job.error_summary
+                db.add(job)
+                db.commit()
+        except Exception:  # noqa: BLE001
+            logger.exception("could not mark upload job failed job=%s", job_id)
+    finally:
+        db.close()
 
 
 def _build_upload_response(
@@ -189,6 +359,14 @@ def _build_upload_response(
     )
 
 
+def _has_excel(files: list[UploadFile]) -> bool:
+    for f in files:
+        name = (f.filename or "").lower()
+        if any(name.endswith(ext) for ext in EXCEL_EXTENSIONS):
+            return True
+    return False
+
+
 @router.post("/upload", response_model=UploadResponse)
 async def upload_file(
     request: Request,
@@ -226,9 +404,12 @@ async def upload_file(
     limits = settings.limits
     csv_path = paths.raw_dir / "input.csv"
     parse_report_out: ExcelParseReportOut | None = None
+    defer_excel = _has_excel(all_files)
 
     try:
-        _, parse_report_out, progress = await _ingest_uploads(all_files, paths=paths, limits=limits)
+        _, parse_report_out, progress, excel_deferred = await _ingest_uploads(
+            all_files, paths=paths, limits=limits, defer_excel=defer_excel
+        )
         if progress:
             job.progress_message = progress
     except (UploadTooLargeError, DecompressionBombError) as exc:
@@ -243,6 +424,20 @@ async def upload_file(
         db.add(job)
         db.commit()
         raise HTTPException(400, str(exc)) from exc
+
+    if excel_deferred:
+        job.state = JobState.PARSING.value
+        job.progress_message = "Parsing Excel workbook… this can take a minute for wide reports."
+        db.add(job)
+        db.commit()
+        threading.Thread(
+            target=_finish_excel_parse,
+            args=(job.id, settings),
+            kwargs={"progress_fallback": "Reviewing detected columns…"},
+            daemon=True,
+            name=f"excel-parse-{job.id[:8]}",
+        ).start()
+        return _pending_upload_response(job)
 
     job.state = "mapping"
     if not job.progress_message:
@@ -293,9 +488,12 @@ async def replace_upload(
     limits = settings.limits
     csv_path = paths.raw_dir / "input.csv"
     parse_report_out: ExcelParseReportOut | None = None
+    defer_excel = _has_excel(all_files)
 
     try:
-        _, parse_report_out, progress = await _ingest_uploads(all_files, paths=paths, limits=limits)
+        _, parse_report_out, progress, excel_deferred = await _ingest_uploads(
+            all_files, paths=paths, limits=limits, defer_excel=defer_excel
+        )
         if progress:
             job.progress_message = progress
     except (UploadTooLargeError, DecompressionBombError) as exc:
@@ -312,7 +510,6 @@ async def replace_upload(
         raise HTTPException(400, str(exc)) from exc
 
     job.original_filename = label
-    job.state = JobState.MAPPING.value
     job.error_summary = None
     job.validation_summary_json = None
     job.results_summary_json = None
@@ -323,6 +520,34 @@ async def replace_upload(
     job.downloaded_excel = False
     # Drop stale mapping — Setup rebuilds from suggestions + prior overlay by column name.
     job.mapping_json = None
+
+    if excel_deferred:
+        job.state = JobState.PARSING.value
+        job.progress_message = "Parsing Excel workbook… this can take a minute for wide reports."
+        db.add(job)
+        db.commit()
+        record_audit(
+            db,
+            action="job.replace_upload",
+            user_id=user.id,
+            job_id=job.id,
+            ip=client_ip(request),
+            user_agent=request.headers.get("user-agent"),
+            detail={"filename": label, "preserved_mapping_cols": len(prior_mapping), "async_excel": True},
+        )
+        threading.Thread(
+            target=_finish_excel_parse,
+            args=(job.id, settings),
+            kwargs={
+                "prior_mapping": prior_mapping or None,
+                "progress_fallback": "Files replaced — review column mapping.",
+            },
+            daemon=True,
+            name=f"excel-replace-{job.id[:8]}",
+        ).start()
+        return _pending_upload_response(job)
+
+    job.state = JobState.MAPPING.value
     if not job.progress_message:
         job.progress_message = "Files replaced — review column mapping."
     db.add(job)

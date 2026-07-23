@@ -179,17 +179,75 @@ function _postUpload(url: string, files: File[], onProgress?: (pct: number) => v
         resolve(JSON.parse(xhr.responseText));
       } else {
         let message = `Upload failed (${xhr.status})`;
+        const raw = (xhr.responseText || "").trim();
         try {
-          message = JSON.parse(xhr.responseText).detail || message;
+          const body = JSON.parse(raw);
+          if (typeof body.detail === "string") message = body.detail;
+          else if (Array.isArray(body.detail)) {
+            message = body.detail.map((d: { msg?: string }) => d.msg || JSON.stringify(d)).join("; ");
+          } else if (body.detail) message = String(body.detail);
         } catch {
-          // ignore
+          if (raw && raw.length < 400 && !raw.startsWith("<")) message = raw;
+        }
+        if (xhr.status === 502 || xhr.status === 504) {
+          message =
+            "Upload timed out while the server was processing your file. " +
+            "Large Excel workbooks can take a minute — wait a moment and retry. " +
+            "If it keeps failing, export a CSV slice and upload that instead.";
+        } else if (xhr.status === 413) {
+          message = message || "File is too large for this deployment.";
         }
         reject(new ApiError(xhr.status, message));
       }
     };
     xhr.onerror = () => reject(new ApiError(0, API_UNREACHABLE));
+    xhr.ontimeout = () =>
+      reject(
+        new ApiError(
+          0,
+          "Upload timed out. Check your connection, then retry — or export CSV and upload that.",
+        ),
+      );
+    xhr.timeout = 180_000;
     xhr.send(form);
   });
+}
+
+/** Poll until Excel→CSV finishes (or fails). Upload may return state=parsing immediately. */
+export async function waitForUploadReady(
+  jobId: string,
+  opts?: { maxMs?: number; onProgress?: (msg: string) => void },
+): Promise<UploadResponse> {
+  const maxMs = opts?.maxMs ?? 300_000;
+  const started = Date.now();
+  let delay = 1_200;
+  for (;;) {
+    const status = await getJobStatus(jobId);
+    if (status.state === "failed") {
+      throw new ApiError(400, status.error_summary || status.progress_message || "Excel parsing failed.");
+    }
+    if (status.state !== "parsing" && status.state !== "uploaded") {
+      const ctx = await getSetupContext(jobId);
+      return {
+        job_id: ctx.job_id,
+        state: ctx.state,
+        detected_columns: ctx.detected_columns,
+        mapping_suggestions: ctx.mapping_suggestions,
+        requires_manual_mapping: ctx.requires_manual_mapping,
+        looks_like_complete_pack: ctx.looks_like_complete_pack ?? false,
+        pack_match_ratio: ctx.pack_match_ratio ?? 0,
+      };
+    }
+    opts?.onProgress?.(status.progress_message || "Parsing Excel workbook…");
+    if (Date.now() - started >= maxMs) {
+      throw new ApiError(
+        0,
+        "Excel parsing is taking too long. Keep this tab open and retry in a minute, or upload a CSV export.",
+      );
+    }
+    await sleep(delay);
+    delay = Math.min(Math.round(delay * 1.25), 4_000);
+  }
 }
 
 /** @deprecated use uploadFiles */

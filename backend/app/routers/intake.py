@@ -381,7 +381,27 @@ def get_setup_context(
     job = _get_job_or_404(db, job_id, user)
     paths = job_paths(settings.job_root_path, job.id)
     csv_path = paths.raw_dir / "input.csv"
+
+    # Excel still converting in background — UI polls until state advances.
+    if job.state == JobState.PARSING.value and not csv_path.exists():
+        return SetupContextResponse(
+            job_id=job.id,
+            state=job.state,
+            detected_columns=[],
+            mapping_suggestions=[],
+            requires_manual_mapping=True,
+            current_mapping={},
+            plant_config=(job.plant_config_json or {}).get("plant") if job.plant_config_json else None,
+            looks_like_complete_pack=False,
+            pack_match_ratio=0.0,
+        )
+
     if not csv_path.exists():
+        if job.state == JobState.FAILED.value:
+            raise HTTPException(
+                404,
+                job.error_summary or "Upload parsing failed. Please upload again.",
+            )
         raise HTTPException(404, "Uploaded file not found for this job. Please upload again.")
 
     columns = read_header(csv_path)

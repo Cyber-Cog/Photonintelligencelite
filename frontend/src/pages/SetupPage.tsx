@@ -203,49 +203,72 @@ export function SetupPage() {
   }, [location.hash, location.search, loadingContext, suggestions.length, applyFocus]);
 
   // Always reload setup from the job (supports completed → edit & re-run).
+  // If Excel is still parsing, poll until mapping (or failed).
   useEffect(() => {
     if (!jobId) return;
     let cancelled = false;
-    setLoadingContext(true);
-    getSetupContext(jobId)
-      .then((ctx) => {
-        if (cancelled) return;
-        setSuggestions(ctx.mapping_suggestions);
-        const next: Record<string, string> = {};
-        for (const s of ctx.mapping_suggestions) {
-          next[s.column_name] =
-            ctx.current_mapping[s.column_name] ?? s.canonical_field ?? "ignore";
+    let timer: number | undefined;
+
+    const applyCtx = (ctx: Awaited<ReturnType<typeof getSetupContext>>) => {
+      setSuggestions(ctx.mapping_suggestions);
+      const next: Record<string, string> = {};
+      for (const s of ctx.mapping_suggestions) {
+        next[s.column_name] =
+          ctx.current_mapping[s.column_name] ?? s.canonical_field ?? "ignore";
+      }
+      for (const [col, field] of Object.entries(ctx.current_mapping)) {
+        if (!(col in next)) next[col] = field;
+      }
+      setMapping(next);
+      if (ctx.plant_config) setPlant(plantFromConfig(ctx.plant_config));
+      setJobState(ctx.state);
+      setJob(jobId, {
+        job_id: ctx.job_id,
+        state: ctx.state,
+        detected_columns: ctx.detected_columns,
+        mapping_suggestions: ctx.mapping_suggestions,
+        requires_manual_mapping: ctx.requires_manual_mapping,
+        looks_like_complete_pack: ctx.looks_like_complete_pack ?? false,
+        pack_match_ratio: ctx.pack_match_ratio ?? 0,
+      });
+      setLooksLikePack(ctx.looks_like_complete_pack ?? false);
+      setPackMatchRatio(ctx.pack_match_ratio ?? 0);
+      setContextError(null);
+    };
+
+    const load = async () => {
+      setLoadingContext(true);
+      try {
+        for (;;) {
+          if (cancelled) return;
+          const ctx = await getSetupContext(jobId);
+          if (cancelled) return;
+          if (ctx.state === "parsing" || (ctx.state === "uploaded" && ctx.detected_columns.length === 0)) {
+            setJobState(ctx.state);
+            setContextError(null);
+            setLoadingContext(true);
+            await new Promise((r) => {
+              timer = window.setTimeout(r, 1500);
+            });
+            continue;
+          }
+          applyCtx(ctx);
+          setLoadingContext(false);
+          return;
         }
-        for (const [col, field] of Object.entries(ctx.current_mapping)) {
-          if (!(col in next)) next[col] = field;
-        }
-        setMapping(next);
-        if (ctx.plant_config) setPlant(plantFromConfig(ctx.plant_config));
-        setJobState(ctx.state);
-        setJob(jobId, {
-          job_id: ctx.job_id,
-          state: ctx.state,
-          detected_columns: ctx.detected_columns,
-          mapping_suggestions: ctx.mapping_suggestions,
-          requires_manual_mapping: ctx.requires_manual_mapping,
-          looks_like_complete_pack: ctx.looks_like_complete_pack ?? false,
-          pack_match_ratio: ctx.pack_match_ratio ?? 0,
-        });
-        setLooksLikePack(ctx.looks_like_complete_pack ?? false);
-        setPackMatchRatio(ctx.pack_match_ratio ?? 0);
-        setContextError(null);
-      })
-      .catch((err) => {
+      } catch (err) {
         if (cancelled) return;
         setContextError(
           err instanceof ApiError ? err.message : "Could not reload setup for this job.",
         );
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingContext(false);
-      });
+        setLoadingContext(false);
+      }
+    };
+
+    void load();
     return () => {
       cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
     };
     // Intentionally only jobId — setJob from context must not retrigger (infinite reload).
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -377,8 +400,13 @@ export function SetupPage() {
 
   if (loadingContext) {
     return (
-      <div className="mx-auto flex max-w-xl items-center gap-2 text-sm text-stone-500">
-        <Spinner className="h-4 w-4" /> Reloading column mapping for this job…
+      <div className="mx-auto flex max-w-xl flex-col gap-2 text-sm text-stone-500">
+        <div className="flex items-center gap-2">
+          <Spinner className="h-4 w-4" />
+          {jobState === "parsing" || jobState === "uploaded"
+            ? "Parsing Excel workbook… wide reports can take up to a minute."
+            : "Reloading column mapping for this job…"}
+        </div>
       </div>
     );
   }

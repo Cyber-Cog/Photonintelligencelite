@@ -26,18 +26,19 @@ def _probe_openpyxl(excel_path: Path, *, sample_rows: int, max_sheets: int) -> l
             ws = wb[name]
             rows: list[list[str]] = []
             n_cols = 0
+            # Only sample — never full-scan during probe (wide SCADA sheets can be 600+ cols).
             for i, row in enumerate(ws.iter_rows(values_only=True)):
                 vals = [cell_to_str(c) for c in row]
                 n_cols = max(n_cols, len(vals))
-                if i < sample_rows:
-                    rows.append(vals)
-                # Cap full scan for huge sheets — still get approximate size from max_row when available
-            n_rows = ws.max_row or len(rows)
-            # Prefer counting non-empty from sample; max_row is fine for probe
+                rows.append(vals)
+                if i + 1 >= sample_rows:
+                    break
+            # read_only max_row is often unset until a full pass; sample length is enough to rank.
+            n_rows = int(ws.max_row or len(rows) or sample_rows)
             probes.append(
                 SheetProbe(
                     sheet_name=name,
-                    n_rows=int(n_rows),
+                    n_rows=n_rows,
                     n_cols=int(ws.max_column or n_cols),
                     sample_rows=rows,
                     merged_cell_count=0,  # read_only mode has no merged_cells

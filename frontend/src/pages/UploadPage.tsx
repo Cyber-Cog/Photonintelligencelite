@@ -7,6 +7,7 @@ import {
   downloadAuthenticated,
   replaceUploadFiles,
   uploadFiles,
+  waitForUploadReady,
 } from "@/api/client";
 import { StepIndicator } from "@/components/StepIndicator";
 import { InfoBanner } from "@/components/ui/InfoBanner";
@@ -40,6 +41,7 @@ export function UploadPage() {
   const [dragActive, setDragActive] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [phaseHint, setPhaseHint] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dlError, setDlError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState<"excel" | "zip" | null>(null);
@@ -110,17 +112,26 @@ export function UploadPage() {
     setUploading(true);
     setError(null);
     setProgress(0);
+    setPhaseHint(null);
     try {
       const prepared = await Promise.all(selectedFiles.map((f) => maybeCompress(f)));
-      const res = replaceJobId
+      let res = replaceJobId
         ? await replaceUploadFiles(replaceJobId, prepared, setProgress)
         : await uploadFiles(prepared, setProgress);
+      if (res.state === "parsing" || res.state === "uploaded") {
+        setProgress(100);
+        setPhaseHint("Parsing Excel workbook… wide reports can take up to a minute.");
+        res = await waitForUploadReady(res.job_id, {
+          onProgress: (msg) => setPhaseHint(msg),
+        });
+      }
       rememberUploadPath(res.job_id, path);
       setJob(res.job_id, res);
       navigate(`/jobs/${res.job_id}/setup`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Upload failed. Check your connection and try again.");
       setUploading(false);
+      setPhaseHint(null);
     }
   };
 
@@ -205,7 +216,9 @@ export function UploadPage() {
       {uploading && (
         <div className="mt-3 space-y-1">
           <ProgressBar pct={progress} />
-          <p className="text-xs text-stone-400">Uploading and merging… {progress}%</p>
+          <p className="text-xs text-stone-400">
+            {phaseHint ?? `Uploading… ${progress}%`}
+          </p>
         </div>
       )}
     </SectionPanel>
