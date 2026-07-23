@@ -41,11 +41,26 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Cross-origin (Vercel UI → Render API): the CSRF cookie is set on the API host, so
+ * ``document.cookie`` on the UI origin cannot read it. Keep a memory copy from login/me
+ * response bodies and still prefer the same-origin cookie when present (local Vite proxy).
+ */
+let memoryCsrf: string | null = null;
+
+export function setCsrfToken(token: string | null) {
+  memoryCsrf = token;
+}
+
 export function getCsrfToken(): string | null {
+  if (memoryCsrf) return memoryCsrf;
   if (typeof document === "undefined") return null;
   const match = document.cookie.match(/(?:^|;\s*)pic_csrf=([^;]+)/);
   return match ? decodeURIComponent(match[1]) : null;
 }
+
+const API_UNREACHABLE =
+  "Can't reach the API. On free tier the server may take ~30–60s to wake — wait and try again.";
 
 function authHeaders(json = true): HeadersInit {
   const headers: Record<string, string> = {};
@@ -85,11 +100,16 @@ async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
     const csrf = getCsrfToken();
     if (csrf && !headers.has("X-CSRF-Token")) headers.set("X-CSRF-Token", csrf);
   }
-  const res = await fetch(`${BASE_URL}${path}`, {
-    ...init,
-    headers,
-    credentials: "include",
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}${path}`, {
+      ...init,
+      headers,
+      credentials: "include",
+    });
+  } catch {
+    throw new ApiError(0, API_UNREACHABLE);
+  }
   return handle<T>(res);
 }
 
@@ -135,7 +155,7 @@ function _postUpload(url: string, files: File[], onProgress?: (pct: number) => v
         reject(new ApiError(xhr.status, message));
       }
     };
-    xhr.onerror = () => reject(new ApiError(0, "Network error while uploading."));
+    xhr.onerror = () => reject(new ApiError(0, API_UNREACHABLE));
     xhr.send(form);
   });
 }
@@ -297,7 +317,12 @@ export function completeAnalysisZipUrl() {
 
 /** Download a gated template with session cookies (avoids bare <a href> 401). */
 export async function downloadAuthenticated(url: string, filename: string) {
-  const res = await fetch(url, { credentials: "include" });
+  let res: Response;
+  try {
+    res = await fetch(url, { credentials: "include" });
+  } catch {
+    throw new ApiError(0, API_UNREACHABLE);
+  }
   if (!res.ok) {
     let message = `Download failed (${res.status})`;
     try {

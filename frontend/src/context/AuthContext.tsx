@@ -7,7 +7,13 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { ApiError, authApi, getCsrfToken, type AuthUser } from "@/api/client";
+import {
+  ApiError,
+  authApi,
+  getCsrfToken,
+  setCsrfToken as storeCsrfToken,
+  type AuthUser,
+} from "@/api/client";
 
 interface AuthContextValue {
   user: AuthUser | null;
@@ -26,12 +32,21 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+function syncCsrf(token: string | null) {
+  storeCsrfToken(token);
+  return token;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
-  const [csrfToken, setCsrfToken] = useState<string | null>(getCsrfToken());
+  const [csrfToken, setCsrfTokenState] = useState<string | null>(getCsrfToken());
   const [smtpConfigured, setSmtpConfigured] = useState(false);
   const [authAutoVerify, setAuthAutoVerify] = useState(true);
+
+  const setCsrfToken = useCallback((token: string | null) => {
+    setCsrfTokenState(syncCsrf(token));
+  }, []);
 
   const refresh = useCallback(async () => {
     try {
@@ -46,42 +61,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [setCsrfToken]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const res = await authApi.login(email, password);
-    setUser(res.user);
-    setCsrfToken(res.csrf_token);
-  }, []);
+  const login = useCallback(
+    async (email: string, password: string) => {
+      const res = await authApi.login(email, password);
+      setUser(res.user);
+      setCsrfToken(res.csrf_token);
+    },
+    [setCsrfToken],
+  );
 
-  const signup = useCallback(async (email: string, password: string, name: string) => {
-    const res = await authApi.signup(email, password, name);
-    setUser(res.user);
-    setCsrfToken(res.csrf_token);
-    return { verificationLink: res.verification_link, message: res.message };
-  }, []);
+  const signup = useCallback(
+    async (email: string, password: string, name: string) => {
+      const res = await authApi.signup(email, password, name);
+      setUser(res.user);
+      setCsrfToken(res.csrf_token);
+      return { verificationLink: res.verification_link, message: res.message };
+    },
+    [setCsrfToken],
+  );
 
   const logout = useCallback(async () => {
     try {
       await authApi.logout();
     } catch (err) {
-      if (!(err instanceof ApiError && err.status === 401)) {
+      if (!(err instanceof ApiError && (err.status === 401 || err.status === 403))) {
         // still clear local state
       }
     }
     setUser(null);
     setCsrfToken(null);
-  }, []);
+  }, [setCsrfToken]);
 
-  const updateProfile = useCallback(async (name: string) => {
-    const res = await authApi.updateProfile(name);
-    setUser(res.user);
-    setCsrfToken(res.csrf_token);
-  }, []);
+  const updateProfile = useCallback(
+    async (name: string) => {
+      const res = await authApi.updateProfile(name);
+      setUser(res.user);
+      setCsrfToken(res.csrf_token);
+    },
+    [setCsrfToken],
+  );
 
   const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
     await authApi.changePassword(currentPassword, newPassword);

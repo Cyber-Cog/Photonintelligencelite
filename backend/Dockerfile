@@ -17,7 +17,12 @@ RUN pip install -r requirements.txt
 
 COPY analytics ./analytics
 COPY backend ./backend
+# Demo endpoint reads tests/fixtures/demo_plant_scada.csv (or generates via synthetic_generator).
+# Ship both so cold starts do not depend on runtime generation / missing package markers.
+COPY tests/__init__.py ./tests/__init__.py
+COPY tests/fixtures/__init__.py ./tests/fixtures/__init__.py
 COPY tests/fixtures/synthetic_generator.py ./tests/fixtures/synthetic_generator.py
+COPY tests/fixtures/demo_plant_scada.csv ./tests/fixtures/demo_plant_scada.csv
 
 RUN mkdir -p /srv/uploads
 

@@ -43,7 +43,8 @@ export function LoginPage() {
           <input
             id="email"
             className="input"
-            type="email"
+            type="text"
+            inputMode="email"
             autoComplete="email"
             required
             value={email}

@@ -20,6 +20,7 @@ frontend/.vite/
 .env
 .env.local
 !.env.example
+.deploy-secrets/
 
 ## Data / temp artifacts (never commit operational SCADA data)
 uploads/

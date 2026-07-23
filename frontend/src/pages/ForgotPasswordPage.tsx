@@ -38,7 +38,8 @@ export function ForgotPasswordPage() {
           <input
             id="email"
             className="input"
-            type="email"
+            type="text"
+            inputMode="email"
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
