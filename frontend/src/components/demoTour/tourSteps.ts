@@ -35,7 +35,7 @@ export const DEMO_TOUR_STEPS: TourStepDef[] = [
   {
     id: "summary",
     title: "Summary & actions",
-    body: "Sticky KPIs stay in view. Below: Action Centre (severity filter + detail), loss bridge, worst inverters, and string health.",
+    body: "Sticky KPIs stay in view. Below: Action Centre (severity filter + detail), worst inverters, and string health.",
     route: "dashboard",
     selector: "[data-tour='summary-kpis']",
     resultsSection: "summary",
@@ -44,10 +44,10 @@ export const DEMO_TOUR_STEPS: TourStepDef[] = [
   {
     id: "loss-bridge",
     title: "Loss bridge",
-    body: "Expected → diagnosed losses → unknown → actual. Summary shows the chart; the Loss bridge tab adds the full segment table.",
+    body: "Expected → diagnosed losses → unknown → actual. Open the Loss bridge tab for the waterfall chart and segment table.",
     route: "dashboard",
     selector: "[data-tour='loss-bridge']",
-    resultsSection: "summary",
+    resultsSection: "bridge",
     placement: "top",
   },
   {

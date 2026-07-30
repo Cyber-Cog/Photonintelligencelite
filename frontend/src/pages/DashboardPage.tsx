@@ -653,15 +653,6 @@ export function DashboardPage() {
                     </div>
                   )}
 
-                  <div data-tour="loss-bridge" data-summary-bridge>
-                    <LossWaterfallBridge
-                      kpis={data.kpis}
-                      results={data.results}
-                      jobId={jobId}
-                      compact
-                    />
-                  </div>
-
                   <SummaryInsightPanels
                     worstInverters={worstInverters}
                     stringHealth={stringHealth.rows}
