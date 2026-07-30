@@ -107,8 +107,17 @@ def map_metric(category: str, leaf: str) -> str | None:
             return "AC Power (kW)"
 
     if "power" in leaf_n and ("kw" in leaf_n or leaf_n == "power"):
-        if "dc" not in cat:
+        # SMB/SCB parameter blocks are DC-side; only treat as AC when category says so.
+        if any(tok in cat for tok in ("smb", "scb", "combiner", "string", "dc")):
+            return "DC Power (kW)"
+        if "ac" in cat or "output" in cat:
             return "AC Power (kW)"
+        if "dc" in cat:
+            return "DC Power (kW)"
+        # Bare "Power (kW)" under an inverter AC block → AC; otherwise prefer DC for combiner exports
+        if "inverter" in cat:
+            return "AC Power (kW)"
+        return "DC Power (kW)"
 
     if leaf_n.startswith("temp") or "temp (" in leaf_n or leaf_n.endswith("temp"):
         if "module" in leaf_n or "panel" in leaf_n:

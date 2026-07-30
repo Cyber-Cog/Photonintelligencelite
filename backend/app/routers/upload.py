@@ -6,6 +6,7 @@ do not 502 when a wide workbook takes longer than the edge timeout (~30s).
 """
 from __future__ import annotations
 
+import json
 import logging
 import shutil
 import threading
@@ -182,8 +183,28 @@ async def _ingest_uploads(
     return converted_paths, parse_report_out, progress, False
 
 
-def _convert_deferred_excels(paths, limits) -> tuple[ExcelParseReportOut | None, str | None]:
-    """Convert any raw upload_*.xlsx left on disk, then merge into input.csv."""
+def _progress_commit(db: Session, job_id: str, message: str) -> None:
+    job = db.get(Job, job_id)
+    if job is None:
+        return
+    job.progress_message = message
+    db.add(job)
+    db.commit()
+
+
+def _convert_deferred_excels(
+    paths,
+    limits,
+    *,
+    job_id: str | None = None,
+    db: Session | None = None,
+) -> tuple[ExcelParseReportOut | None, str | None]:
+    """Convert any raw upload_*.xlsx left on disk, then merge into input.csv.
+
+    Parses each workbook independently so one bad file does not silently kill
+    the batch with a vague error — failures name the file and successful parts
+    still merge when at least one CSV was produced.
+    """
     excel_files = sorted(
         p
         for p in paths.raw_dir.iterdir()
@@ -194,6 +215,7 @@ def _convert_deferred_excels(paths, limits) -> tuple[ExcelParseReportOut | None,
 
     parse_report_out: ExcelParseReportOut | None = None
     converted: list[Path] = []
+    failures: list[str] = []
     # Also keep any CSV parts already written (mixed excel+csv uploads).
     existing_csvs = sorted(
         p for p in paths.raw_dir.iterdir() if p.is_file() and p.suffix.lower() == ".csv" and p.name.startswith("part_")
@@ -201,42 +223,99 @@ def _convert_deferred_excels(paths, limits) -> tuple[ExcelParseReportOut | None,
     converted.extend(existing_csvs)
 
     multi = len(excel_files) + len(existing_csvs) > 1
-    for excel_target in excel_files:
+    total = len(excel_files)
+    for i, excel_target in enumerate(excel_files):
         # upload_0.xlsx → part_0.csv or input.csv
         stem = excel_target.stem  # upload_0
         idx_s = stem.split("_", 1)[-1]
         out_csv = paths.raw_dir / (f"part_{idx_s}.csv" if multi else "input.csv")
         report_path = paths.raw_dir / f"parse_report_{idx_s}.json"
-        _n, report = parse_excel_to_csv(
-            excel_target,
-            out_csv,
-            max_decompressed_bytes=limits.max_decompressed_upload_mb * 1024 * 1024,
-            max_rows=limits.max_rows,
-            report_path=report_path,
+        label = excel_target.name
+        if job_id and db is not None:
+            _progress_commit(
+                db,
+                job_id,
+                f"Parsing Excel {i + 1}/{total}: {label}…",
+            )
+        try:
+            _n, report = parse_excel_to_csv(
+                excel_target,
+                out_csv,
+                max_decompressed_bytes=limits.max_decompressed_upload_mb * 1024 * 1024,
+                max_rows=limits.max_rows,
+                report_path=report_path,
+            )
+            if parse_report_out is None:
+                parse_report_out = ExcelParseReportOut(**report.to_dict())
+            excel_target.unlink(missing_ok=True)
+            converted.append(out_csv)
+        except (UploadTooLargeError, DecompressionBombError) as exc:
+            failures.append(f"{label}: {exc}")
+            out_csv.unlink(missing_ok=True)
+            logger.warning("excel size limit file=%s: %s", label, exc)
+        except ExcelConversionError as exc:
+            failures.append(f"{label}: {exc}")
+            out_csv.unlink(missing_ok=True)
+            logger.warning("excel parse failed file=%s: %s", label, exc)
+        except Exception as exc:  # noqa: BLE001
+            failures.append(f"{label}: {type(exc).__name__}: {exc}")
+            out_csv.unlink(missing_ok=True)
+            logger.exception("excel parse unexpected file=%s", label)
+
+    if not converted:
+        detail = "; ".join(failures) if failures else "no readable workbooks"
+        raise ExcelConversionError(
+            f"Could not parse any of the {total} Excel file(s). {detail}"
         )
-        if parse_report_out is None:
-            parse_report_out = ExcelParseReportOut(**report.to_dict())
-        excel_target.unlink(missing_ok=True)
-        converted.append(out_csv)
 
     csv_path = paths.raw_dir / "input.csv"
     manifest_path = paths.raw_dir / "sources_manifest.json"
     progress: str | None = None
     unique = list(dict.fromkeys(converted))
     if len(unique) > 1:
-        row_count, names = merge_csv_files(unique, csv_path, manifest_path)
+        if job_id and db is not None:
+            _progress_commit(db, job_id, f"Merging {len(unique)} parsed report(s)…")
+        try:
+            row_count, names = merge_csv_files(unique, csv_path, manifest_path)
+        except Exception as exc:  # noqa: BLE001
+            raise ExcelConversionError(
+                f"Parsed {len(unique)} file(s) but could not merge them: {exc}"
+            ) from exc
         for p in unique:
             if p != csv_path:
                 p.unlink(missing_ok=True)
         progress = f"Merged {len(names)} report(s) — {row_count:,} rows."
+        if failures:
+            progress += f" Skipped {len(failures)} file(s)."
+            logger.warning("partial excel batch job failures: %s", failures)
     elif parse_report_out:
+        # Single successful part may still be named part_N.csv
+        if unique and unique[0] != csv_path:
+            unique[0].replace(csv_path)
         inv_n = len(parse_report_out.inverters_found)
         progress = (
             f"Parsed {parse_report_out.layout} ({parse_report_out.strategy}): "
             f"{parse_report_out.row_count:,} rows, {inv_n} inverter(s), "
             f"confidence {parse_report_out.confidence:.0%}."
         )
+        if failures:
+            progress += f" Skipped {len(failures)} file(s)."
+    if failures and unique:
+        # Surface partial success in progress; do not fail the job.
+        warn_path = paths.raw_dir / "parse_failures.json"
+        warn_path.write_text(json.dumps({"failures": failures}, indent=2), encoding="utf-8")
     return parse_report_out, progress
+
+
+def _mark_job_failed(db: Session, job_id: str, message: str) -> None:
+    job = db.get(Job, job_id)
+    if job is None:
+        return
+    job.state = JobState.FAILED.value
+    job.error_summary = message
+    job.progress_message = message
+    db.add(job)
+    db.commit()
 
 
 def _finish_excel_parse(
@@ -258,7 +337,9 @@ def _finish_excel_parse(
         db.add(job)
         db.commit()
 
-        parse_report_out, progress = _convert_deferred_excels(paths, limits)
+        parse_report_out, progress = _convert_deferred_excels(
+            paths, limits, job_id=job_id, db=db
+        )
         csv_path = paths.raw_dir / "input.csv"
         if not csv_path.exists():
             raise ExcelConversionError("Excel conversion finished but no CSV was produced.")
@@ -280,39 +361,28 @@ def _finish_excel_parse(
     except (UploadTooLargeError, DecompressionBombError) as exc:
         logger.warning("excel parse size limit job=%s: %s", job_id, exc)
         try:
-            job = db.get(Job, job_id)
-            if job is not None:
-                job.state = JobState.FAILED.value
-                job.error_summary = str(exc)
-                job.progress_message = str(exc)
-                db.add(job)
-                db.commit()
+            _mark_job_failed(db, job_id, str(exc))
         except Exception:  # noqa: BLE001
             logger.exception("could not mark upload job failed job=%s", job_id)
     except ExcelConversionError as exc:
         logger.warning("excel parse failed job=%s: %s", job_id, exc)
         try:
-            job = db.get(Job, job_id)
-            if job is not None:
-                job.state = JobState.FAILED.value
-                job.error_summary = str(exc)
-                job.progress_message = str(exc)
-                db.add(job)
-                db.commit()
+            _mark_job_failed(db, job_id, str(exc))
         except Exception:  # noqa: BLE001
             logger.exception("could not mark upload job failed job=%s", job_id)
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         logger.exception("excel background parse failed job=%s", job_id)
         try:
-            job = db.get(Job, job_id)
-            if job is not None:
-                job.state = JobState.FAILED.value
-                job.error_summary = (
-                    "Could not parse this Excel file. Try exporting as CSV, or use a smaller date range."
-                )
-                job.progress_message = job.error_summary
-                db.add(job)
-                db.commit()
+            # Prefer actionable detail over a generic CSV tip — only when truly unrecoverable.
+            detail = f"{type(exc).__name__}: {exc}".strip()
+            if len(detail) > 400:
+                detail = detail[:397] + "…"
+            _mark_job_failed(
+                db,
+                job_id,
+                f"Excel processing failed unexpectedly ({detail}). "
+                "Re-upload the files, or export as CSV if the workbook is corrupted.",
+            )
         except Exception:  # noqa: BLE001
             logger.exception("could not mark upload job failed job=%s", job_id)
     finally:
