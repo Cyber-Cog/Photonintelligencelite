@@ -8,7 +8,10 @@ from pathlib import Path
 from openpyxl import load_workbook
 
 from analytics.common.aliasing import score_column
-from analytics.common.architecture_excel import parse_architecture_excel
+from analytics.common.architecture_excel import (
+    HIERARCHY_COLUMNS,
+    parse_architecture_excel,
+)
 from analytics.common.complete_analysis_pack import (
     OFFICIAL_COLUMN_TO_CANONICAL,
     SCADA_COLUMNS,
@@ -20,6 +23,7 @@ from analytics.common.complete_analysis_pack import (
 from analytics.common.prerequisites import evaluate_prerequisites
 from backend.app.services.excel_parser import parse_excel_to_csv
 from backend.app.services.mapping_service import suggest_mapping
+from backend.app.services.pack_architecture_import import plant_config_from_architecture_file
 
 
 def test_excel_pack_sheets_and_sample():
@@ -35,6 +39,8 @@ def test_excel_pack_sheets_and_sample():
     rows = list(ws.iter_rows(values_only=True))
     assert list(rows[0]) == list(SCADA_COLUMNS)
     assert len(rows) > 10  # header + sample telemetry
+    arch_header = [c.value for c in next(wb["architecture"].iter_rows(max_row=1))]
+    assert arch_header == list(HIERARCHY_COLUMNS)
     # README must be literal text — leading '=' becomes formula type and Excel repair-fails
     for row in wb["README"].iter_rows(min_col=1, max_col=1):
         cell = row[0]
@@ -43,6 +49,26 @@ def test_excel_pack_sheets_and_sample():
         assert cell.data_type != "f", f"README formula cell: {cell.value!r}"
         assert not (isinstance(cell.value, str) and cell.value.startswith("="))
     wb.close()
+
+
+def test_pack_architecture_hierarchy_parses_capacities():
+    raw = build_excel_bytes()
+    parsed = parse_architecture_excel(raw)
+    assert parsed.ok
+    assert parsed.format == "hierarchy"
+    assert "INV-01" in parsed.equipment_ratings
+    assert parsed.equipment_ratings["INV-01"] == 90.0
+    assert parsed.architecture["INV-01-SCB-01"]["strings_per_scb"] == 2
+    assert parsed.architecture["INV-01-SCB-01"].get("dc_capacity_kwp") == 54.0
+    # Plant 180 kW / 216 kWp → 0.18 MW / 0.216 MWp
+    assert parsed.ac_capacity_mw == 0.18
+    assert abs(parsed.dc_capacity_mwp - 0.216) < 1e-9
+    assert parsed.inverter_capacity_kw == 90.0
+
+    draft = parsed.to_plant_config_draft()
+    assert draft["architecture_imported"] is True
+    assert draft["ac_capacity_mw"] == 0.18
+    assert draft["equipment_ratings"]["INV-02"] == 90.0
 
 
 def test_zip_pack_contents():
@@ -56,8 +82,10 @@ def test_zip_pack_contents():
         assert csv_text.splitlines()[0] == ",".join(SCADA_COLUMNS)
         arch = parse_architecture_excel(zf.read("02_architecture.xlsx"))
         assert arch.ok
+        assert arch.format == "hierarchy"
         assert "INV-01" in arch.equipment_ratings
         assert arch.architecture["INV-01-SCB-01"]["strings_per_scb"] == 2
+        assert arch.ac_capacity_mw == 0.18
 
 
 def test_official_headers_auto_map():
@@ -128,6 +156,11 @@ def test_excel_upload_prefers_scada_sheet(tmp_path: Path):
     header = csv_path.read_text(encoding="utf-8").splitlines()[0]
     for col in ("Timestamp", "Equipment ID", "AC Power (kW)", "DC Current (A)"):
         assert col in header
+    # Architecture still extractable from the same workbook
+    draft = plant_config_from_architecture_file(excel_path)
+    assert draft is not None
+    assert draft["equipment_ratings"]["INV-01"] == 90.0
+    assert draft["ac_capacity_mw"] == 0.18
 
 
 def test_scada_csv_text_nonempty():
@@ -136,3 +169,13 @@ def test_scada_csv_text_nonempty():
     assert "PLANT-WMS-01" in text
     # Spot-check alias scoring still exact for official headers
     assert score_column("AC Power (kW)").canonical_field == "ac_power_kw"
+
+
+def test_single_row_scada_still_maps():
+    """Minimal one-row SCADA (no architecture sheet) still maps official headers."""
+    suggestions = suggest_mapping(
+        ["Timestamp", "Equipment ID", "AC Power (kW)", "Irradiance (W/m2)"]
+    )
+    by_col = {s.column_name: s.canonical_field for s in suggestions}
+    assert by_col["Timestamp"] == "timestamp"
+    assert by_col["AC Power (kW)"] == "ac_power_kw"

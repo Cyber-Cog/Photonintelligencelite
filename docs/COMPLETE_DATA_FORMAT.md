@@ -5,9 +5,10 @@ end-to-end. Multi-file / fuzzy OEM mapping remains fully supported for messy rea
 SCADA; this document defines the **accurate / methodical path**.
 
 **Code source of truth for column headers:** `analytics/common/complete_analysis_pack.py`
-(`SCADA_COLUMNS` / `OFFICIAL_COLUMN_TO_CANONICAL`). Download endpoints build templates
-from that module at request time — there is no separate static file to go stale.
-Run `scripts/check_template_sync.py` after changing headers.
+(`SCADA_COLUMNS` / `OFFICIAL_COLUMN_TO_CANONICAL`). Architecture hierarchy columns:
+`analytics/common/architecture_excel.py` (`HIERARCHY_COLUMNS`). Download endpoints
+build templates from those modules at request time — there is no separate static
+file to go stale. Run `scripts/check_template_sync.py` after changing headers.
 
 Download before upload:
 
@@ -15,7 +16,7 @@ Download before upload:
 |---|---|
 | Excel (README + `scada` + `architecture` + checklist) | `GET /api/templates/complete-analysis` |
 | ZIP (`01_scada_long.csv` + `02_architecture.xlsx` + README) | `GET /api/templates/complete-analysis.zip` |
-| Architecture-only (Setup Method A) | `GET /api/architecture-template` |
+| Architecture-only flat template (Setup Method A) | `GET /api/architecture-template` |
 
 UI: **Landing** and **Upload** pages — “Download complete analysis template”.
 
@@ -35,11 +36,12 @@ Point this out first — if any of these are missing, Validation will correctly 
 | 5 | **DC current (A)** at SCB or string | Clipping-by-current, disconnected strings, string outlier |
 | 6 | **DC voltage (V)** at SCB | Module damage / bypass diode |
 | 7 | **POA or GHI (W/m²)** | Clipping (power & current), disconnected strings |
-| 8 | **Plant architecture** (INV → SCB → `strings_per_scb`) | Current clipping, DS, module damage |
+| 8 | **Plant architecture** (Plant → INV → SCB → String + capacities) | Current clipping, DS, module damage, loss normalization |
 | 9 | **Inverter ratings (kW)** | Clipping-by-power clip limit |
 
-**Units (required):** power in **kW** (not MW), current in **A**, voltage in **V**,
-irradiance in **W/m²**, temperature in **°C**.
+**Units (required):** SCADA power in **kW** (not MW), current in **A**, voltage in **V**,
+irradiance in **W/m²**, temperature in **°C**. Architecture capacities: **AC kW**,
+**DC kWp** (plant totals convert to MW / MWp ÷ 1000 in Setup).
 
 Demo / customer exports that omit SCB DC current/voltage will correctly leave
 SCB-level modules unavailable — that is expected, not a bug.
@@ -95,8 +97,28 @@ Other OEM naming still works via fuzzy mapping + Setup architecture.
 |---|---|---|
 | `README` | Instructions + necessities | Not ingested |
 | `scada` | Long-format sample / your filled telemetry | **Upload this workbook** on Upload page (parser prefers `scada`) |
-| `architecture` | One row per SCB: `inverter_id`, `inverter_rated_kw`, `scb_id`, `strings_per_scb`, `notes` | Setup → Equipment structure → Method A (save sheet or use ZIP’s `02_architecture.xlsx`) |
+| `architecture` | Hierarchy: Plant → Inverter → SCB → String + capacities | **Auto-imported** on pack upload into Setup (override anytime) |
 | `fault_checklist` | Per-module column/config matrix | Reference only |
+
+### Architecture sheet (hierarchy)
+
+| Column | Meaning | Units |
+|---|---|---|
+| `id` | Device / node id (must match SCADA Equipment IDs for INV/SCB/STR) | — |
+| `parent_id` | Parent node id (`PLANT` for inverters; inverter for SCBs; SCB for strings) | — |
+| `device_type` | `plant` \| `inverter` \| `scb` \| `string` (`smb`/`combiner` → scb) | — |
+| `ac_capacity_kw` | AC nameplate (plant total + per inverter; SCB optional) | **kW** |
+| `dc_capacity_kwp` | DC nameplate at that level | **kWp** |
+| `strings_per_scb` | String count under an SCB (required for current-clipping / DS) | count |
+| `notes` | Free text | — |
+
+On upload, PIC Lite converts plant `ac_capacity_kw` / `dc_capacity_kwp` → Setup
+`ac_capacity_mw` / `dc_capacity_mwp` (÷ 1000), maps inverter AC into
+`equipment_ratings`, and builds per-SCB `architecture` so faults can normalize
+losses against nameplate **without re-entering Setup architecture**.
+
+Flat fallback (Setup Method A / large plants): `inverter_id`, `inverter_rated_kw`,
+`scb_id`, `strings_per_scb`, `notes` — still accepted by the same parser.
 
 ---
 
@@ -106,7 +128,7 @@ Other OEM naming still works via fuzzy mapping + Setup architecture.
 |---|---|
 | `README.txt` | Same necessities + how-to |
 | `01_scada_long.csv` | Official long SCADA (upload on Upload page) |
-| `02_architecture.xlsx` | Matching architecture for sample IDs (upload in Setup) |
+| `02_architecture.xlsx` | Matching hierarchy architecture (auto-import when uploaded with pack Excel; or Setup Method A) |
 
 Clients who already export CSV SCADA can keep their multi-file habit and only
 adopt the column/ID conventions from this pack.
@@ -117,7 +139,7 @@ adopt the column/ID conventions from this pack.
 
 | Module | SCADA fields | Setup config |
 |---|---|---|
-| Plant KPIs | `ac_power_kw` | — |
+| Plant KPIs | `ac_power_kw` | Plant AC/DC capacity (from architecture plant row) |
 | Clipping by power | `ac_power_kw` + (`poa_w_m2` ∨ `ghi_w_m2`) | Inverter ratings |
 | Inverter efficiency | `ac_power_kw` + (`dc_power_kw` ∨ `dc_current_a`) | — |
 | Box plot | same as efficiency | — |
@@ -148,6 +170,4 @@ string-level rows when SCB aggregates are enough for plant-level screening.
 - Multi-file upload + timestamp join of inverter + WMS exports still works.
 - Fuzzy alias mapping and saved OEM templates still work.
 - The Complete Analysis Pack is the **official clear path**, not the only path.
-
-Canonical schema after standardization: see
-[`architecture_decisions.md`](architecture_decisions.md) §1.
+- Hierarchy architecture in the pack is preferred; flat SCB Excel remains supported.

@@ -1,7 +1,12 @@
 """Architecture Excel template / parse / pattern + prerequisite honesty."""
 from __future__ import annotations
 
+from io import BytesIO
+
+from openpyxl import Workbook
+
 from analytics.common.architecture_excel import (
+    HIERARCHY_COLUMNS,
     apply_smb_pattern,
     build_template_bytes,
     parse_architecture_excel,
@@ -13,10 +18,36 @@ def test_template_roundtrip():
     raw = build_template_bytes(example_inverters=2, scbs_per_inverter=3, strings_per_scb=8, default_rated_kw=1500)
     parsed = parse_architecture_excel(raw)
     assert parsed.ok
+    assert parsed.format == "flat"
     assert len(parsed.inverters) == 2
     assert len(parsed.architecture) == 6
     assert parsed.equipment_ratings["INV-01"] == 1500.0
     assert parsed.architecture["INV-01-SCB-01"]["strings_per_scb"] == 8
+
+
+def test_hierarchy_sheet_roundtrip():
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "architecture"
+    ws.append(list(HIERARCHY_COLUMNS))
+    ws.append(["DemoPlant", "", "plant", 180, 216, "", "Demo"])
+    ws.append(["INV-01", "DemoPlant", "inverter", 90, 108, "", ""])
+    ws.append(["INV-01-SCB-01", "INV-01", "scb", "", 54, 2, ""])
+    ws.append(["INV-01-SCB-01-STR-01", "INV-01-SCB-01", "string", "", 27, "", ""])
+    ws.append(["INV-01-SCB-01-STR-02", "INV-01-SCB-01", "string", "", 27, "", ""])
+    buf = BytesIO()
+    wb.save(buf)
+    parsed = parse_architecture_excel(buf.getvalue())
+    assert parsed.ok
+    assert parsed.format == "hierarchy"
+    assert parsed.plant_name == "Demo"  # notes preferred over id for display name
+    assert parsed.ac_capacity_mw == 0.18
+    assert abs(parsed.dc_capacity_mwp - 0.216) < 1e-9
+    assert parsed.equipment_ratings["INV-01"] == 90.0
+    assert parsed.architecture["INV-01-SCB-01"]["strings_per_scb"] == 2
+    draft = parsed.to_plant_config_draft()
+    assert draft["architecture_imported"] is True
+    assert draft["inverter_capacity_kw"] == 90.0
 
 
 def test_pattern_applies_to_selected():

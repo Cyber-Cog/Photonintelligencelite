@@ -13,7 +13,7 @@ from typing import Iterable
 
 from openpyxl import Workbook
 
-from analytics.common.architecture_excel import TEMPLATE_COLUMNS
+from analytics.common.architecture_excel import HIERARCHY_COLUMNS
 
 # ---------------------------------------------------------------------------
 # Official column headers (human-readable; aliases.yaml maps them → canonical)
@@ -64,10 +64,18 @@ ARCHITECTURE_XLSX_NAME = "02_architecture.xlsx"
 README_NAME = "README.txt"
 
 # Compact smoke plant: 2 INV × 2 SCB × 2 STR, one sunny morning (15-min steps).
+_SAMPLE_PLANT_ID = "PLANT"
+_SAMPLE_PLANT_NAME = "Sample Plant (Complete Analysis Pack)"
 _SAMPLE_INVERTERS = ("INV-01", "INV-02")
 _SCBS_PER_INV = 2
 _STRINGS_PER_SCB = 2
 _INVERTER_RATED_KW = 90.0
+# Nameplate DC (kWp) — ~1.2 DC/AC; used for fault/loss normalization vs capacity.
+_INVERTER_DC_KWP = 108.0
+_SCB_DC_KWP = _INVERTER_DC_KWP / _SCBS_PER_INV  # 54
+_STRING_DC_KWP = _SCB_DC_KWP / _STRINGS_PER_SCB  # 27
+_PLANT_AC_KW = _INVERTER_RATED_KW * len(_SAMPLE_INVERTERS)  # 180
+_PLANT_DC_KWP = _INVERTER_DC_KWP * len(_SAMPLE_INVERTERS)  # 216
 _STRING_ISC_A = 10.0
 _SCB_VOLTAGE_V = 620.0
 _SAMPLE_START = datetime(2026, 3, 15, 8, 0, 0)
@@ -165,12 +173,59 @@ def iter_scada_sample_rows() -> Iterable[list]:
 
 
 def architecture_sample_rows() -> list[list]:
-    rows: list[list] = []
+    """Hierarchy rows: Plant → Inverter → SCB → String (matches HIERARCHY_COLUMNS).
+
+    Capacities: AC in kW, DC in kWp. PlantConfig converts plant totals to MW/MWp on import.
+    """
+    rows: list[list] = [
+        [
+            _SAMPLE_PLANT_ID,
+            "",
+            "plant",
+            _PLANT_AC_KW,
+            _PLANT_DC_KWP,
+            "",
+            _SAMPLE_PLANT_NAME,
+        ],
+    ]
     for inv in _SAMPLE_INVERTERS:
+        rows.append(
+            [
+                inv,
+                _SAMPLE_PLANT_ID,
+                "inverter",
+                _INVERTER_RATED_KW,
+                _INVERTER_DC_KWP,
+                "",
+                "Example — replace with your plant IDs" if inv == "INV-01" else "",
+            ]
+        )
         for scb_i in range(1, _SCBS_PER_INV + 1):
             scb_id = f"{inv}-SCB-{scb_i:02d}"
-            note = "Example — replace with your plant IDs" if inv == "INV-01" and scb_i == 1 else ""
-            rows.append([inv, _INVERTER_RATED_KW, scb_id, _STRINGS_PER_SCB, note])
+            rows.append(
+                [
+                    scb_id,
+                    inv,
+                    "scb",
+                    "",
+                    round(_SCB_DC_KWP, 3),
+                    _STRINGS_PER_SCB,
+                    "",
+                ]
+            )
+            for str_i in range(1, _STRINGS_PER_SCB + 1):
+                string_id = f"{scb_id}-STR-{str_i:02d}"
+                rows.append(
+                    [
+                        string_id,
+                        scb_id,
+                        "string",
+                        "",
+                        round(_STRING_DC_KWP, 3),
+                        "",
+                        "",
+                    ]
+                )
     return rows
 
 
@@ -202,8 +257,16 @@ def _readme_lines() -> list[str]:
         "   • DC Current (A)         → clipping-by-current, disconnected strings, string outlier",
         "   • DC Voltage (V)         → module damage",
         "   • POA or GHI (W/m²)      → clipping (power & current), disconnected strings",
-        "4. Plant architecture in Setup (inverter → SCB → strings_per_scb) + inverter ratings (kW).",
-        "   Use 02_architecture.xlsx (or Setup → Download architecture template).",
+        "4. Architecture sheet (this pack) — Plant → Inverter → SCB → String + nameplate capacities.",
+        "   Uploading this workbook auto-imports architecture into Setup (you can still override).",
+        "",
+        "ARCHITECTURE SHEET (hierarchy)",
+        "-" * 40,
+        "Columns: id | parent_id | device_type | ac_capacity_kw | dc_capacity_kwp | strings_per_scb | notes",
+        "device_type: plant | inverter | scb | string  (smb/combiner aliases → scb)",
+        "Units: AC capacity in kW · DC capacity in kWp (plant totals convert to MW/MWp in Setup).",
+        "Why: faults normalize losses against nameplate capacity at the right hierarchy level",
+        "     without re-entering architecture later.",
         "",
         "PER-FAULT CHECKLIST",
         "-" * 40,
@@ -218,17 +281,17 @@ def _readme_lines() -> list[str]:
         "HOW TO UPLOAD",
         "-" * 40,
         "Accurate path (this pack):",
-        "  A) Excel: upload pic_lite_complete_analysis_pack.xlsx — PIC Lite reads the 'scada' sheet.",
-        "     Then on Setup → Equipment structure, upload the 'architecture' sheet",
-        "     (save that sheet alone as .xlsx, or use 02_architecture.xlsx from the ZIP).",
-        "  B) ZIP / CSV: upload 01_scada_long.csv (and optionally other OEM CSVs).",
-        "     Upload 02_architecture.xlsx in Setup → Method A.",
+        "  A) Excel: upload pic_lite_complete_analysis_pack.xlsx — PIC Lite reads the 'scada'",
+        "     sheet for telemetry and auto-imports the 'architecture' sheet into Setup.",
+        "  B) ZIP / CSV: upload 01_scada_long.csv; architecture from 02_architecture.xlsx is",
+        "     imported when you upload that file with the pack, or via Setup → Method A.",
         "",
         "Flexible path (messy real SCADA): keep uploading multiple OEM files;",
         "fuzzy column mapping still works. This pack is the official clear path.",
         "",
-        "UNITS — always use these (not MW / kA):",
+        "UNITS — always use these (not MW / kA on SCADA rows):",
         "  Power kW · Current A · Voltage V · Irradiance W/m² · Temperature °C",
+        "  Architecture capacities: AC kW · DC kWp (plant MW/MWp = kW/1000)",
         "",
         "See docs/COMPLETE_DATA_FORMAT.md in the repo for the full specification.",
     ]
@@ -256,26 +319,28 @@ def build_excel_bytes() -> bytes:
     for col in ws_scada.columns:
         ws_scada.column_dimensions[col[0].column_letter].width = 18
 
-    # --- architecture ---
+    # --- architecture (hierarchy: Plant → Inverter → SCB → String) ---
     ws_arch = wb.create_sheet("architecture")
-    ws_arch.append(list(TEMPLATE_COLUMNS))
+    ws_arch.append(list(HIERARCHY_COLUMNS))
     for row in architecture_sample_rows():
         ws_arch.append(row)
     for col in ws_arch.columns:
-        ws_arch.column_dimensions[col[0].column_letter].width = 22
+        ws_arch.column_dimensions[col[0].column_letter].width = 18
+    ws_arch.column_dimensions["G"].width = 36
 
     # --- fault_checklist ---
     ws_chk = wb.create_sheet("fault_checklist")
     ws_chk.append(["Fault / module", "Required SCADA columns", "Required Setup config"])
     checklist = [
         ("Plant KPIs", "AC Power (kW)", "—"),
-        ("Clipping by power", "AC Power (kW) + Irradiance/POA or GHI (W/m2)", "Inverter ratings (kW)"),
+        ("Clipping by power", "AC Power (kW) + Irradiance/POA or GHI (W/m2)", "Inverter AC ratings (architecture)"),
         ("Inverter efficiency", "AC Power (kW) + DC Power (kW) OR DC Current (A)", "—"),
         ("Box plot", "AC Power (kW) + DC Power (kW) OR DC Current (A)", "—"),
-        ("Clipping by current", "DC Current (A) + Irradiance/POA or GHI", "Architecture (INV→SCB→strings)"),
-        ("Disconnected strings", "DC Current (A) + Irradiance/POA or GHI", "Architecture"),
-        ("Module damage", "DC Voltage (V)", "Architecture"),
+        ("Clipping by current", "DC Current (A) + Irradiance/POA or GHI", "Architecture hierarchy + strings_per_scb"),
+        ("Disconnected strings", "DC Current (A) + Irradiance/POA or GHI", "Architecture hierarchy"),
+        ("Module damage", "DC Voltage (V)", "Architecture hierarchy"),
         ("String outlier", "DC Current (A)", "—"),
+        ("Loss normalization", "—", "Plant/inverter/SCB DC (kWp) + AC (kW) capacities"),
     ]
     for row in checklist:
         ws_chk.append(list(row))
@@ -300,18 +365,19 @@ def build_zip_bytes() -> bytes:
     with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.writestr(README_NAME, "\n".join(_readme_lines()) + "\n")
         zf.writestr(SCADA_CSV_NAME, build_scada_csv_text())
-        # Compact architecture matching sample plant (not the large default template)
+        # Hierarchy architecture matching sample plant (same as Excel pack sheet)
         arch_wb = Workbook()
         ws = arch_wb.active
         ws.title = "architecture"
-        ws.append(list(TEMPLATE_COLUMNS))
+        ws.append(list(HIERARCHY_COLUMNS))
         for row in architecture_sample_rows():
             ws.append(row)
         instr = arch_wb.create_sheet("instructions", 0)
         instr["A1"] = "PIC Lite — Plant architecture (Complete Analysis Pack)"
-        instr["A3"] = "Upload this file in Setup → Equipment structure → Method A."
-        instr["A4"] = "IDs must match Equipment ID values in 01_scada_long.csv."
-        instr.column_dimensions["A"].width = 90
+        instr["A3"] = "Hierarchy: Plant → Inverter → SCB → String with AC (kW) and DC (kWp) capacities."
+        instr["A4"] = "Upload with the pack Excel, or upload this file in Setup → Method A to override."
+        instr["A5"] = "IDs must match Equipment ID values in 01_scada_long.csv."
+        instr.column_dimensions["A"].width = 100
         arch_buf = io.BytesIO()
         arch_wb.save(arch_buf)
         zf.writestr(ARCHITECTURE_XLSX_NAME, arch_buf.getvalue())

@@ -35,6 +35,36 @@ export function fromDetected(
   }));
 }
 
+/** Rebuild editable tree from saved / pack-imported plant_config.architecture. */
+export function fromPlantArchitecture(
+  architecture: Record<string, ArchitectureEntry> | null | undefined,
+  ratings?: Record<string, number | null | undefined>,
+): EditableInverter[] {
+  if (!architecture || Object.keys(architecture).length === 0) return [];
+  const invOrder: string[] = [];
+  const invMap = new Map<string, EditableInverter>();
+  for (const [scbId, entry] of Object.entries(architecture)) {
+    const invId = (entry?.inverter_id || "").trim();
+    if (!invId || !scbId.trim()) continue;
+    let inv = invMap.get(invId);
+    if (!inv) {
+      invOrder.push(invId);
+      inv = {
+        inverter_id: invId,
+        rated_kw: ratings?.[invId] ?? null,
+        scbs: [],
+      };
+      invMap.set(invId, inv);
+    }
+    inv.scbs.push({
+      scb_id: scbId,
+      strings_per_scb: entry.strings_per_scb ?? null,
+      strings_detected: false,
+    });
+  }
+  return invOrder.map((id) => invMap.get(id)!);
+}
+
 export function fromPatternPayload(inverters: EditableInverter[]): EditableInverter[] {
   return inverters.map((inv) => ({
     inverter_id: inv.inverter_id,

@@ -141,6 +141,10 @@ def _plant_fields_for_storage(payload: PlantConfigSubmission) -> dict:
             cleaned["modules_per_string"] = entry["modules_per_string"]
         if entry.get("spare_flag"):
             cleaned["spare_flag"] = True
+        if entry.get("dc_capacity_kwp") is not None:
+            cleaned["dc_capacity_kwp"] = float(entry["dc_capacity_kwp"])
+        if entry.get("ac_capacity_kw") is not None:
+            cleaned["ac_capacity_kw"] = float(entry["ac_capacity_kw"])
         arch_out[scb_id] = cleaned
     plant_fields["architecture"] = arch_out
     return plant_fields
@@ -288,7 +292,12 @@ async def upload_architecture_excel(
     return ArchitectureUploadResponse(
         equipment_ratings=parsed.equipment_ratings,
         architecture={
-            scb_id: {"inverter_id": entry["inverter_id"], "strings_per_scb": entry.get("strings_per_scb")}
+            scb_id: {
+                "inverter_id": entry["inverter_id"],
+                "strings_per_scb": entry.get("strings_per_scb"),
+                **({"dc_capacity_kwp": entry["dc_capacity_kwp"]} if entry.get("dc_capacity_kwp") is not None else {}),
+                **({"ac_capacity_kw": entry["ac_capacity_kw"]} if entry.get("ac_capacity_kw") is not None else {}),
+            }
             for scb_id, entry in parsed.architecture.items()
         },
         inverters=[
@@ -308,6 +317,10 @@ async def upload_architecture_excel(
         notes=parsed.notes,
         row_count=parsed.row_count,
         inverter_ratings=inverter_ratings,
+        plant_name=parsed.plant_name,
+        ac_capacity_mw=parsed.ac_capacity_mw,
+        dc_capacity_mwp=parsed.dc_capacity_mwp,
+        inverter_capacity_kw=parsed.inverter_capacity_kw,
     )
 
 

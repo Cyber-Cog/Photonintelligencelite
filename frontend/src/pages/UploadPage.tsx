@@ -315,8 +315,9 @@ export function UploadPage() {
               Use the Complete Analysis template
             </span>
             <span className="mt-1.5 text-sm leading-relaxed text-stone-600 dark:text-stone-400">
-              Best for full fault coverage. Download the pack, fill required columns, then upload. If you upload a
-              different format anyway, we detect it and send you to normal mapping.
+              Best for full fault coverage. Download the pack, fill SCADA + Architecture sheets, then upload —
+              hierarchy and capacities import into Setup automatically. If you upload a different format, we detect
+              it and send you to normal mapping.
             </span>
             <span className="mt-4 text-xs font-semibold text-brand-700 group-hover:underline dark:text-brand-300">
               Continue with template →
@@ -351,9 +352,11 @@ export function UploadPage() {
               Complete Analysis Pack
             </p>
             <p className="mt-1 text-sm leading-relaxed text-stone-700 dark:text-stone-300">
-              Prefer this path for full fault coverage. Include timestamp, equipment IDs, AC power (kW), DC current
-              (A) and voltage (V), and POA/GHI (W/m²). Architecture and inverter ratings are confirmed in Setup.
-              OEM SMB exports with string channels I1…In (and multi-file irradiance) also work via the own-files path.
+              Prefer this path for full fault coverage. Fill the <span className="font-medium">scada</span> sheet
+              (timestamp, equipment IDs, AC power kW, DC current/voltage, POA/GHI) and the{" "}
+              <span className="font-medium">architecture</span> sheet (Plant → Inverter → SCB → String with AC kW
+              and DC kWp capacities). On upload, architecture is imported into Setup automatically — no separate
+              re-entry. OEM SMB exports with string channels I1…In also work via the own-files path.
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <button

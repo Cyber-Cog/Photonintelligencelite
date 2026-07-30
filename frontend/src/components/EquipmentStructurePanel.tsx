@@ -203,8 +203,9 @@ export function EquipmentStructurePanel({
       <div className="mb-3 rounded border border-stone-200 p-3 dark:border-stone-700">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Method A: Excel template</p>
         <p className="mt-1 text-xs text-slate-500">
-          Download, complete offline (suitable for ~300 inverters / ~2000 SMBs), then upload. Columns: inverter_id,
-          inverter_rated_kw, scb_id, strings_per_scb.
+          Download, complete offline (suitable for ~300 inverters / ~2000 SMBs), then upload. Flat columns:
+          inverter_id, inverter_rated_kw, scb_id, strings_per_scb — or hierarchy (Complete Analysis Pack): id,
+          parent_id, device_type, ac_capacity_kw, dc_capacity_kwp, strings_per_scb.
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
           <a className="btn-secondary text-xs" href={architectureTemplateUrl()} download>

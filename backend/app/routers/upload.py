@@ -34,6 +34,10 @@ from backend.app.services.mapping_service import (
     requires_manual_mapping,
     suggest_mapping,
 )
+from backend.app.services.pack_architecture_import import (
+    merge_architecture_into_job_plant,
+    plant_config_from_architecture_file,
+)
 from backend.app.services.storage import (
     DecompressionBombError,
     UploadTooLargeError,
@@ -108,19 +112,21 @@ async def _ingest_uploads(
     paths,
     limits,
     defer_excel: bool = False,
-) -> tuple[list[Path], ExcelParseReportOut | None, str | None, bool]:
+) -> tuple[list[Path], ExcelParseReportOut | None, str | None, bool, dict | None]:
     """Save/convert uploads into raw_dir.
 
-    Returns (converted_paths, parse_report, progress, excel_deferred).
-    When defer_excel=True, Excel files are saved raw and conversion is skipped.
+    Returns (converted_paths, parse_report, progress, excel_deferred, architecture_draft).
+    When defer_excel=True, Excel files are saved raw and conversion is skipped;
+    architecture is extracted later in the background worker.
     """
     parse_report_out: ExcelParseReportOut | None = None
     converted_paths: list[Path] = []
     progress: str | None = None
     excel_deferred = False
+    architecture_draft: dict | None = None
 
     async def _ingest_one(upload: UploadFile, idx: int) -> Path:
-        nonlocal parse_report_out, excel_deferred
+        nonlocal parse_report_out, excel_deferred, architecture_draft
         filename = sanitize_filename(upload.filename or f"upload_{idx}.csv")
         lower = filename.lower()
         is_gz = lower.endswith(".gz")
@@ -134,6 +140,8 @@ async def _ingest_uploads(
                 excel_deferred = True
                 # Placeholder path — background worker writes the real CSV.
                 return out_csv
+            if architecture_draft is None:
+                architecture_draft = plant_config_from_architecture_file(excel_target)
             report_path = paths.raw_dir / f"parse_report_{idx}.json"
             _n, report = parse_excel_to_csv(
                 excel_target,
@@ -163,7 +171,7 @@ async def _ingest_uploads(
         converted_paths.append(await _ingest_one(uf, i))
 
     if excel_deferred:
-        return converted_paths, None, "Saving Excel — parsing will continue in the background…", True
+        return converted_paths, None, "Saving Excel — parsing will continue in the background…", True, None
 
     csv_path = paths.raw_dir / "input.csv"
     manifest_path = paths.raw_dir / "sources_manifest.json"
@@ -180,7 +188,7 @@ async def _ingest_uploads(
             f"{parse_report_out.row_count:,} rows, {inv_n} inverter(s), "
             f"confidence {parse_report_out.confidence:.0%}."
         )
-    return converted_paths, parse_report_out, progress, False
+    return converted_paths, parse_report_out, progress, False, architecture_draft
 
 
 def _progress_commit(db: Session, job_id: str, message: str) -> None:
@@ -198,12 +206,14 @@ def _convert_deferred_excels(
     *,
     job_id: str | None = None,
     db: Session | None = None,
-) -> tuple[ExcelParseReportOut | None, str | None]:
+) -> tuple[ExcelParseReportOut | None, str | None, dict | None]:
     """Convert any raw upload_*.xlsx left on disk, then merge into input.csv.
 
     Parses each workbook independently so one bad file does not silently kill
     the batch with a vague error — failures name the file and successful parts
     still merge when at least one CSV was produced.
+
+    Also extracts Complete Analysis Pack ``architecture`` sheets into a plant draft.
     """
     excel_files = sorted(
         p
@@ -211,11 +221,12 @@ def _convert_deferred_excels(
         if p.is_file() and p.suffix.lower() in EXCEL_EXTENSIONS and p.name.startswith("upload_")
     )
     if not excel_files:
-        return None, None
+        return None, None, None
 
     parse_report_out: ExcelParseReportOut | None = None
     converted: list[Path] = []
     failures: list[str] = []
+    architecture_draft: dict | None = None
     # Also keep any CSV parts already written (mixed excel+csv uploads).
     existing_csvs = sorted(
         p for p in paths.raw_dir.iterdir() if p.is_file() and p.suffix.lower() == ".csv" and p.name.startswith("part_")
@@ -238,6 +249,8 @@ def _convert_deferred_excels(
                 f"Parsing Excel {i + 1}/{total}: {label}…",
             )
         try:
+            if architecture_draft is None:
+                architecture_draft = plant_config_from_architecture_file(excel_target)
             _n, report = parse_excel_to_csv(
                 excel_target,
                 out_csv,
@@ -304,7 +317,22 @@ def _convert_deferred_excels(
         # Surface partial success in progress; do not fail the job.
         warn_path = paths.raw_dir / "parse_failures.json"
         warn_path.write_text(json.dumps({"failures": failures}, indent=2), encoding="utf-8")
-    return parse_report_out, progress
+    if architecture_draft:
+        n_scb = len(architecture_draft.get("architecture") or {})
+        arch_note = f" Architecture imported ({n_scb} SCB(s))."
+        progress = (progress or "Excel parsed.") + arch_note
+    return parse_report_out, progress, architecture_draft
+
+
+def _apply_architecture_draft(job: Job, draft: dict | None, *, overwrite_architecture: bool) -> None:
+    """Persist pack-imported architecture onto the job when present."""
+    if not draft:
+        return
+    job.plant_config_json = merge_architecture_into_job_plant(
+        job.plant_config_json,
+        draft,
+        overwrite_architecture=overwrite_architecture,
+    )
 
 
 def _mark_job_failed(db: Session, job_id: str, message: str) -> None:
@@ -337,12 +365,18 @@ def _finish_excel_parse(
         db.add(job)
         db.commit()
 
-        parse_report_out, progress = _convert_deferred_excels(
+        parse_report_out, progress, architecture_draft = _convert_deferred_excels(
             paths, limits, job_id=job_id, db=db
         )
         csv_path = paths.raw_dir / "input.csv"
         if not csv_path.exists():
             raise ExcelConversionError("Excel conversion finished but no CSV was produced.")
+
+        # Fresh upload: always import. Replace-upload keeps existing plant unless no architecture yet.
+        overwrite = prior_mapping is None or not (
+            (job.plant_config_json or {}).get("plant") or {}
+        ).get("architecture")
+        _apply_architecture_draft(job, architecture_draft, overwrite_architecture=overwrite)
 
         # Touch mapping helpers so we fail early if the CSV is unreadable.
         _ = _build_upload_response(
@@ -477,7 +511,7 @@ async def upload_file(
     defer_excel = _has_excel(all_files)
 
     try:
-        _, parse_report_out, progress, excel_deferred = await _ingest_uploads(
+        _, parse_report_out, progress, excel_deferred, architecture_draft = await _ingest_uploads(
             all_files, paths=paths, limits=limits, defer_excel=defer_excel
         )
         if progress:
@@ -509,6 +543,7 @@ async def upload_file(
         ).start()
         return _pending_upload_response(job)
 
+    _apply_architecture_draft(job, architecture_draft, overwrite_architecture=True)
     job.state = "mapping"
     if not job.progress_message:
         job.progress_message = "Reviewing detected columns…"
@@ -561,7 +596,7 @@ async def replace_upload(
     defer_excel = _has_excel(all_files)
 
     try:
-        _, parse_report_out, progress, excel_deferred = await _ingest_uploads(
+        _, parse_report_out, progress, excel_deferred, architecture_draft = await _ingest_uploads(
             all_files, paths=paths, limits=limits, defer_excel=defer_excel
         )
         if progress:
@@ -616,6 +651,10 @@ async def replace_upload(
             name=f"excel-replace-{job.id[:8]}",
         ).start()
         return _pending_upload_response(job)
+
+    # Keep existing architecture on replace unless pack provides one and job had none.
+    has_arch = bool(((job.plant_config_json or {}).get("plant") or {}).get("architecture"))
+    _apply_architecture_draft(job, architecture_draft, overwrite_architecture=not has_arch)
 
     job.state = JobState.MAPPING.value
     if not job.progress_message:

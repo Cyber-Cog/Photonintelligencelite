@@ -14,6 +14,7 @@ import { CANONICAL_FIELD_OPTIONS, MODULE_TECHNOLOGY_OPTIONS, PLANT_TYPE_OPTIONS 
 import {
   buildRatingsAndArchitecture,
   fromDetected,
+  fromPlantArchitecture,
   type EditableInverter,
 } from "@/lib/equipmentStructure";
 import {
@@ -139,6 +140,7 @@ export function SetupPage() {
   const [packMatchRatio, setPackMatchRatio] = useState<number>(
     () => uploadInfo?.pack_match_ratio ?? 0,
   );
+  const [packArchImported, setPackArchImported] = useState(false);
   const autoDetectDone = useRef(false);
   const focusApplied = useRef(false);
   const pendingFocusKey = useRef<string | null>(null);
@@ -220,7 +222,29 @@ export function SetupPage() {
         if (!(col in next)) next[col] = field;
       }
       setMapping(next);
-      if (ctx.plant_config) setPlant(plantFromConfig(ctx.plant_config));
+      if (ctx.plant_config) {
+        setPlant(plantFromConfig(ctx.plant_config));
+        const arch = (ctx.plant_config.architecture || {}) as Record<
+          string,
+          import("@/types").ArchitectureEntry
+        >;
+        const ratings = (ctx.plant_config.equipment_ratings || {}) as Record<string, number>;
+        const imported = Boolean(ctx.plant_config.architecture_imported) || Object.keys(arch).length > 0;
+        if (Object.keys(arch).length > 0) {
+          setEquipment(fromPlantArchitecture(arch, ratings));
+          setDetected(true);
+          setDetectNotes(
+            imported && ctx.plant_config.architecture_imported
+              ? [
+                  "Architecture imported from the Complete Analysis Pack (Plant → Inverter → SCB → String). "
+                    + "Review capacities below — you can still override via Excel, pattern, or re-detect.",
+                ]
+              : ["Loaded saved plant architecture. You can still override via Excel, pattern, or re-detect."],
+          );
+          setPackArchImported(Boolean(ctx.plant_config.architecture_imported));
+          autoDetectDone.current = true;
+        }
+      }
       setJobState(ctx.state);
       setJob(jobId, {
         job_id: ctx.job_id,
@@ -335,6 +359,10 @@ export function SetupPage() {
 
   useEffect(() => {
     if (!jobId || loadingContext || suggestions.length === 0 || autoDetectDone.current) return;
+    if (packArchImported) {
+      autoDetectDone.current = true;
+      return;
+    }
     if (!mappingHasEquipmentIds(mapping)) {
       setEquipment((prev) => prev);
       setDetectNotes([
@@ -345,7 +373,7 @@ export function SetupPage() {
     }
     autoDetectDone.current = true;
     void runDetect();
-  }, [jobId, loadingContext, suggestions.length, mapping, runDetect]);
+  }, [jobId, loadingContext, suggestions.length, mapping, runDetect, packArchImported]);
 
   const isInvalid = (key: string) => Boolean(fieldErrors[key]) || flashField === key;
 
@@ -497,7 +525,17 @@ export function SetupPage() {
       {looksLikePack === true && (
         <InfoBanner className="mb-3" tone="success" title="Complete Analysis Pack detected">
           Headers match the official pack ({Math.round(packMatchRatio * 100)}% overlap). Columns are auto-mapped
-          where confidence is high — you can still edit any row below.
+          where confidence is high
+          {packArchImported
+            ? "; plant hierarchy and capacities were imported from the Architecture sheet — review Plant and Architecture steps (override anytime)."
+            : " — you can still edit any row below. If the pack includes an Architecture sheet, hierarchy and capacities import automatically."}
+        </InfoBanner>
+      )}
+
+      {packArchImported && looksLikePack !== true && (
+        <InfoBanner className="mb-3" tone="success" title="Architecture imported from workbook">
+          Plant → Inverter → SCB hierarchy and nameplate capacities were loaded from the uploaded Excel. Review
+          Plant and Architecture steps — you can still override.
         </InfoBanner>
       )}
 

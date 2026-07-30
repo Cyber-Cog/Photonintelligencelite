@@ -45,6 +45,8 @@ export interface ArchitectureEntry {
   inverter_id: string;
   strings_per_scb?: number | null;
   modules_per_string?: number | null;
+  dc_capacity_kwp?: number | null;
+  ac_capacity_kw?: number | null;
 }
 
 export interface PlantConfigInput {

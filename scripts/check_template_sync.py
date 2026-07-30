@@ -20,6 +20,7 @@ from analytics.common.complete_analysis_pack import (  # noqa: E402
     SCADA_COLUMNS,
     build_scada_csv_text,
 )
+from analytics.common.architecture_excel import HIERARCHY_COLUMNS  # noqa: E402
 from backend.app.services.excel_parser.headers import TIDY_FIELDS  # noqa: E402
 
 
@@ -61,6 +62,13 @@ def main() -> int:
         if f"`{col}`" not in docs:
             _fail(f"docs/COMPLETE_DATA_FORMAT.md missing backtick mention of `{col}`")
             errors += 1
+    for col in HIERARCHY_COLUMNS:
+        if f"`{col}`" not in docs:
+            _fail(f"docs/COMPLETE_DATA_FORMAT.md missing hierarchy column `{col}`")
+            errors += 1
+    if "Auto-imported" not in docs and "auto-imported" not in docs.lower():
+        _fail("docs/COMPLETE_DATA_FORMAT.md should describe architecture auto-import")
+        errors += 1
 
     # Aliases must resolve every official header to the documented canonical field.
     from analytics.common.aliasing import score_column
@@ -84,6 +92,7 @@ def main() -> int:
         return 1
     print("OK: Complete Analysis Pack, demo CSV, TIDY_FIELDS, docs, aliases, and report builders are synced.")
     print(f"Canonical headers ({len(SCADA_COLUMNS)}): {', '.join(SCADA_COLUMNS)}")
+    print(f"Hierarchy columns ({len(HIERARCHY_COLUMNS)}): {', '.join(HIERARCHY_COLUMNS)}")
     return 0
 
 

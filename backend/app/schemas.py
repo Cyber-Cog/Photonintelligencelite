@@ -66,6 +66,10 @@ class ArchitectureEntry(BaseModel):
     modules_per_string: Optional[int] = Field(default=None, ge=1)
     spare_flag: Optional[bool] = Field(default=None)
     """True when this SCB is a spare (no live strings) — excluded from disconnected-string checks."""
+    dc_capacity_kwp: Optional[float] = Field(default=None, gt=0)
+    """Optional SCB DC nameplate (kWp) from Complete Analysis Pack hierarchy."""
+    ac_capacity_kw: Optional[float] = Field(default=None, gt=0)
+    """Optional SCB AC capacity (kW) when relevant."""
 
 
 class PlantConfigSubmission(BaseModel):
@@ -181,6 +185,11 @@ class ArchitectureUploadResponse(BaseModel):
     row_count: int = 0
     # rated_kw is not on InverterStructureOut — frontend gets it via a parallel list
     inverter_ratings: dict[str, Optional[float]] = Field(default_factory=dict)
+    # Present when hierarchy sheet includes a plant row / capacities (kW→MW already converted).
+    plant_name: Optional[str] = None
+    ac_capacity_mw: Optional[float] = None
+    dc_capacity_mwp: Optional[float] = None
+    inverter_capacity_kw: Optional[float] = None
 
 
 class PatternApplyRequest(BaseModel):
