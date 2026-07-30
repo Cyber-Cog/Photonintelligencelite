@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   ApiError,
@@ -10,6 +10,11 @@ import {
   waitForUploadReady,
 } from "@/api/client";
 import { StepIndicator } from "@/components/StepIndicator";
+import { ParseActivityConsole } from "@/components/upload/ParseActivityConsole";
+import {
+  useParseActivityLog,
+  type UploadActivityPhase,
+} from "@/components/upload/useParseActivityLog";
 import { InfoBanner } from "@/components/ui/InfoBanner";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ProgressBar } from "@/components/ui/ProgressBar";
@@ -42,15 +47,42 @@ export function UploadPage() {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [phaseHint, setPhaseHint] = useState<string | null>(null);
+  const [activityPhase, setActivityPhase] = useState<UploadActivityPhase | null>(null);
+  const [elapsedSec, setElapsedSec] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [dlError, setDlError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState<"excel" | "zip" | null>(null);
+  const uploadStartedAt = useRef<number | null>(null);
 
   useEffect(() => {
     if (!replaceJobId) return;
     setPath((prev) => prev ?? "own");
     setShowDropzone(true);
   }, [replaceJobId]);
+
+  useEffect(() => {
+    if (!uploading) {
+      uploadStartedAt.current = null;
+      setElapsedSec(0);
+      return;
+    }
+    uploadStartedAt.current = Date.now();
+    const id = window.setInterval(() => {
+      if (uploadStartedAt.current == null) return;
+      setElapsedSec(Math.floor((Date.now() - uploadStartedAt.current) / 1000));
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [uploading]);
+
+  const fileNames = useMemo(() => selectedFiles.map((f) => f.name), [selectedFiles]);
+  const activityLines = useParseActivityLog(
+    uploading,
+    activityPhase,
+    phaseHint,
+    fileNames,
+    progress,
+    elapsedSec,
+  );
 
   const choosePath = (next: UploadPath) => {
     setPath(next);
@@ -113,6 +145,7 @@ export function UploadPage() {
     setError(null);
     setProgress(0);
     setPhaseHint(null);
+    setActivityPhase("uploading");
     try {
       const prepared = await Promise.all(selectedFiles.map((f) => maybeCompress(f)));
       let res = replaceJobId
@@ -120,6 +153,7 @@ export function UploadPage() {
         : await uploadFiles(prepared, setProgress);
       if (res.state === "parsing" || res.state === "uploaded") {
         setProgress(100);
+        setActivityPhase("parsing");
         setPhaseHint("Parsing Excel workbook… wide reports can take up to a minute.");
         res = await waitForUploadReady(res.job_id, {
           onProgress: (msg) => setPhaseHint(msg),
@@ -132,6 +166,7 @@ export function UploadPage() {
       setError(err instanceof ApiError ? err.message : "Upload failed. Check your connection and try again.");
       setUploading(false);
       setPhaseHint(null);
+      setActivityPhase(null);
     }
   };
 
@@ -215,10 +250,18 @@ export function UploadPage() {
 
       {uploading && (
         <div className="mt-3 space-y-1">
-          <ProgressBar pct={progress} />
+          <div className="proc-progress-pulse">
+            <ProgressBar pct={progress} />
+          </div>
           <p className="text-xs text-stone-400">
             {phaseHint ?? `Uploading… ${progress}%`}
+            {elapsedSec > 0 ? (
+              <span className="ml-1.5 tabular-nums text-stone-300 dark:text-stone-500">· {elapsedSec}s</span>
+            ) : null}
           </p>
+          {activityPhase ? (
+            <ParseActivityConsole lines={activityLines} phase={activityPhase} live />
+          ) : null}
         </div>
       )}
     </SectionPanel>
@@ -310,6 +353,7 @@ export function UploadPage() {
             <p className="mt-1 text-sm leading-relaxed text-stone-700 dark:text-stone-300">
               Prefer this path for full fault coverage. Include timestamp, equipment IDs, AC power (kW), DC current
               (A) and voltage (V), and POA/GHI (W/m²). Architecture and inverter ratings are confirmed in Setup.
+              OEM SMB exports with string channels I1…In (and multi-file irradiance) also work via the own-files path.
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <button
@@ -370,6 +414,25 @@ export function UploadPage() {
                 Upload any CSV or Excel plant export. You will map columns to required signals in Setup before
                 analysis runs.
               </p>
+              <div className="mt-3 rounded-xl border border-stone-200/80 bg-white/80 px-3 py-2.5 text-xs leading-relaxed text-stone-600 dark:border-stone-700 dark:bg-stone-950/40 dark:text-stone-300">
+                <p className="font-semibold text-stone-800 dark:text-stone-100">What to upload so everything can be detected</p>
+                <ul className="mt-1.5 list-disc space-y-1 pl-4">
+                  <li>
+                    <span className="font-medium text-stone-800 dark:text-stone-100">Complete Analysis Pack columns</span>
+                    {" "}
+                    (single file): Timestamp, Equipment ID, AC Power, DC Current/Voltage, Irradiance/POA (and GHI if available).
+                  </li>
+                  <li>
+                    <span className="font-medium text-stone-800 dark:text-stone-100">SMB / string currents</span>
+                    {" "}
+                    (I1…In under a merged &quot;Strings Current&quot; header) — multi-row Excel headers are stitched automatically.
+                  </li>
+                  <li>
+                    <span className="font-medium text-stone-800 dark:text-stone-100">Multi-file OK</span>
+                    : e.g. one SMB sheet with I1…I24 + a separate irradiance/POA file. Files are merged into one dataset.
+                  </li>
+                </ul>
+              </div>
               {!showDropzone ? (
                 <div className="mt-3">
                   <button type="button" className="btn-primary text-xs" onClick={() => setShowDropzone(true)}>

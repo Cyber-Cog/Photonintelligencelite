@@ -1157,6 +1157,30 @@ html.dark .tour-btn-next:hover {
   min-height: 16rem;
 }
 
+/* Compact upload-page parse console — same card language as Processing, smaller footprint */
+.parse-activity-panel {
+  @apply rounded-xl border border-stone-200/90 bg-white/90 shadow-sm shadow-stone-900/[0.02] dark:border-stone-700 dark:bg-stone-900/85 dark:shadow-none;
+}
+
+.parse-sheet-card {
+  height: 100%;
+  min-height: 7.5rem;
+}
+
+.parse-sheet-row-live {
+  animation: parseSheetPulse 1.8s ease-in-out infinite;
+}
+
+@keyframes parseSheetPulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
 .proc-status-strip {
   position: relative;
   overflow: hidden;
@@ -1284,7 +1308,8 @@ html.dark .tour-btn-next:hover {
   .proc-progress-pulse::after,
   .proc-chart-draw,
   .proc-chart-draw-delayed,
-  .proc-chart-shimmer::after {
+  .proc-chart-shimmer::after,
+  .parse-sheet-row-live {
     animation: none !important;
   }
   .proc-chart-draw,
@@ -1293,5 +1318,8 @@ html.dark .tour-btn-next:hover {
   }
   .proc-caret {
     opacity: 1;
+  }
+  .parse-sheet-row-live {
+    opacity: 0.85;
   }
 }
