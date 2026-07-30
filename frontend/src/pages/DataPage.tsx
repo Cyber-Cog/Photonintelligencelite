@@ -3,12 +3,10 @@ import { useParams } from "react-router-dom";
 import { ApiError, dataExportUrl, getDataPreview } from "@/api/client";
 import { JobNav } from "@/components/JobNav";
 import { ErrorState } from "@/components/ui/ErrorState";
-import { PageHeader } from "@/components/ui/PageHeader";
-import { SectionPanel } from "@/components/ui/SectionPanel";
 import { Spinner } from "@/components/ui/Spinner";
 import type { DataPreviewResponse } from "@/types";
 
-const PAGE = 50;
+const PAGE = 75;
 
 function useDebounced<T>(value: T, ms = 250): T {
   const [debounced, setDebounced] = useState(value);
@@ -128,30 +126,27 @@ export function DataPage() {
   if (!jobId) return null;
 
   return (
-    <div className="tool-enter">
-      <JobNav />
-      <PageHeader
-        className="mb-4"
-        eyebrow="Telemetry browse"
-        title="Raw data"
-        description={
-          <>
-            SCADA rows for this job · source{" "}
-            <span className="font-medium text-stone-700 dark:text-stone-200">{data?.source ?? "…"}</span>
-            {data?.upload_sources && data.upload_sources.length > 1 && (
-              <> · merged from {data.upload_sources.length} reports</>
-            )}
-            {data?.original_filename ? (
-              <span className="block text-stone-400">File: {data.original_filename}</span>
-            ) : null}
-          </>
-        }
-        actions={
-          <a className="btn-secondary text-xs" href={exportHref} download>
-            {dateActive ? "Download filtered CSV" : "Download CSV"}
-          </a>
-        }
-      />
+    <div className="tool-enter flex h-[calc(100dvh-8.75rem)] max-h-[calc(100dvh-8.75rem)] flex-col gap-1.5 overflow-hidden">
+      <div className="flex shrink-0 flex-wrap items-end justify-between gap-2 [&_nav]:mb-0">
+        <div className="min-w-0">
+          <JobNav />
+          <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0">
+            <h2 className="font-display text-base font-semibold tracking-tight text-stone-900 dark:text-stone-50">
+              Raw data
+            </h2>
+            <p className="text-[11px] text-stone-500">
+              {data?.source ?? "…"}
+              {data?.upload_sources && data.upload_sources.length > 1
+                ? ` · ${data.upload_sources.length} reports`
+                : ""}
+              {data?.original_filename ? ` · ${data.original_filename}` : ""}
+            </p>
+          </div>
+        </div>
+        <a className="btn-secondary shrink-0 !px-2.5 !py-1 text-[11px]" href={exportHref} download>
+          {dateActive ? "CSV (filtered)" : "Download CSV"}
+        </a>
+      </div>
 
       {loading && !data && (
         <div className="flex items-center gap-2 text-sm text-stone-500">
@@ -162,116 +157,101 @@ export function DataPage() {
 
       {data && (
         <>
-          <div data-tour="raw-data-filters">
-          <SectionPanel
-            className="mb-3"
-            title="Filters"
-            description={
-              spanMin && spanMax
-                ? `Dataset span: ${toInputValue(spanMin).replace("T", " ")} to ${toInputValue(spanMax).replace("T", " ")} UTC`
-                : "Date range and column filters"
-            }
-            scrollMargin={false}
+          <div
+            data-tour="raw-data-filters"
+            className="flex shrink-0 flex-wrap items-end gap-1.5 rounded-xl border border-stone-200/90 bg-white/90 px-2.5 py-1.5 dark:border-stone-800 dark:bg-stone-900/70"
           >
-            <div className="toolbar !border-0 !bg-transparent !p-0">
-              <label className="block min-w-[11rem] flex-1">
-                <span className="label">From</span>
-                <input
-                  type="datetime-local"
-                  className="input"
-                  value={startInput}
-                  onChange={(e) => setStartInput(e.target.value)}
-                  max={endInput || undefined}
-                />
-              </label>
-              <label className="block min-w-[11rem] flex-1">
-                <span className="label">To</span>
-                <input
-                  type="datetime-local"
-                  className="input"
-                  value={endInput}
-                  onChange={(e) => setEndInput(e.target.value)}
-                  min={startInput || undefined}
-                />
-              </label>
-              <button type="button" className="btn-primary text-xs" onClick={applyDates} disabled={loading}>
-                Apply range
-              </button>
-              <button type="button" className="btn-ghost text-xs" onClick={fullRange} disabled={loading}>
-                Full range
-              </button>
-            </div>
+            <label className="min-w-[9rem] flex-1 sm:max-w-[12rem]">
+              <span className="label mb-0 text-[10px]">From</span>
+              <input
+                type="datetime-local"
+                className="input !py-1 text-[11px]"
+                value={startInput}
+                onChange={(e) => setStartInput(e.target.value)}
+                max={endInput || undefined}
+              />
+            </label>
+            <label className="min-w-[9rem] flex-1 sm:max-w-[12rem]">
+              <span className="label mb-0 text-[10px]">To</span>
+              <input
+                type="datetime-local"
+                className="input !py-1 text-[11px]"
+                value={endInput}
+                onChange={(e) => setEndInput(e.target.value)}
+                min={startInput || undefined}
+              />
+            </label>
+            <button type="button" className="btn-primary !py-1 text-[11px]" onClick={applyDates} disabled={loading}>
+              Apply
+            </button>
+            <button type="button" className="btn-ghost !px-2 !py-1 text-[11px]" onClick={fullRange} disabled={loading}>
+              Full
+            </button>
+            <label className="min-w-[8rem] flex-1 sm:max-w-[11rem]">
+              <span className="label mb-0 text-[10px]">Columns</span>
+              <input
+                className="input !py-1 text-[11px]"
+                placeholder="Filter cols…"
+                value={columnFilter}
+                onChange={(e) => setColumnFilter(e.target.value)}
+              />
+            </label>
+            <label className="min-w-[8rem] flex-1 sm:max-w-[11rem]">
+              <span className="label mb-0 text-[10px]">Search</span>
+              <input
+                className="input !py-1 text-[11px]"
+                placeholder="Cell text…"
+                value={valueSearch}
+                onChange={(e) => setValueSearch(e.target.value)}
+              />
+            </label>
+            <label className="flex cursor-pointer items-center gap-1.5 pb-1 text-[11px] text-stone-600 dark:text-stone-300">
+              <input type="checkbox" checked={hideEmpty} onChange={(e) => setHideEmpty(e.target.checked)} />
+              Hide empty
+            </label>
             {!data.time_column && (
-              <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">
-                No timestamp column detected. Date filter may not apply until analysis produces canonical data.
+              <p className="basis-full text-[10px] text-amber-700 dark:text-amber-400">
+                No timestamp column — date filter may not apply.
               </p>
             )}
-            <div className="mt-3 grid gap-2 border-t border-stone-200 pt-3 dark:border-stone-800 sm:grid-cols-2 lg:grid-cols-3">
-              <label className="block">
-                <span className="label">Filter columns</span>
-                <input
-                  className="input"
-                  placeholder="e.g. ac_power, inverter…"
-                  value={columnFilter}
-                  onChange={(e) => setColumnFilter(e.target.value)}
-                />
-              </label>
-              <label className="block">
-                <span className="label">Search values (this page)</span>
-                <input
-                  className="input"
-                  placeholder="Filter rows by cell text…"
-                  value={valueSearch}
-                  onChange={(e) => setValueSearch(e.target.value)}
-                />
-              </label>
-              <label className="flex cursor-pointer items-center gap-2 self-end pb-2 text-sm text-stone-600 dark:text-stone-300">
-                <input type="checkbox" checked={hideEmpty} onChange={(e) => setHideEmpty(e.target.checked)} />
-                Hide empty columns (this page)
-              </label>
-            </div>
-          </SectionPanel>
           </div>
 
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-stone-200/80 bg-white/60 px-3 py-2 dark:border-stone-800/80 dark:bg-stone-900/40">
-            <p className="text-xs text-stone-600 dark:text-stone-300">
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 px-0.5">
+            <p className="text-[11px] text-stone-600 dark:text-stone-300">
               {data.total_rows === 0 ? (
                 <>No rows{dateActive ? " in this date range" : ""}</>
               ) : (
                 <>
-                  Showing {(offset + 1).toLocaleString()}–
+                  {(offset + 1).toLocaleString()}–
                   {Math.min(offset + PAGE, data.total_rows).toLocaleString()} of{" "}
                   <span className="font-semibold tabular-nums">{data.total_rows.toLocaleString()}</span>
-                  {dateActive ? " in range" : " rows"}
+                  {dateActive ? " in range" : ""}
                   {dateActive && data.unfiltered_rows != null && (
-                    <span className="text-stone-400">
-                      {" "}
-                      · {data.unfiltered_rows.toLocaleString()} total unfiltered
-                    </span>
+                    <span className="text-stone-400"> · {data.unfiltered_rows.toLocaleString()} total</span>
                   )}
                 </>
               )}
               <span className="text-stone-400">
                 {" "}
-                · {visibleCols.length}/{data.columns.length} columns
+                · {visibleCols.length}/{data.columns.length} cols
               </span>
               {debouncedSearch && (
-                <span className="text-stone-400"> · {visibleRows.length} match on this page</span>
+                <span className="text-stone-400"> · {visibleRows.length} match</span>
               )}
-              {loading && <span className="ml-2 text-stone-400">Updating…</span>}
+              {loading && <span className="ml-1 text-stone-400">Updating…</span>}
             </p>
-            <div className="flex gap-2">
+            <div className="flex gap-1.5">
               <button
                 type="button"
-                className="btn-secondary text-xs"
+                className="btn-secondary !px-2 !py-0.5 text-[11px]"
                 disabled={offset === 0 || loading}
                 onClick={() => setOffset((o) => Math.max(0, o - PAGE))}
               >
-                Previous
+                Prev
               </button>
               <button
                 type="button"
-                className="btn-secondary text-xs"
+                className="btn-secondary !px-2 !py-0.5 text-[11px]"
                 disabled={offset + PAGE >= data.total_rows || loading}
                 onClick={() => setOffset((o) => o + PAGE)}
               >
@@ -283,14 +263,14 @@ export function DataPage() {
           {visibleCols.length === 0 ? (
             <p className="text-sm text-stone-500">No columns to show. Adjust filters or uncheck “Hide empty”.</p>
           ) : (
-            <div className="data-table-shell">
-              <table className="data-table text-xs">
+            <div className="data-table-shell min-h-0 flex-1 !max-h-none !rounded-xl">
+              <table className="data-table !min-w-[480px] text-[11px]">
                 <thead className="sticky top-0 z-10">
                   <tr>
                     {visibleCols.map((c) => (
                       <th
                         key={c.name}
-                        className={`whitespace-nowrap ${isTsCol(c.name) ? "min-w-[9.5rem]" : ""}`}
+                        className={`!px-2 !py-1.5 whitespace-nowrap ${isTsCol(c.name) ? "min-w-[8.5rem]" : ""}`}
                         title={c.name}
                       >
                         {c.name}
@@ -301,7 +281,7 @@ export function DataPage() {
                 <tbody>
                   {visibleRows.length === 0 ? (
                     <tr>
-                      <td colSpan={visibleCols.length} className="px-3 py-6 text-center text-stone-400">
+                      <td colSpan={visibleCols.length} className="px-3 py-5 text-center text-stone-400">
                         {dateActive
                           ? "No rows in this date range for the current page filters."
                           : "No rows on this page match the value search."}
@@ -319,8 +299,8 @@ export function DataPage() {
                           return (
                             <td
                               key={c.name}
-                              className={`whitespace-nowrap px-2.5 py-1.5 font-mono text-[11px] tabular-nums text-stone-700 dark:text-stone-300 ${
-                                isTsCol(c.name) ? "text-stone-800 dark:text-stone-100" : "max-w-[12rem] truncate"
+                              className={`whitespace-nowrap !px-2 !py-0.5 font-mono text-[10px] tabular-nums text-stone-700 dark:text-stone-300 ${
+                                isTsCol(c.name) ? "text-stone-800 dark:text-stone-100" : "max-w-[10rem] truncate"
                               }`}
                               title={empty ? undefined : String(val)}
                             >
