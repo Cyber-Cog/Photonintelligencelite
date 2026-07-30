@@ -1,0 +1,121 @@
+{
+  "date": "2026-07-30T11:20:03.593Z",
+  "base": "https://piclite.vigorithm.com",
+  "api": "https://pic-lite-api.onrender.com",
+  "demoJobId": "dfb0724a-009d-439a-adfe-531ecda6edb0",
+  "results": [
+    {
+      "id": "13",
+      "name": "Cold API — health / wake",
+      "status": "Pass",
+      "severity": "P2",
+      "evidence": "api curl",
+      "notes": "Healthy: 200 511ms {\"status\":\"ok\",\"free_tier\":true,\"max_concurrent_jobs\":1,\"workers\":1,\"running_jobs\":0,\"queued_jobs\":0,\"worker_pool_starte"
+    },
+    {
+      "id": "1",
+      "name": "Landing / Home — load, CTAs, template",
+      "status": "Pass",
+      "severity": "P2",
+      "evidence": "docs/uat-evidence/01-landing.png",
+      "notes": "upload=2 demo=2 template=2 brand=true"
+    },
+    {
+      "id": "2a",
+      "name": "Auth — login",
+      "status": "Fail",
+      "severity": "P0",
+      "evidence": "docs/uat-evidence/02-login-fail.png",
+      "notes": "TimeoutError: page.fill: Timeout 45000ms exceeded.\nCall log:\n  - waiting for locator('input[type=\"email\"], input[name=\"email\"]')\n"
+    },
+    {
+      "id": "1b",
+      "name": "Template download",
+      "status": "Fail",
+      "severity": "P1",
+      "evidence": "docs/uat-evidence/01b-template-fail.png",
+      "notes": "Error: not logged in"
+    },
+    {
+      "id": "2b",
+      "name": "Auth — admin",
+      "status": "Fail",
+      "severity": "P0",
+      "evidence": "docs/uat-evidence/02-admin-fail.png",
+      "notes": "Error: not logged in"
+    },
+    {
+      "id": "2d",
+      "name": "Auth — logout",
+      "status": "Blocked",
+      "severity": "P1",
+      "evidence": "docs/uat-evidence/02-logout.png",
+      "notes": "Log out not visible"
+    },
+    {
+      "id": "3a",
+      "name": "Demo — Run demo → processing",
+      "status": "Fail",
+      "severity": "P0",
+      "evidence": "docs/uat-evidence/03-demo-fail.png",
+      "notes": "Error: locator.click: Error: strict mode violation: getByRole('button', { name: /Run demo/i }) resolved to 2 elements:\n    1) <button type=\"button\" class=\"btn-secondary landing-cta-btn px-5 py-2.5 text-sm \">Run demo</button> aka locator('#demo').getByRole('button', { name: 'Run demo' })\n    2) <button type=\"button\" class=\"btn-secondary landing-cta-btn px-5 py-2.5 text-sm\">Run demo</button> aka getByRole('button', { name: 'Run demo' }).nth(1)\n\nCall log:\n  - waiting for getByRole('button', { name: /Run demo/i })\n"
+    },
+    {
+      "id": "3b",
+      "name": "Demo — Results",
+      "status": "Fail",
+      "severity": "P0",
+      "evidence": "docs/uat-evidence/03-demo-results-fail.png",
+      "notes": "Error: locator.click: Error: strict mode violation: getByRole('button', { name: /Run demo/i }) resolved to 2 elements:\n    1) <button type=\"button\" class=\"btn-secondary landing-cta-btn px-5 py-2.5 text-sm \">Run demo</button> aka locator('#demo').getByRole('button', { name: 'Run demo' })\n    2) <button type=\"button\" class=\"btn-secondary landing-cta-btn px-5 py-2.5 text-sm\">Run demo</button> aka getByRole('button', { name: 'Run demo' }).nth(1)\n\nCall log:\n  - waiting for getByRole('button', { name: /Run demo/i })\n"
+    },
+    {
+      "id": "8",
+      "name": "Results Summary — Action Centre, KPIs, loss bridge",
+      "status": "Pass",
+      "severity": "P1",
+      "evidence": "docs/uat-evidence/08-summary.png",
+      "notes": "actionCentre=true kpis=true lossBridge=true"
+    },
+    {
+      "id": "9",
+      "name": "Diagnostics — Faults vs Box plot; Needs data",
+      "status": "Pass",
+      "severity": "P1",
+      "evidence": "docs/uat-evidence/09-diagnostics.png",
+      "notes": "faults=true boxSection=true needsFields=true folderSnippet=MODULES\n\n7 checks\n\nFAULTS\nDisconnected Strings\nFINDINGS\nInverter Clipping by Power\nFINDINGS\nInverter Clipping by Current (v1)\nHEALTHY\nInverter Efficiency Loss\nFINDINGS\nModule Damage & Bypass Diode Fai"
+    },
+    {
+      "id": "10",
+      "name": "Signal Explorer — I/V dual charts, synced zoom",
+      "status": "Pass",
+      "severity": "P1",
+      "evidence": "docs/uat-evidence/10-explorer.png",
+      "notes": "plots=0 ivHint=true"
+    },
+    {
+      "id": "11",
+      "name": "Raw data — dense table",
+      "status": "Pass",
+      "severity": "P1",
+      "evidence": "docs/uat-evidence/11-raw-data.png",
+      "notes": "rows=75"
+    },
+    {
+      "id": "4a",
+      "name": "Upload",
+      "status": "Fail",
+      "severity": "P0",
+      "evidence": "docs/uat-evidence/04-upload-fail.png",
+      "notes": "TimeoutError: page.fill: Timeout 45000ms exceeded.\nCall log:\n  - waiting for locator('input[type=\"email\"], input[name=\"email\"]')\n"
+    },
+    {
+      "id": "12",
+      "name": "Responsive smoke — narrow width",
+      "status": "Pass",
+      "severity": "P2",
+      "evidence": "docs/uat-evidence/12-mobile-landing.png",
+      "notes": "horizontalOverflow=false"
+    }
+  ],
+  "consoleErrors": []
+}

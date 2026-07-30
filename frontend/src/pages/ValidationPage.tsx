@@ -112,6 +112,23 @@ function IssueRow({ issue, jobId }: { issue: ValidationIssue; jobId: string }) {
   );
 }
 
+/** True once validation has produced a real summary (not empty defaults). */
+function validationSummaryReady(v: ValidationResponse | null): boolean {
+  if (!v) return false;
+  if ((v.blockers?.length ?? 0) > 0) return true;
+  if ((v.module_readiness?.length ?? 0) > 0) return true;
+  if ((v.row_count ?? 0) > 0 || (v.column_count ?? 0) > 0) return true;
+  if ((v.warnings?.length ?? 0) > 0) return true;
+  const st = (v.state || "").toLowerCase();
+  // Terminal / post-validation states with an empty summary still need a decisive UI
+  // (failed with no issues is rare; treat completed/normalizing/failed as settled only
+  // when we also have can_proceed or explicit counts — otherwise keep polling).
+  if (st === "failed" && (v.blockers?.length ?? 0) === 0 && (v.row_count ?? 0) === 0) {
+    return false;
+  }
+  return false;
+}
+
 export function ValidationPage() {
   const { jobId } = useParams<{ jobId: string }>();
   const navigate = useNavigate();
@@ -132,15 +149,47 @@ export function ValidationPage() {
   };
 
   useEffect(() => {
-    reload();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (!jobId) return;
+    let cancelled = false;
+    let attempts = 0;
+    const maxAttempts = 60;
+
+    const tick = async () => {
+      try {
+        const v = await getValidation(jobId);
+        if (cancelled) return;
+        setValidation(v);
+        setError(null);
+        if (validationSummaryReady(v) || attempts >= maxAttempts) {
+          setLoading(false);
+          return;
+        }
+        attempts += 1;
+        setLoading(true);
+        window.setTimeout(() => {
+          if (!cancelled) void tick();
+        }, 500);
+      } catch (err) {
+        if (cancelled) return;
+        setError(err instanceof ApiError ? err.message : "Could not load validation results.");
+        setLoading(false);
+      }
+    };
+
+    setLoading(true);
+    void tick();
+    return () => {
+      cancelled = true;
+    };
   }, [jobId]);
 
   if (!jobId) return null;
 
+  const summaryReady = validationSummaryReady(validation);
   const hasBlockers = (validation?.blockers.length ?? 0) > 0;
   const canDrop = Boolean(validation?.can_proceed_with_row_drops);
   const tsCol = validation?.timestamp_column;
+  const canRunAnalysis = summaryReady && !hasBlockers && Boolean(validation?.can_proceed);
 
   const handleContinue = async (dropBad = false) => {
     setAcking(true);
@@ -189,7 +238,13 @@ export function ValidationPage() {
         <ErrorState title="Could not load validation" message={error} />
       )}
 
-      {!loading && validation && (
+      {!loading && validation && !summaryReady && (
+        <InfoBanner tone="info" title="Validation still running">
+          Waiting for row counts and module readiness. This page refreshes automatically.
+        </InfoBanner>
+      )}
+
+      {!loading && validation && summaryReady && (
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
             <div className="stat-tile">
@@ -330,7 +385,7 @@ export function ValidationPage() {
             </SectionPanel>
           )}
 
-          {!hasBlockers && validation.warnings.length === 0 && (
+          {!hasBlockers && validation.warnings.length === 0 && canRunAnalysis && (
             <InfoBanner tone="success" title="Ready to analyze">
               No data-quality blockers. Review module readiness above, then run analysis.
             </InfoBanner>
@@ -349,7 +404,7 @@ export function ValidationPage() {
             <button type="button" className="btn-ghost" onClick={() => navigate(`/upload?replace=${jobId}`)}>
               Replace files / Back to upload
             </button>
-            {!hasBlockers && (
+            {canRunAnalysis && (
               <button type="button" className="btn-primary" onClick={() => handleContinue(false)} disabled={acking}>
                 {acking ? <Spinner className="h-4 w-4" /> : null}
                 {validation.warnings.length > 0 ? "Acknowledge & run analysis" : "Run analysis"}

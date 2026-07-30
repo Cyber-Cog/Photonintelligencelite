@@ -1,0 +1,104 @@
+{
+  "date": "2026-07-30T11:26:57.984Z",
+  "base": "https://piclite.vigorithm.com",
+  "api": "https://pic-lite-api.onrender.com",
+  "demoJobId": "542831e8-9fd6-4091-924b-c9202a36e107",
+  "results": [
+    {
+      "id": "2a",
+      "name": "Auth — login",
+      "status": "Pass",
+      "severity": "P0",
+      "evidence": "02-login-ok.png",
+      "notes": "url=https://piclite.vigorithm.com/upload profile=true"
+    },
+    {
+      "id": "1b",
+      "name": "Template download",
+      "status": "Pass",
+      "severity": "P1",
+      "evidence": "pic_lite_complete_analysis_pack.xlsx",
+      "notes": "saved pic_lite_complete_analysis_pack.xlsx"
+    },
+    {
+      "id": "2b",
+      "name": "Auth — admin page",
+      "status": "Pass",
+      "severity": "P0",
+      "evidence": "02-admin-ok.png",
+      "notes": "url=https://piclite.vigorithm.com/admin?returnTo=%2F"
+    },
+    {
+      "id": "2c",
+      "name": "Exit admin / return",
+      "status": "Pass",
+      "severity": "P1",
+      "evidence": "docs/uat-evidence/02-exit-ok.png",
+      "notes": "url=https://piclite.vigorithm.com/"
+    },
+    {
+      "id": "2d",
+      "name": "Auth — logout",
+      "status": "Pass",
+      "severity": "P1",
+      "evidence": "docs/uat-evidence/02-logout-ok.png",
+      "notes": "loggedOut=true"
+    },
+    {
+      "id": "3a",
+      "name": "Demo → processing console",
+      "status": "Pass",
+      "severity": "P0",
+      "evidence": "docs/uat-evidence/03-proc-ok.png",
+      "notes": "job=542831e8-9fd6-4091-924b-c9202a36e107 consoleHints=3"
+    },
+    {
+      "id": "3b",
+      "name": "Demo → Results",
+      "status": "Pass",
+      "severity": "P0",
+      "evidence": "docs/uat-evidence/03-results-ok.png",
+      "notes": "url=https://piclite.vigorithm.com/jobs/542831e8-9fd6-4091-924b-c9202a36e107/dashboard"
+    },
+    {
+      "id": "8b",
+      "name": "Sticky KPIs on scroll",
+      "status": "Pass",
+      "severity": "P2",
+      "evidence": "08-sticky-kpis.png",
+      "notes": "stickyEl=true (visual check in screenshot)"
+    },
+    {
+      "id": "10b",
+      "name": "Explorer detail",
+      "status": "Fail",
+      "severity": "P1",
+      "evidence": "docs/uat-evidence/10-fail2.png",
+      "notes": "TimeoutError: locator.click: Timeout 60000ms exceeded.\nCall log:\n  - waiting for getByRole('button', { name: /Plot|Load|Show|Apply/i }).first()\n    - locator resolved to <button disabled type=\"button\" class=\"btn-primary !py-1 text-[11px]\" title=\"Select at least one equipment and one signal\">Plot</button>\n  - attempting click action\n    2 × waiting for element to be visible, enabled and stable\n      - element is not enabled\n    - retrying click action\n    - waiting 20ms\n    2 × waiting for element to be visible, enabled and stable\n      - element is not enabled\n    - retrying click action\n      - waiting 100ms\n    113 × waiting for element to be visible, enabled and stable\n        - element is not enabled\n      - retrying click action\n        - waiting 500ms\n"
+    },
+    {
+      "id": "4a",
+      "name": "Upload multi guidance",
+      "status": "Pass",
+      "severity": "P1",
+      "evidence": "docs/uat-evidence/04-upload-ok.png",
+      "notes": "hints=1"
+    },
+    {
+      "id": "4-7",
+      "name": "Upload/setup/validate",
+      "status": "Fail",
+      "severity": "P0",
+      "evidence": "docs/uat-evidence/04-fail2.png",
+      "notes": "TimeoutError: locator.setInputFiles: Timeout 60000ms exceeded.\nCall log:\n  - waiting for locator('input[type=\"file\"]').first()\n"
+    },
+    {
+      "id": "9b",
+      "name": "No mid-word wrap on diag labels",
+      "status": "Pass",
+      "severity": "P2",
+      "evidence": "docs/uat-evidence/09-wrap-check.png",
+      "notes": "{\"bad\":false}"
+    }
+  ]
+}

@@ -1,0 +1,47 @@
+{
+  "date": "2026-07-30T11:28:13.984Z",
+  "demoJobId": "542831e8-9fd6-4091-924b-c9202a36e107",
+  "uploadJobId": null,
+  "results": [
+    {
+      "id": "10",
+      "name": "Signal Explorer I/V dual synced",
+      "status": "Pass",
+      "severity": "P1",
+      "evidence": "10-iv-dual.png",
+      "notes": "plots=1 dualHint=true"
+    },
+    {
+      "id": "4b",
+      "name": "Upload pack",
+      "status": "Fail",
+      "severity": "P0",
+      "evidence": "04-upload-fail3.png",
+      "notes": "Error: no file input after path. page:\n1\nUpload\n2\nSetup\n3\nValidate\n4\nAnalyze\n5\nResults\n\nSTART ANALYSIS\n\nUpload SCADA reports\nFiles are merged into a single analysis dataset. After upload we detect whether this looks like the Complete Analysis Pack, then Setup mapping is always available.\nChange path\n\nComplete Analysis Pack\n\nPrefer this path for full fault coverage. Fill the scada sheet (timestamp, equipment IDs, AC power kW, DC current/voltage, POA/GHI) and the architecture sheet (Plant → Inverter → SCB → String with AC kW and DC kWp capacities). On upload, architecture is imported into Setup automatically — no separate re-entry. OEM SMB exports with string channels I1…In also work via the own-files path.\n\nDownload Excel template\nDownload CSV package\nI filled the template — upload files"
+    },
+    {
+      "id": "5",
+      "name": "Setup",
+      "status": "Blocked",
+      "severity": "P0",
+      "evidence": "n/a",
+      "notes": "no upload job"
+    },
+    {
+      "id": "6",
+      "name": "Validate",
+      "status": "Blocked",
+      "severity": "P1",
+      "evidence": "n/a",
+      "notes": "no upload job"
+    },
+    {
+      "id": "7",
+      "name": "Analyze",
+      "status": "Blocked",
+      "severity": "P1",
+      "evidence": "n/a",
+      "notes": "no upload job"
+    }
+  ]
+}

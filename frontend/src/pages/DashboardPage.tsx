@@ -304,24 +304,39 @@ export function DashboardPage() {
   useEffect(() => {
     if (!jobId) return;
     let cancelled = false;
-    setLoading(true);
-    setError(null);
-    setErrorStatus(null);
-    getResults(jobId)
-      .then((res) => {
-        if (!cancelled) setData(res);
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setError(err instanceof ApiError ? err.message : "Could not load results.");
-          setErrorStatus(err instanceof ApiError ? err.status : null);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+    let timer: number | undefined;
+    let attempts = 0;
+
+    const load = () => {
+      setLoading(true);
+      setError(null);
+      setErrorStatus(null);
+      getResults(jobId)
+        .then((res) => {
+          if (cancelled) return;
+          setData(res);
+          setLoading(false);
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          const status = err instanceof ApiError ? err.status : null;
+          const msg = err instanceof ApiError ? err.message : "Could not load results.";
+          // Analysis may still be finishing when Processing navigates early — retry briefly.
+          if ((status === 404 || status === 409 || /not (ready|complete)|still running/i.test(msg)) && attempts < 40) {
+            attempts += 1;
+            timer = window.setTimeout(load, 1500);
+            return;
+          }
+          setError(msg);
+          setErrorStatus(status);
+          setLoading(false);
+        });
+    };
+
+    load();
     return () => {
       cancelled = true;
+      if (timer) window.clearTimeout(timer);
     };
   }, [jobId]);
 

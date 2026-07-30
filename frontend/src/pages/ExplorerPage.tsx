@@ -121,19 +121,25 @@ export function ExplorerPage() {
   /** One-click Current + Voltage pair when both exist at this browse level (or already known). */
   const pairCurrentVoltage = () => {
     const ids = new Set(signals.map((s) => s.id));
-    const currentId =
+    let currentId =
       [...ids].find((id) => classifySignal(id) === "current") ??
       (knownSigLabels["dc_current_a"] ? "dc_current_a" : null);
-    const voltageId =
+    let voltageId =
       [...ids].find((id) => classifySignal(id) === "voltage") ??
       (knownSigLabels["dc_voltage_v"] ? "dc_voltage_v" : null);
+
+    // Inverter-level lists often only expose AC/DC power — jump to SCB for I/V.
+    if ((!currentId || !voltageId) && browseLevel === "inverter") {
+      setBrowseLevel("scb");
+      return;
+    }
+
     if (!currentId && !voltageId) return;
-    setSelectedSig((prev) => {
-      const next = new Set(prev);
-      if (currentId) next.add(currentId);
-      if (voltageId) next.add(voltageId);
-      return Array.from(next);
-    });
+    // Prefer a clean I/V selection so dual panes activate immediately.
+    const next = new Set<string>();
+    if (currentId) next.add(currentId);
+    if (voltageId) next.add(voltageId);
+    setSelectedSig(Array.from(next));
     setForceSingle(false);
   };
 

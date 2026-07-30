@@ -1,0 +1,46 @@
+{
+  "date": "2026-07-30T11:29:44.092Z",
+  "uploadJobId": "6b5fa839-e29b-4862-84e6-468107e8f455",
+  "results": [
+    {
+      "id": "4",
+      "name": "Upload multi + parse console + pack",
+      "status": "Pass",
+      "severity": "P0",
+      "evidence": "04-navigated.png",
+      "notes": "job=6b5fa839-e29b-4862-84e6-468107e8f455 parseHints=11 url=https://piclite.vigorithm.com/jobs/6b5fa839-e29b-4862-84e6-468107e8f455/setup"
+    },
+    {
+      "id": "5",
+      "name": "Setup mapping/plant/architecture",
+      "status": "Pass",
+      "severity": "P0",
+      "evidence": "05-r4.png",
+      "notes": "map=true plant=true arch=true"
+    },
+    {
+      "id": "6",
+      "name": "Validate capacity/blockers",
+      "status": "Pass",
+      "severity": "P1",
+      "evidence": "06-r4.png",
+      "notes": "capacity=false readiness=true blockersClearish=true"
+    },
+    {
+      "id": "7",
+      "name": "Analyze denser console",
+      "status": "Pass",
+      "severity": "P1",
+      "evidence": "07-r4.png",
+      "notes": "elements=17"
+    },
+    {
+      "id": "7b",
+      "name": "Upload → Results",
+      "status": "Pass",
+      "severity": "P0",
+      "evidence": "07-dash-r4.png",
+      "notes": "url=https://piclite.vigorithm.com/jobs/6b5fa839-e29b-4862-84e6-468107e8f455/dashboard"
+    }
+  ]
+}
