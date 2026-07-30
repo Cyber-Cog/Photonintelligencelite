@@ -8,6 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Callable
 
+from analytics.common.module_kinds import is_analysis_module
 from analytics.core.result import ResultObject, ResultStatus
 
 _SEVERITY_RANK = {
@@ -86,10 +87,6 @@ _OWNER_COPY: dict[str, tuple[_ProblemFn, str]] = {
         ),
         "Review DC vs AC on the worst units and schedule inverter service if sustained.",
     ),
-    "box_plot": (
-        lambda _equipment, _count, _title: "Inverter efficiency spread looks unusual across the fleet.",
-        "Compare efficiency outliers to peers in the diagnostics section.",
-    ),
 }
 
 
@@ -147,6 +144,9 @@ def _first_actionable_rec(recs: list[str]) -> str | None:
 
 def _has_real_findings(r: ResultObject) -> bool:
     if r.status != ResultStatus.OK:
+        return False
+    # Analysis tools (box plot, etc.) are never owner-brief "faults".
+    if is_analysis_module(r.algorithm_id) or (r.module_kind == "analysis"):
         return False
     if (r.loss_energy_kwh or 0) > 0:
         return True

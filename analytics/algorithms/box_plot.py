@@ -1,10 +1,13 @@
-"""Box plot analysis — inverter efficiency distribution.
+"""Box plot analysis — inverter efficiency distribution (diagnostics tool, not a fault).
 
 Extracted as a first-class algorithm/result module (PRD gap fix #3: in PIC this lived
 embedded inside the inverter-efficiency payload as `inverter_box_stats`; PIC Lite promotes
-it to its own dashboard fault card / result object so the mapping to PRD §7.10 is 1:1).
+it to its own dashboard analysis card / result object so the mapping to PRD §7.10 is 1:1).
 Reuses analytics.algorithms.inverter_efficiency.compute_efficiency_frame so both modules
 agree on the same underlying per-sample efficiency values.
+
+Never frames distribution stats as fault findings — severity stays informational and
+affected_equipment is empty so Results “Faults” / owner actions do not treat boxes as faults.
 """
 from __future__ import annotations
 
@@ -18,7 +21,7 @@ from analytics.core.registry import register_algorithm
 from analytics.core.result import EvidenceRef, ResultObject, ResultStatus, ResultTable
 
 ALGORITHM_ID = "box_plot"
-VERSION = "1.0.0-port"
+VERSION = "1.1.0-port"
 
 
 def _box_stats(series: pd.Series, clamp_min: float, clamp_max: float) -> dict[str, float] | None:
@@ -88,22 +91,37 @@ def run(context: AnalysisContext) -> ResultObject:
     if outliers:
         recommendations.append(
             f"{len(outliers)} inverter(s) show a low-median efficiency distribution with wide spread "
-            f"({', '.join(outliers[:5])}) — investigate for intermittent underperformance."
+            f"({', '.join(outliers[:5])}) — compare peers in this chart; not classified as a confirmed fault."
         )
     else:
-        recommendations.append("Efficiency distributions are tight and consistent across inverters — no distributional outliers detected.")
+        recommendations.append(
+            "Efficiency distributions are tight and consistent across inverters — no distributional outliers noted."
+        )
+
+    summary = (
+        f"Efficiency distribution for {len(stats_list)} inverter(s) shown together. "
+        + (
+            f"{len(outliers)} unit(s) have wide/low-median spread for review."
+            if outliers
+            else "No distributional outliers noted."
+        )
+    )
 
     return ResultObject(
         algorithm_id=ALGORITHM_ID,
         algorithm_version=VERSION,
         status=ResultStatus.OK,
         title="Box Plot Analysis",
-        summary=f"Efficiency distributions computed for {len(stats_list)} inverter(s); {len(outliers)} show outlier spread.",
-        severity="medium" if outliers else "info",
+        summary=summary,
+        # Analysis tool — never medium/high severity or affected_equipment (those feed fault tables).
+        severity="info",
         confidence=0.85,
-        affected_equipment=outliers,
+        affected_equipment=[],
         loss_energy_kwh=None,
-        metrics={"inverters_analyzed": float(len(stats_list)), "outlier_count": float(len(outliers))},
+        metrics={
+            "inverters_analyzed": float(len(stats_list)),
+            "outlier_count": float(len(outliers)),
+        },
         tables=[table],
         charts=[chart],
         recommendations=recommendations,
@@ -115,5 +133,10 @@ def run(context: AnalysisContext) -> ResultObject:
             source_fields=["ac_power_kw", "dc_power_kw"],
             affected_sample_count=int(len(df_valid)),
             total_sample_count=int(len(df_valid)),
+            notes=(
+                f"Distributional review flags (not faults): {', '.join(outliers)}"
+                if outliers
+                else "All-inverter efficiency box plot — analysis tool, not a fault module."
+            ),
         ),
     )

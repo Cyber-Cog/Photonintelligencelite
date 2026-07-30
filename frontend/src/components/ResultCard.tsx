@@ -106,6 +106,22 @@ function ResultCardInner({
   if (result.status === "unavailable") {
     const fix = setupFixForAlgorithm(result.algorithm_id);
     const href = jobId ? fixHref(jobId, fix) : "/upload";
+    const needs =
+      (result.missing_fields?.length || result.missing_config?.length
+        ? `Needs: ${[
+            ...(result.missing_fields ?? []).map((f) =>
+              f.includes(" or ")
+                ? f
+                    .split(" or ")
+                    .map((x) => x.trim().replace(/_/g, " "))
+                    .join(" / ")
+                : f.replace(/_/g, " "),
+            ),
+            ...(result.missing_config ?? []),
+          ].join(", ")}`
+        : null) ||
+      result.summary ||
+      "Needs required signals or plant config.";
     return (
       <Link
         to={href}
@@ -119,12 +135,23 @@ function ResultCardInner({
             <p className={`font-medium text-stone-800 dark:text-stone-100 ${standalone ? "font-display text-base" : "text-sm"}`}>
               {result.title}
             </p>
-            <p className="mt-1 text-xs leading-relaxed text-stone-600 dark:text-stone-400">{result.summary}</p>
-            <p className="mt-1.5 text-[11px] font-semibold text-amber-800 dark:text-amber-200">
-              Fix in Setup — then re-run to unlock this check
+            <p className="mt-1 text-xs font-semibold leading-relaxed text-amber-900 dark:text-amber-100">
+              {needs}
             </p>
+            {result.summary && !/^needs:/i.test(result.summary.trim()) ? (
+              <p className="mt-1 text-xs leading-relaxed text-stone-600 dark:text-stone-400">{result.summary}</p>
+            ) : result.summary && /^needs:/i.test(result.summary.trim()) ? (
+              <p className="mt-1 text-xs leading-relaxed text-stone-600 dark:text-stone-400">
+                {result.summary.replace(/^Needs:\s*[^.]*\.\s*/i, "").trim() ||
+                  "Fix in Setup — then re-run to unlock this check"}
+              </p>
+            ) : (
+              <p className="mt-1.5 text-[11px] font-semibold text-amber-800 dark:text-amber-200">
+                Fix in Setup — then re-run to unlock this check
+              </p>
+            )}
           </div>
-          <Badge tone="warning">Needs input</Badge>
+          <Badge tone="warning">Needs data</Badge>
         </div>
       </Link>
     );

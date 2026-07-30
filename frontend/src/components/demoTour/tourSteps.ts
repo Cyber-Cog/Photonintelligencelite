@@ -35,7 +35,7 @@ export const DEMO_TOUR_STEPS: TourStepDef[] = [
   {
     id: "summary",
     title: "Summary & actions",
-    body: "Sticky plant KPIs stay in view — Owner Action Center below lists prioritized problems and a clear next step.",
+    body: "Sticky KPIs stay in view. Below: Action Centre (severity filter + detail), loss bridge, worst inverters, and string health.",
     route: "dashboard",
     selector: "[data-tour='summary-kpis']",
     resultsSection: "summary",
@@ -44,10 +44,10 @@ export const DEMO_TOUR_STEPS: TourStepDef[] = [
   {
     id: "loss-bridge",
     title: "Loss bridge",
-    body: "A waterfall from expected energy to what the plant delivered — each bar is a loss bucket, with a segment table underneath.",
+    body: "Expected → diagnosed losses → unknown → actual. Summary shows the chart; the Loss bridge tab adds the full segment table.",
     route: "dashboard",
     selector: "[data-tour='loss-bridge']",
-    resultsSection: "bridge",
+    resultsSection: "summary",
     placement: "top",
   },
   {
@@ -62,7 +62,7 @@ export const DEMO_TOUR_STEPS: TourStepDef[] = [
   {
     id: "diagnostics",
     title: "Diagnostics modules",
-    body: "Open Diagnostics, then pick a module from the narrow folder — summary and findings open in the wide pane; use Investigate for evidence charts.",
+    body: "Open Diagnostics: Faults are listed separately from Box plot analysis. Status chips are Healthy / Findings / Needs data (with missing signals on hover).",
     route: "dashboard",
     selector: "[data-tour='diagnostics-folder-list'] button[data-results-section]",
     resultsSection: "diagnostics",

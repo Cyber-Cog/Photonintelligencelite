@@ -146,6 +146,8 @@ class ModuleReadinessOut(BaseModel):
     missing_config: list[str] = Field(default_factory=list)
     message: str
     how_to_fix: str = ""
+    module_kind: Optional[str] = None
+    """fault | analysis | kpi — box plot is analysis (not a fault)."""
 
 
 class ValidationResponse(BaseModel):

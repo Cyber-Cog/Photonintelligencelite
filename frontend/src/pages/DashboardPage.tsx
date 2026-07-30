@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ApiError, getResults, reportUrl } from "@/api/client";
+import { BoxPlotAnalysisPanel } from "@/components/BoxPlotAnalysisPanel";
 import { EvidenceInvestigateModal } from "@/components/EvidenceInvestigateModal";
 import { FaultsTable } from "@/components/FaultsTable";
 import { JobNav } from "@/components/JobNav";
@@ -8,14 +9,22 @@ import { KpiStrip, type KpiStripItem } from "@/components/KpiStrip";
 import { LossWaterfallBridge } from "@/components/LossWaterfallBridge";
 import { OwnerActionCenter } from "@/components/OwnerActionCenter";
 import { ResultCard } from "@/components/ResultCard";
+import { SummaryInsightPanels } from "@/components/SummaryInsightPanels";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { InfoBanner } from "@/components/ui/InfoBanner";
 import { Spinner } from "@/components/ui/Spinner";
 import { SubnavTabs } from "@/components/ui/SubnavTabs";
 import { useJob } from "@/context/JobContext";
+import {
+  isAnalysisModule,
+  moduleNavBadge,
+  needsDataLine,
+  orderDiagModules,
+} from "@/lib/diagnosticsModules";
 import { buildFaultRows, type FaultRow } from "@/lib/faultsTable";
 import { diagnoseKpiGaps, fixHref } from "@/lib/missingReasons";
 import { buildOwnerActions } from "@/lib/ownerActions";
+import { stringHealthFromResults, worstInvertersFromResults } from "@/lib/summaryInsights";
 import {
   RESULTS_SECTION_EVENT,
   RESULTS_SECTIONS,
@@ -23,17 +32,6 @@ import {
   type ResultsSectionId,
 } from "@/lib/resultsNav";
 import type { ResultObject, ResultsResponse } from "@/types";
-
-/** Preferred Diagnostics module order (codex-like fault modules first). */
-const DIAG_ORDER = [
-  "disconnected_strings",
-  "clipping_power",
-  "clipping_current",
-  "inverter_efficiency",
-  "module_damage",
-  "string_outlier",
-  "box_plot",
-];
 
 /** App chrome: header + main py + footer — match Raw data / Explorer density. */
 const RESULTS_SHELL = "h-[calc(100dvh-8.75rem)] max-h-[calc(100dvh-8.75rem)]";
@@ -85,61 +83,14 @@ function FileIcon() {
   );
 }
 
-/** Modules worth listing in Diagnostics folder (preferred order, then the rest). */
+/** Modules worth listing in Diagnostics folder (faults + analysis, preferred order). */
 function relevantDiagModules(results: ResultObject[]): ResultObject[] {
-  const byId = new Map(results.map((r) => [r.algorithm_id, r]));
-  const ordered: ResultObject[] = [];
-  const placed = new Set<string>();
-
-  for (const id of DIAG_ORDER) {
-    const r = byId.get(id);
-    if (!r) continue;
-    ordered.push(r);
-    placed.add(id);
-  }
-  for (const r of results) {
-    if (placed.has(r.algorithm_id)) continue;
-    ordered.push(r);
-  }
-  return ordered;
+  const { faults, analysis } = orderDiagModules(results.filter((r) => r.algorithm_id !== "kpis"));
+  return [...faults, ...analysis];
 }
 
 function firstReadyModuleId(modules: ResultObject[]): string | null {
   return modules.find((r) => r.status === "ok")?.algorithm_id ?? modules[0]?.algorithm_id ?? null;
-}
-
-function moduleNavBadge(r: ResultObject): {
-  label: string;
-  className: string;
-} {
-  if (r.status === "unavailable") {
-    return {
-      label: "Needs input",
-      className:
-        "bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200",
-    };
-  }
-  if (r.status === "error") {
-    return {
-      label: "Error",
-      className: "bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300",
-    };
-  }
-  const hasFindings =
-    (r.loss_energy_kwh ?? 0) > 0.5 ||
-    (r.severity != null && ["critical", "high", "medium"].includes(r.severity)) ||
-    r.tables.some((t) => t.rows.length > 0);
-  if (hasFindings) {
-    return {
-      label: "Findings",
-      className: "bg-rose-50 text-rose-800 dark:bg-rose-950/40 dark:text-rose-200",
-    };
-  }
-  return {
-    label: "Ready",
-    className:
-      "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300",
-  };
 }
 
 function DiagStatusBadge({ result }: { result: ResultObject }) {
@@ -147,6 +98,7 @@ function DiagStatusBadge({ result }: { result: ResultObject }) {
   return (
     <span
       className={`shrink-0 rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ${meta.className}`}
+      title={meta.title}
     >
       {meta.label}
     </span>
@@ -220,30 +172,70 @@ function ResultsSidebar({
 
 /** Vertical folder-style module list (lives inside Diagnostics pane only). */
 function DiagnosticsFolderList({
-  modules,
+  faultModules,
+  analysisModules,
   activeModuleId,
   onSelectModule,
   onCollapse,
 }: {
-  modules: ResultObject[];
+  faultModules: ResultObject[];
+  analysisModules: ResultObject[];
   activeModuleId: string | null;
   onSelectModule: (algorithmId: string) => void;
   onCollapse?: () => void;
 }) {
+  const total = faultModules.length + analysisModules.length;
+
+  const renderItem = (m: ResultObject) => {
+    const active = activeModuleId === m.algorithm_id;
+    const tip =
+      m.status === "unavailable"
+        ? needsDataLine(m) ?? m.title
+        : m.title + (m.summary ? ` — ${m.summary}` : "");
+    return (
+      <li key={m.algorithm_id} className="pl-1.5">
+        <button
+          type="button"
+          data-results-section={m.algorithm_id}
+          data-tour={`nav-diag-${m.algorithm_id}`}
+          aria-current={active ? "page" : undefined}
+          title={tip}
+          onClick={() => onSelectModule(m.algorithm_id)}
+          className={`flex w-full min-w-0 items-center gap-1.5 rounded-md px-1.5 py-1.5 text-left transition duration-150 ${
+            active
+              ? "bg-brand-50 text-stone-900 ring-1 ring-brand-300/90 dark:bg-brand-950/50 dark:text-amber-50 dark:ring-brand-700/60"
+              : "text-stone-600 hover:bg-stone-50 hover:text-stone-900 dark:text-stone-300 dark:hover:bg-stone-800/70 dark:hover:text-amber-100"
+          }`}
+        >
+          <span
+            className={`shrink-0 ${active ? "text-brand-600 dark:text-brand-400" : "text-stone-400 dark:text-stone-500"}`}
+          >
+            <FileIcon />
+          </span>
+          {/* break-normal + truncate — no mid-word wraps in the modules list */}
+          <span className="min-w-0 flex-1 truncate break-normal text-[12px] font-semibold leading-tight">
+            {m.title}
+          </span>
+          <DiagStatusBadge result={m} />
+        </button>
+      </li>
+    );
+  };
+
   return (
     <nav
       className="flex h-full min-h-0 w-full flex-col rounded-xl border border-stone-200/90 bg-white/95 dark:border-stone-700 dark:bg-stone-900"
       aria-label="Diagnostic modules"
       data-tour="diagnostics-folder-list"
     >
-      <div className="flex shrink-0 items-center gap-1.5 border-b border-stone-100 px-2 py-1.5 dark:border-stone-800">
+      <div className="flex shrink-0 items-center gap-1.5 border-b border-stone-100 px-2.5 py-1.5 dark:border-stone-800">
         <span className="text-brand-600 dark:text-brand-400">
           <FolderIcon open />
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-stone-400">Modules</p>
           <p className="text-[11px] font-medium text-stone-500 dark:text-stone-400">
-            {modules.length} {modules.length === 1 ? "check" : "checks"}
+            {total} {total === 1 ? "check" : "checks"}
           </p>
         </div>
         {onCollapse && (
@@ -261,48 +253,30 @@ function DiagnosticsFolderList({
         )}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1">
-        {modules.length === 0 ? (
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1.5">
+        {total === 0 ? (
           <p className="px-2 py-2 text-[11px] text-stone-400">No modules for this run</p>
         ) : (
-          <ul className="space-y-px">
-            <li className="pointer-events-none select-none px-1.5 py-0.5" aria-hidden="true">
-              <div className="flex items-center gap-1.5 text-[11px] font-semibold text-stone-500 dark:text-stone-400">
-                <span className="text-stone-400 dark:text-stone-500">
+          <ul className="space-y-0.5">
+            {faultModules.length > 0 && (
+              <li className="pointer-events-none select-none px-1.5 pb-0.5 pt-1" aria-hidden="true">
+                <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.1em] text-stone-400">
                   <FolderIcon open />
-                </span>
-                <span>Fault modules</span>
-              </div>
-            </li>
-            {modules.map((m) => {
-              const active = activeModuleId === m.algorithm_id;
-              return (
-                <li key={m.algorithm_id} className="pl-2">
-                  <button
-                    type="button"
-                    data-results-section={m.algorithm_id}
-                    data-tour={`nav-diag-${m.algorithm_id}`}
-                    aria-current={active ? "page" : undefined}
-                    onClick={() => onSelectModule(m.algorithm_id)}
-                    className={`flex w-full items-start gap-1 rounded-md px-1.5 py-1 text-left transition duration-150 ${
-                      active
-                        ? "bg-brand-50 text-stone-900 ring-1 ring-brand-300/90 dark:bg-brand-950/50 dark:text-amber-50 dark:ring-brand-700/60"
-                        : "text-stone-600 hover:bg-stone-50 hover:text-stone-900 dark:text-stone-300 dark:hover:bg-stone-800/70 dark:hover:text-amber-100"
-                    }`}
-                  >
-                    <span
-                      className={`mt-0.5 ${active ? "text-brand-600 dark:text-brand-400" : "text-stone-400 dark:text-stone-500"}`}
-                    >
-                      <FileIcon />
-                    </span>
-                    <span className="min-w-0 flex-1 break-words text-[11px] font-semibold leading-snug">
-                      {m.title}
-                    </span>
-                    <DiagStatusBadge result={m} />
-                  </button>
-                </li>
-              );
-            })}
+                  <span>Faults</span>
+                </div>
+              </li>
+            )}
+            {faultModules.map(renderItem)}
+
+            {analysisModules.length > 0 && (
+              <li className="pointer-events-none select-none px-1.5 pb-0.5 pt-2" aria-hidden="true">
+                <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.1em] text-stone-400">
+                  <FolderIcon open />
+                  <span>Box plot analysis</span>
+                </div>
+              </li>
+            )}
+            {analysisModules.map(renderItem)}
           </ul>
         )}
       </div>
@@ -358,6 +332,10 @@ export function DashboardPage() {
   }, [data]);
 
   const diagModules = useMemo(() => relevantDiagModules(sortedResults), [sortedResults]);
+  const { faultModules, analysisModules } = useMemo(() => {
+    const { faults, analysis } = orderDiagModules(diagModules);
+    return { faultModules: faults, analysisModules: analysis };
+  }, [diagModules]);
   modulesRef.current = diagModules;
 
   const activeModule = useMemo(
@@ -433,6 +411,15 @@ export function DashboardPage() {
   );
 
   const faultRows = useMemo(() => (data ? buildFaultRows(data.results) : []), [data]);
+
+  const worstInverters = useMemo(
+    () => (data ? worstInvertersFromResults(data.results) : []),
+    [data],
+  );
+  const stringHealth = useMemo(() => {
+    if (!data) return { rows: [], healthyNote: null as string | null };
+    return stringHealthFromResults(data.results);
+  }, [data]);
 
   const kpiItems = useMemo((): KpiStripItem[] => {
     if (!data || !jobId) return [];
@@ -536,7 +523,7 @@ export function DashboardPage() {
             </h2>
             <p className="text-[11px] text-stone-500 dark:text-stone-400">
               {data
-                ? `${okCount} ready · ${blockedCount} need input`
+                ? `${okCount} ready · ${blockedCount} need data`
                 : "KPIs, actions, bridge, faults, diagnostics"}
             </p>
           </div>
@@ -615,7 +602,7 @@ export function DashboardPage() {
             <KpiStrip items={kpiItems} />
           </div>
 
-          <div className="flex min-h-0 flex-1 items-stretch gap-2 overflow-hidden">
+          <div className="flex min-h-0 flex-1 items-stretch gap-3 overflow-hidden">
             <ResultsSidebar
               activeSection={activeSection}
               onSelectSection={selectSection}
@@ -636,7 +623,7 @@ export function DashboardPage() {
                 <div
                   id="results-actions"
                   data-results-pane="summary"
-                  className="rounded-xl border border-stone-200/90 bg-white/95 p-3 dark:border-stone-700 dark:bg-stone-900"
+                  className="flex flex-col gap-3 pb-1"
                 >
                   {ownerActions ? (
                     <OwnerActionCenter
@@ -646,8 +633,26 @@ export function DashboardPage() {
                       onSection={(id) => selectSection(id)}
                     />
                   ) : (
-                    <p className="text-sm text-stone-500">No owner actions for this run.</p>
+                    <div className="rounded-xl border border-stone-200/90 bg-white/95 px-4 py-6 text-sm text-stone-500 dark:border-stone-700 dark:bg-stone-900">
+                      No owner actions for this run.
+                    </div>
                   )}
+
+                  <div data-tour="loss-bridge" data-summary-bridge>
+                    <LossWaterfallBridge
+                      kpis={data.kpis}
+                      results={data.results}
+                      jobId={jobId}
+                      compact
+                    />
+                  </div>
+
+                  <SummaryInsightPanels
+                    worstInverters={worstInverters}
+                    stringHealth={stringHealth.rows}
+                    stringHealthyNote={stringHealth.healthyNote}
+                    onModule={jumpToModule}
+                  />
                 </div>
               )}
 
@@ -690,12 +695,13 @@ export function DashboardPage() {
                     </div>
                   )}
                   <div
-                    className={`max-h-[min(32vh,14rem)] shrink-0 overflow-hidden lg:max-h-none lg:h-full lg:w-[11rem] lg:max-w-[20%] lg:shrink-0 ${
+                    className={`max-h-[min(32vh,14rem)] min-w-0 shrink-0 overflow-hidden lg:max-h-none lg:h-full lg:w-[16rem] lg:max-w-[30%] lg:shrink-0 ${
                       folderCollapsed ? "lg:hidden" : ""
                     }`}
                   >
                     <DiagnosticsFolderList
-                      modules={diagModules}
+                      faultModules={faultModules}
+                      analysisModules={analysisModules}
                       activeModuleId={activeModuleId}
                       onSelectModule={selectModule}
                       onCollapse={() => setFolderCollapsed(true)}
@@ -714,7 +720,7 @@ export function DashboardPage() {
                         <p className="mt-1 max-w-sm text-xs leading-relaxed text-stone-500 dark:text-stone-400">
                           {diagModules.length === 0
                             ? "No diagnostic modules available for this run."
-                            : "Choose a module from the folder — summary and findings open here; charts via Investigate."}
+                            : "Choose a fault check or box plot analysis from the folder."}
                         </p>
                       </div>
                     ) : (
@@ -726,7 +732,13 @@ export function DashboardPage() {
                             : ""
                         }`}
                       >
-                        <ResultCard key={activeModule.algorithm_id} result={activeModule} standalone />
+                        {activeModule.algorithm_id === "box_plot" &&
+                        activeModule.status === "ok" &&
+                        isAnalysisModule(activeModule.algorithm_id, activeModule) ? (
+                          <BoxPlotAnalysisPanel result={activeModule} />
+                        ) : (
+                          <ResultCard key={activeModule.algorithm_id} result={activeModule} standalone />
+                        )}
                       </div>
                     )}
                   </div>

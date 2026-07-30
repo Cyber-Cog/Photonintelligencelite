@@ -81,7 +81,8 @@ def test_prerequisites_block_clipping_current_without_irr():
     )
     assert len(rows) == 1
     assert rows[0]["will_run"] is False
-    assert "You have not provided" in rows[0]["message"]
+    assert rows[0]["message"].startswith("Needs:")
+    assert "POA" in rows[0]["message"] or "irradiance" in rows[0]["message"].lower() or "poa" in str(rows[0]["missing_fields"]).lower()
 
 
 def test_prerequisites_run_when_complete():

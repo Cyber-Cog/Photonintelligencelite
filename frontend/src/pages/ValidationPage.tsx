@@ -295,8 +295,8 @@ export function ValidationPage() {
 
           {(validation.module_readiness?.length ?? 0) > 0 && (
             <SectionPanel
-              title="Fault / loss module readiness"
-              description="Modules blocked by missing telemetry or plant architecture are listed with remediation steps. Blocked modules do not appear as empty results on the dashboard."
+              title="Fault / diagnostic module readiness"
+              description="Blocked modules list explicit missing signals or config. Box plot is an analysis tool (not a fault). Validation uses populated columns only — empty schema columns do not count as available."
               accent="brand"
               scrollMargin={false}
             >
@@ -307,7 +307,12 @@ export function ValidationPage() {
                     className="rounded-xl border border-stone-200/90 bg-stone-50/50 px-3.5 py-2.5 dark:border-stone-800 dark:bg-stone-950/40"
                   >
                     <div className="flex flex-wrap items-center gap-2">
-                      <Badge tone={m.will_run ? "info" : "warning"}>{m.will_run ? "Will run" : "Blocked"}</Badge>
+                      <Badge tone={m.will_run ? "info" : "warning"}>
+                        {m.will_run ? "Will run" : "Needs data"}
+                      </Badge>
+                      {m.module_kind === "analysis" || m.algorithm_id === "box_plot" ? (
+                        <Badge tone="neutral">Analysis</Badge>
+                      ) : null}
                       <span className="text-sm font-medium text-stone-800 dark:text-stone-100">{m.title}</span>
                     </div>
                     <p className="mt-1 text-xs text-stone-600 dark:text-stone-300">{m.message}</p>

@@ -77,10 +77,13 @@ export function LossWaterfallBridge({
   kpis,
   results,
   jobId,
+  compact = false,
 }: {
   kpis: KpiResponse;
   results: ResultObject[];
   jobId: string;
+  /** Tighter chart for Summary composition. */
+  compact?: boolean;
 }) {
   const { theme } = useTheme();
   const [unit, setUnit] = useState<WaterfallUnit>("mwh");
@@ -92,8 +95,9 @@ export function LossWaterfallBridge({
 
   const chartHeight = useMemo(() => {
     const n = model?.segments.length ?? 0;
+    if (compact) return Math.min(300, Math.max(220, n > 10 ? 280 : 240));
     return Math.min(420, Math.max(280, n > 10 ? 360 : 300));
-  }, [model?.segments.length]);
+  }, [model?.segments.length, compact]);
 
   const scaled = useMemo(() => {
     if (!model) return [];
@@ -203,17 +207,17 @@ export function LossWaterfallBridge({
         </div>
       )}
 
-      <div className="space-y-2 p-2.5">
+      <div className={`space-y-2 ${compact ? "p-3" : "p-2.5"}`}>
         {model.gaps.length > 0 && <MissingReasonBanner reasons={model.gaps} jobId={jobId} />}
 
         {model.note && (
-          <p className="rounded border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
+          <p className="rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
             {model.note}
           </p>
         )}
 
         <div
-          className="flex flex-wrap gap-x-4 gap-y-1 border border-stone-200 bg-stone-50 px-2.5 py-1.5 dark:border-stone-700 dark:bg-stone-800/40"
+          className="flex flex-wrap gap-x-4 gap-y-1 rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-1.5 dark:border-stone-700 dark:bg-stone-800/40"
           role="list"
           aria-label="Colours"
         >
@@ -235,7 +239,7 @@ export function LossWaterfallBridge({
 
         <div
           ref={chartHostRef}
-          className="plotly-chart-host w-full overflow-visible border border-stone-200 dark:border-stone-800"
+          className="plotly-chart-host w-full overflow-visible rounded-lg border border-stone-200 dark:border-stone-800"
         >
           <Plot
             data={figureData}
@@ -243,7 +247,7 @@ export function LossWaterfallBridge({
               barmode: "stack",
               autosize: true,
               height: chartHeight,
-              margin: plotlySafeMargins({ b: bottomPad, l: 52 }),
+              margin: plotlySafeMargins({ b: compact ? Math.min(bottomPad, 72) : bottomPad, l: 52 }),
               paper_bgcolor: "transparent",
               plot_bgcolor: plotBg,
               font: { color: fontColor, size: 11, family: "DM Sans, Segoe UI, system-ui, sans-serif" },
@@ -281,54 +285,57 @@ export function LossWaterfallBridge({
           />
         </div>
 
-        <div className="overflow-x-auto rounded-xl border border-stone-200/90 dark:border-stone-700">
-          <table className="w-full min-w-[28rem] text-left text-sm">
-            <thead>
-              <tr className="border-b border-stone-200 bg-stone-50/90 text-[10px] font-semibold uppercase tracking-wide text-stone-400 dark:border-stone-700 dark:bg-stone-950/50">
-                <th className="px-3 py-2 font-semibold">Segment</th>
-                <th className="px-3 py-2 text-right font-semibold">MWh</th>
-                {model.expectedMwh > 0 && (
-                  <th className="px-3 py-2 text-right font-semibold">% of expected</th>
-                )}
-                <th className="px-3 py-2 font-semibold">Type</th>
-              </tr>
-            </thead>
-            <tbody>
-              {model.segments.map((seg) => {
-                const pct =
-                  model.expectedMwh > 0 ? (seg.rawMwh / model.expectedMwh) * 100 : null;
-                const typeLabel =
-                  seg.kind === "total" ? "Total" : seg.kind === "unknown" ? "Unknown" : "Loss";
-                return (
-                  <tr
-                    key={seg.key}
-                    className="border-b border-stone-100 last:border-0 dark:border-stone-800/80"
-                  >
-                    <td className="px-3 py-2">
-                      <span className="inline-flex items-center gap-2 font-medium text-stone-800 dark:text-stone-100">
-                        <span
-                          className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm border border-stone-300/70"
-                          style={{ background: seg.fill }}
-                          aria-hidden
-                        />
-                        {seg.label}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-stone-700 dark:text-stone-300">
-                      {fmtMwh(seg.rawMwh)}
-                    </td>
-                    {model.expectedMwh > 0 && (
-                      <td className="px-3 py-2 text-right tabular-nums text-stone-500">
-                        {pct != null ? `${pct.toFixed(2)}%` : "—"}
+        {/* Full segment table on Bridge tab — Summary stays chart-forward */}
+        {!compact && (
+          <div className="overflow-x-auto rounded-xl border border-stone-200/90 dark:border-stone-700">
+            <table className="w-full min-w-[28rem] text-left text-sm">
+              <thead>
+                <tr className="border-b border-stone-200 bg-stone-50/90 text-[10px] font-semibold uppercase tracking-wide text-stone-400 dark:border-stone-700 dark:bg-stone-950/50">
+                  <th className="px-3 py-2 font-semibold">Segment</th>
+                  <th className="px-3 py-2 text-right font-semibold">MWh</th>
+                  {model.expectedMwh > 0 && (
+                    <th className="px-3 py-2 text-right font-semibold">% of expected</th>
+                  )}
+                  <th className="px-3 py-2 font-semibold">Type</th>
+                </tr>
+              </thead>
+              <tbody>
+                {model.segments.map((seg) => {
+                  const pct =
+                    model.expectedMwh > 0 ? (seg.rawMwh / model.expectedMwh) * 100 : null;
+                  const typeLabel =
+                    seg.kind === "total" ? "Total" : seg.kind === "unknown" ? "Unknown" : "Loss";
+                  return (
+                    <tr
+                      key={seg.key}
+                      className="border-b border-stone-100 last:border-0 dark:border-stone-800/80"
+                    >
+                      <td className="px-3 py-2">
+                        <span className="inline-flex items-center gap-2 font-medium text-stone-800 dark:text-stone-100">
+                          <span
+                            className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm border border-stone-300/70"
+                            style={{ background: seg.fill }}
+                            aria-hidden
+                          />
+                          {seg.label}
+                        </span>
                       </td>
-                    )}
-                    <td className="px-3 py-2 text-xs text-stone-500">{typeLabel}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                      <td className="px-3 py-2 text-right tabular-nums text-stone-700 dark:text-stone-300">
+                        {fmtMwh(seg.rawMwh)}
+                      </td>
+                      {model.expectedMwh > 0 && (
+                        <td className="px-3 py-2 text-right tabular-nums text-stone-500">
+                          {pct != null ? `${pct.toFixed(2)}%` : "—"}
+                        </td>
+                      )}
+                      <td className="px-3 py-2 text-xs text-stone-500">{typeLabel}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </SectionPanel>
   );

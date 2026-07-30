@@ -1,38 +1,54 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  OWNER_ACTION_EXPANDED_LIMIT,
   type OwnerActionCard,
   type OwnerActionCenterModel,
   type OwnerCta,
 } from "@/lib/ownerActions";
 
-const TONE_BORDER: Record<OwnerActionCard["tone"], string> = {
-  danger: "border-rose-200/90 dark:border-rose-900/50",
-  warning: "border-amber-200/90 dark:border-amber-900/45",
-  info: "border-stone-200/90 dark:border-stone-700",
-};
+type SeverityFilter = "all" | "high" | "medium" | "low";
 
-const TONE_ACCENT: Record<OwnerActionCard["tone"], string> = {
+const TONE_DOT: Record<OwnerActionCard["tone"], string> = {
   danger: "bg-rose-500",
   warning: "bg-amber-500",
   info: "bg-brand-500",
 };
+
+const TONE_BADGE: Record<OwnerActionCard["tone"], string> = {
+  danger: "bg-rose-50 text-rose-800 ring-rose-200/80 dark:bg-rose-950/40 dark:text-rose-200 dark:ring-rose-900/50",
+  warning:
+    "bg-amber-50 text-amber-900 ring-amber-200/80 dark:bg-amber-950/35 dark:text-amber-100 dark:ring-amber-900/45",
+  info: "bg-stone-100 text-stone-700 ring-stone-200/90 dark:bg-stone-800 dark:text-stone-200 dark:ring-stone-700",
+};
+
+function cardSeverity(card: OwnerActionCard): SeverityFilter {
+  const s = (card.severity ?? "").toLowerCase();
+  if (s === "critical" || s === "high" || card.tone === "danger") return "high";
+  if (s === "medium" || card.tone === "warning") return "medium";
+  return "low";
+}
+
+function severityLabel(card: OwnerActionCard): string {
+  if (card.severity) return card.severity;
+  if (card.tone === "danger") return "high";
+  if (card.tone === "warning") return "medium";
+  return "info";
+}
 
 function CtaButton({
   cta,
   onInvestigate,
   onModule,
   onSection,
-  compact,
+  primary,
 }: {
   cta: OwnerCta;
   onInvestigate: (algorithmId: string) => void;
   onModule: (algorithmId: string) => void;
   onSection: (sectionId: "faults" | "bridge" | "diagnostics") => void;
-  compact?: boolean;
+  primary?: boolean;
 }) {
-  const cls = compact ? "btn-secondary !px-2 !py-0.5 text-[11px]" : "btn-primary text-xs";
+  const cls = primary ? "btn-primary text-xs" : "btn-secondary !px-2.5 !py-1 text-[11px]";
   if (cta.kind === "setup") {
     return (
       <Link to={cta.href} className={cls}>
@@ -61,7 +77,87 @@ function CtaButton({
   );
 }
 
-function ActionCard({
+function FilterChip({
+  active,
+  label,
+  count,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  count: number;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-semibold transition ${
+        active
+          ? "bg-brand-600 text-white shadow-sm dark:bg-brand-500 dark:text-stone-950"
+          : "bg-stone-100 text-stone-600 hover:bg-stone-200/80 dark:bg-stone-800 dark:text-stone-300 dark:hover:bg-stone-700"
+      }`}
+    >
+      {label}
+      <span
+        className={`tabular-nums rounded px-1 py-px text-[10px] font-bold ${
+          active ? "bg-white/20 text-white dark:bg-stone-950/20 dark:text-stone-950" : "bg-white/80 text-stone-500 dark:bg-stone-900 dark:text-stone-400"
+        }`}
+      >
+        {count}
+      </span>
+    </button>
+  );
+}
+
+function ActionListItem({
+  card,
+  selected,
+  onSelect,
+}: {
+  card: OwnerActionCard;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const loss =
+    card.lossKwh != null && card.lossKwh > 0
+      ? `${card.lossKwh.toLocaleString(undefined, { maximumFractionDigits: 1 })} kWh`
+      : null;
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-current={selected ? "true" : undefined}
+      className={`flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2.5 text-left transition ${
+        selected
+          ? "bg-brand-50 ring-1 ring-brand-200/90 dark:bg-brand-950/45 dark:ring-brand-800/50"
+          : "hover:bg-stone-50 dark:hover:bg-stone-800/50"
+      }`}
+      data-tour={card.cta.kind === "investigate" ? "owner-investigate" : undefined}
+    >
+      <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${TONE_DOT[card.tone]}`} aria-hidden />
+      <div className="min-w-0 flex-1">
+        <p className="text-[13px] font-medium leading-snug text-stone-900 dark:text-stone-50 break-normal">
+          {card.problem}
+        </p>
+        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px]">
+          <span className={`rounded-md px-1.5 py-0.5 capitalize ring-1 ring-inset ${TONE_BADGE[card.tone]}`}>
+            {severityLabel(card)}
+          </span>
+          {loss ? (
+            <span className="font-semibold tabular-nums text-rose-700 dark:text-rose-300">{loss}</span>
+          ) : (
+            <span className="text-stone-500 dark:text-stone-400">{card.impact}</span>
+          )}
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function ActionDetail({
   card,
   onInvestigate,
   onModule,
@@ -73,104 +169,62 @@ function ActionCard({
   onSection: (sectionId: "faults" | "bridge" | "diagnostics") => void;
 }) {
   return (
-    <article
-      className={`flex flex-col gap-2 rounded-lg border bg-stone-50/50 p-2.5 dark:bg-stone-950/40 ${TONE_BORDER[card.tone]}`}
-      data-tour={card.cta.kind === "investigate" ? "owner-investigate" : undefined}
-    >
-      <div className="flex items-start gap-2">
-        <span className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${TONE_ACCENT[card.tone]}`} aria-hidden />
-        <div className="min-w-0 flex-1 space-y-1.5">
-          <div>
-            <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-stone-400">Problem</p>
-            <p className="mt-0.5 text-[13px] font-medium leading-snug text-stone-900 dark:text-stone-50">{card.problem}</p>
-          </div>
-          <div className="grid gap-1.5 sm:grid-cols-2">
-            <div>
-              <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-stone-400">Impact</p>
-              <p className="mt-0.5 text-xs font-semibold tabular-nums text-rose-700 dark:text-rose-300">{card.impact}</p>
-            </div>
-            <div>
-              <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-stone-400">What to do next</p>
-              <p className="mt-0.5 text-xs leading-snug text-stone-600 dark:text-stone-300">{card.nextStep}</p>
-            </div>
-          </div>
+    <div className="flex h-full flex-col gap-4 p-4 sm:p-5" data-tour="owner-action-detail">
+      <div>
+        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-stone-400">Selected issue</p>
+        <h4 className="mt-1.5 font-display text-base font-semibold leading-snug tracking-tight text-stone-900 dark:text-stone-50 break-normal">
+          {card.problem}
+        </h4>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="rounded-lg border border-stone-100 bg-stone-50/70 px-3 py-2.5 dark:border-stone-800 dark:bg-stone-950/40">
+          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-stone-400">Impact</p>
+          <p className="mt-1 text-sm font-semibold tabular-nums leading-snug text-rose-700 dark:text-rose-300">
+            {card.impact}
+          </p>
+        </div>
+        <div className="rounded-lg border border-stone-100 bg-stone-50/70 px-3 py-2.5 dark:border-stone-800 dark:bg-stone-950/40">
+          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-stone-400">Severity</p>
+          <p className="mt-1">
+            <span className={`inline-flex rounded-md px-1.5 py-0.5 text-xs font-semibold capitalize ring-1 ring-inset ${TONE_BADGE[card.tone]}`}>
+              {severityLabel(card)}
+            </span>
+          </p>
         </div>
       </div>
-      <div className="flex flex-wrap items-center gap-1.5 pl-3.5">
+
+      <div>
+        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-stone-400">What to do next</p>
+        <p className="mt-1.5 text-sm leading-relaxed text-stone-600 dark:text-stone-300 break-normal">
+          {card.nextStep}
+        </p>
+      </div>
+
+      <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-stone-100 pt-4 dark:border-stone-800">
         <CtaButton
           cta={card.cta}
           onInvestigate={onInvestigate}
           onModule={onModule}
           onSection={onSection}
+          primary
         />
         {card.algorithmId && card.cta.kind !== "module" && (
-          <button type="button" className="btn-ghost !px-2 !py-0.5 text-[11px]" onClick={() => onModule(card.algorithmId!)}>
+          <button
+            type="button"
+            className="btn-ghost !px-2.5 !py-1 text-[11px]"
+            onClick={() => onModule(card.algorithmId!)}
+          >
             Go to module
           </button>
         )}
       </div>
-    </article>
+    </div>
   );
-}
-
-function CompactActionRow({
-  card,
-  onInvestigate,
-  onModule,
-  onSection,
-}: {
-  card: OwnerActionCard;
-  onInvestigate: (algorithmId: string) => void;
-  onModule: (algorithmId: string) => void;
-  onSection: (sectionId: "faults" | "bridge" | "diagnostics") => void;
-}) {
-  const severity =
-    card.severity ??
-    (card.tone === "danger" ? "high" : card.tone === "warning" ? "medium" : "info");
-
-  return (
-    <tr className="border-b border-stone-100 last:border-0 dark:border-stone-800/80">
-      <td className="max-w-[14rem] py-1.5 pr-2 align-middle sm:max-w-none">
-        <div className="flex items-start gap-1.5">
-          <span className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${TONE_ACCENT[card.tone]}`} aria-hidden />
-          <p className="line-clamp-2 text-xs font-medium leading-snug text-stone-800 dark:text-stone-100">
-            {card.problem}
-          </p>
-        </div>
-      </td>
-      <td className="whitespace-nowrap py-1.5 pr-2 align-middle text-xs font-semibold tabular-nums text-rose-700 dark:text-rose-300">
-        {card.lossKwh != null && card.lossKwh > 0
-          ? `${card.lossKwh.toLocaleString(undefined, { maximumFractionDigits: 1 })} kWh`
-          : card.impact}
-      </td>
-      <td className="whitespace-nowrap py-1.5 pr-2 align-middle text-[11px] capitalize text-stone-500 dark:text-stone-400">
-        {severity}
-      </td>
-      <td className="py-1.5 text-right align-middle">
-        <CtaButton
-          cta={card.cta}
-          onInvestigate={onInvestigate}
-          onModule={onModule}
-          onSection={onSection}
-          compact
-        />
-      </td>
-    </tr>
-  );
-}
-
-function summaryChipLabel(model: OwnerActionCenterModel): string {
-  const n = model.issueCount > 0 ? model.issueCount : model.cards.length;
-  const issues = `${n} issue${n === 1 ? "" : "s"}`;
-  if (model.totalLossKwh != null && model.totalLossKwh > 0) {
-    return `${issues} · ${model.totalLossKwh.toLocaleString(undefined, { maximumFractionDigits: 1 })} kWh`;
-  }
-  return issues;
 }
 
 /**
- * Owner-first action strip at the top of Results Summary.
- * Top N expanded PROBLEM cards; remainder in a compact accordion (no nested max-height scroll).
+ * Owner-first Action Centre — severity filters, readable list, detail panel when selected.
  */
 export function OwnerActionCenter({
   model,
@@ -183,103 +237,128 @@ export function OwnerActionCenter({
   onModule: (algorithmId: string) => void;
   onSection: (sectionId: "faults" | "bridge" | "diagnostics") => void;
 }) {
-  const [moreOpen, setMoreOpen] = useState(false);
-  const expanded = model.cards.slice(0, OWNER_ACTION_EXPANDED_LIMIT);
-  const rest = model.cards.slice(OWNER_ACTION_EXPANDED_LIMIT);
-  const showAccordion = rest.length > 0;
+  const [filter, setFilter] = useState<SeverityFilter>("all");
+  const [selectedId, setSelectedId] = useState<string | null>(model.cards[0]?.id ?? null);
+
+  const counts = useMemo(() => {
+    let high = 0;
+    let medium = 0;
+    let low = 0;
+    for (const c of model.cards) {
+      const s = cardSeverity(c);
+      if (s === "high") high += 1;
+      else if (s === "medium") medium += 1;
+      else low += 1;
+    }
+    return { all: model.cards.length, high, medium, low };
+  }, [model.cards]);
+
+  const filtered = useMemo(() => {
+    if (filter === "all") return model.cards;
+    return model.cards.filter((c) => cardSeverity(c) === filter);
+  }, [model.cards, filter]);
+
+  useEffect(() => {
+    if (filtered.length === 0) {
+      setSelectedId(null);
+      return;
+    }
+    if (!selectedId || !filtered.some((c) => c.id === selectedId)) {
+      setSelectedId(filtered[0].id);
+    }
+  }, [filtered, selectedId]);
+
+  const selected = filtered.find((c) => c.id === selectedId) ?? filtered[0] ?? null;
+
+  const summaryChip =
+    model.issueCount > 0
+      ? model.totalLossKwh != null && model.totalLossKwh > 0
+        ? `${model.issueCount} issue${model.issueCount === 1 ? "" : "s"} · ${model.totalLossKwh.toLocaleString(undefined, { maximumFractionDigits: 1 })} kWh`
+        : `${model.issueCount} issue${model.issueCount === 1 ? "" : "s"}`
+      : null;
 
   return (
-    <div
-      className="space-y-0"
+    <section
+      className="overflow-hidden rounded-xl border border-stone-200/90 bg-white/95 dark:border-stone-700 dark:bg-stone-900"
       role="region"
       aria-label="Owner action center"
       data-tour="owner-actions"
     >
-      <div className="flex flex-wrap items-start justify-between gap-2">
+      <div className="h-0.5 w-full bg-gradient-to-r from-brand-400/80 via-accent-400/40 to-brand-500/15" aria-hidden />
+
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-stone-100 px-4 py-3.5 dark:border-stone-800 sm:px-5">
         <div className="min-w-0">
-          <p className="tool-eyebrow !text-[10px]">Owner action center</p>
+          <p className="tool-eyebrow !text-[10px]">Owner action centre</p>
           <h3
-            className={`mt-0.5 font-display text-base font-semibold tracking-tight sm:text-lg ${
-              model.healthy
-                ? "text-accent-800 dark:text-accent-300"
-                : "text-stone-900 dark:text-stone-50"
+            className={`mt-1 font-display text-lg font-semibold tracking-tight ${
+              model.healthy ? "text-accent-800 dark:text-accent-300" : "text-stone-900 dark:text-stone-50"
             }`}
           >
             {model.headline}
           </h3>
-          <p className="mt-0.5 max-w-2xl text-[11px] leading-snug text-stone-500 dark:text-stone-400">{model.subline}</p>
+          <p className="mt-1 max-w-2xl text-xs leading-relaxed text-stone-500 dark:text-stone-400">
+            {model.subline}
+          </p>
         </div>
-        {!model.healthy && model.cards.length > 0 && (
+        {summaryChip ? (
           <span
-            className="shrink-0 rounded-md border border-amber-200/80 bg-amber-50/80 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100"
+            className="shrink-0 rounded-lg border border-amber-200/80 bg-amber-50/90 px-2.5 py-1 text-[11px] font-semibold text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100"
             data-tour="owner-actions-summary"
           >
-            {summaryChipLabel(model)}
+            {summaryChip}
           </span>
-        )}
+        ) : null}
       </div>
 
-      {model.cards.length > 0 && (
-        <div className="mt-2 space-y-2">
-          {expanded.length > 0 && (
-            <div className="grid gap-2 lg:grid-cols-2">
-              {expanded.map((card) => (
-                <ActionCard
-                  key={card.id}
-                  card={card}
+      {model.cards.length === 0 ? (
+        <p className="px-4 py-8 text-center text-sm text-stone-500 dark:text-stone-400 sm:px-5">
+          No owner actions for this run. Use Loss bridge and Diagnostics for detail.
+        </p>
+      ) : (
+        <>
+          <div className="flex flex-wrap gap-1.5 border-b border-stone-100 px-4 py-2.5 dark:border-stone-800 sm:px-5">
+            <FilterChip active={filter === "all"} label="All" count={counts.all} onClick={() => setFilter("all")} />
+            <FilterChip active={filter === "high"} label="High" count={counts.high} onClick={() => setFilter("high")} />
+            <FilterChip
+              active={filter === "medium"}
+              label="Medium"
+              count={counts.medium}
+              onClick={() => setFilter("medium")}
+            />
+            <FilterChip active={filter === "low"} label="Low" count={counts.low} onClick={() => setFilter("low")} />
+          </div>
+
+          <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
+            <div className="max-h-[22rem] space-y-0.5 overflow-y-auto overscroll-contain border-b border-stone-100 p-2 dark:border-stone-800 lg:max-h-[26rem] lg:border-b-0 lg:border-r">
+              {filtered.length === 0 ? (
+                <p className="px-2.5 py-6 text-center text-xs text-stone-500">No issues in this severity band.</p>
+              ) : (
+                filtered.map((card) => (
+                  <ActionListItem
+                    key={card.id}
+                    card={card}
+                    selected={selected?.id === card.id}
+                    onSelect={() => setSelectedId(card.id)}
+                  />
+                ))
+              )}
+            </div>
+
+            <div className="min-h-[14rem] bg-stone-50/40 dark:bg-stone-950/25">
+              {selected ? (
+                <ActionDetail
+                  card={selected}
                   onInvestigate={onInvestigate}
                   onModule={onModule}
                   onSection={onSection}
                 />
-              ))}
-            </div>
-          )}
-
-          {showAccordion && (
-            <div className="rounded-lg border border-stone-200/80 dark:border-stone-700">
-              <button
-                type="button"
-                className="flex w-full items-center justify-between gap-2 px-2.5 py-1.5 text-left text-xs font-semibold text-stone-700 hover:bg-stone-50/80 dark:text-stone-200 dark:hover:bg-stone-900/50"
-                aria-expanded={moreOpen}
-                onClick={() => setMoreOpen((o) => !o)}
-                data-tour="owner-actions-more"
-              >
-                <span>
-                  {moreOpen ? "Hide" : "Show"} {rest.length} more issue{rest.length === 1 ? "" : "s"}
-                </span>
-                <span className="text-stone-400" aria-hidden>
-                  {moreOpen ? "▴" : "▾"}
-                </span>
-              </button>
-              {moreOpen && (
-                <div className="overflow-x-auto border-t border-stone-100 px-2 pb-2 dark:border-stone-800">
-                  <table className="w-full min-w-[20rem] border-collapse text-left">
-                    <thead className="text-[10px] font-bold uppercase tracking-[0.1em] text-stone-400">
-                      <tr>
-                        <th className="py-1.5 pr-2 font-bold">Problem</th>
-                        <th className="py-1.5 pr-2 font-bold">Impact</th>
-                        <th className="py-1.5 pr-2 font-bold">Severity</th>
-                        <th className="py-1.5 text-right font-bold">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rest.map((card) => (
-                        <CompactActionRow
-                          key={card.id}
-                          card={card}
-                          onInvestigate={onInvestigate}
-                          onModule={onModule}
-                          onSection={onSection}
-                        />
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+              ) : (
+                <p className="px-5 py-10 text-center text-sm text-stone-500">Select an issue to see detail.</p>
               )}
             </div>
-          )}
-        </div>
+          </div>
+        </>
       )}
-    </div>
+    </section>
   );
 }

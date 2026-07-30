@@ -8,6 +8,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+from analytics.common.module_kinds import module_kind
+
 
 @dataclass(frozen=True)
 class AlgorithmPrerequisite:
@@ -151,19 +153,18 @@ def evaluate_prerequisites(
         will_run = not missing_fields and not missing_config
         parts: list[str] = []
         if missing_fields:
-            labeled = [label_for(f) if " or " not in f else " / ".join(label_for(x) for x in f.split(" or ")) for f in missing_fields]
-            parts.append(
-                "You have not provided "
-                + ", ".join(labeled)
-                + " — this fault cannot be computed until you upload/map it."
-            )
+            labeled = [
+                label_for(f) if " or " not in f else " / ".join(label_for(x) for x in f.split(" or "))
+                for f in missing_fields
+            ]
+            parts.append("Needs: " + ", ".join(labeled) + ".")
         if missing_config:
-            parts.append(
-                "You have not provided "
-                + " and ".join(missing_config)
-                + " — configure it in Setup (Excel template, auto-detect, or pattern apply)."
-            )
-        message = " ".join(parts) if parts else f"{spec.title} has the inputs it needs and will run."
+            parts.append("Needs config: " + " and ".join(missing_config) + ".")
+        if parts:
+            fix = spec.how_to_fix.strip()
+            message = " ".join(parts) + (f" {fix}" if fix else "")
+        else:
+            message = f"{spec.title} has the inputs it needs and will run."
         rows.append(
             {
                 "algorithm_id": aid,
@@ -173,6 +174,7 @@ def evaluate_prerequisites(
                 "missing_config": missing_config,
                 "message": message,
                 "how_to_fix": spec.how_to_fix,
+                "module_kind": module_kind(aid),
             }
         )
     return rows
@@ -197,7 +199,4 @@ def actionable_unavailable_message(algorithm_id: str, missing: set[str], fallbac
         return fallback or f"{title} could not run on this upload."
     labeled = ", ".join(sorted(label_for(f) for f in missing))
     fix = spec.how_to_fix if spec else "Map the required columns on the Setup page and re-run."
-    return (
-        f"You have not provided {labeled} — {title} cannot be computed until you upload/map it. "
-        f"Next step: {fix}"
-    )
+    return f"Needs: {labeled}. {title} cannot run until these are mapped. Next step: {fix}"

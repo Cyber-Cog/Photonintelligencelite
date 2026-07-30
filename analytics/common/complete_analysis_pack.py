@@ -272,7 +272,7 @@ def _readme_lines() -> list[str]:
         "-" * 40,
         "KPIs                    : AC Power (kW)",
         "Clipping by power       : AC Power + POA/GHI + inverter ratings",
-        "Efficiency / box plot   : AC Power + (DC Power OR DC Current)",
+        "Efficiency (fault) / box plot (diagnostic, not a fault): AC Power + (DC Power OR DC Current)",
         "Clipping by current     : DC Current + POA/GHI + architecture",
         "Disconnected strings    : DC Current + POA/GHI + architecture",
         "Module damage           : DC Voltage + architecture",
@@ -333,13 +333,17 @@ def build_excel_bytes() -> bytes:
     ws_chk.append(["Fault / module", "Required SCADA columns", "Required Setup config"])
     checklist = [
         ("Plant KPIs", "AC Power (kW)", "—"),
-        ("Clipping by power", "AC Power (kW) + Irradiance/POA or GHI (W/m2)", "Inverter AC ratings (architecture)"),
-        ("Inverter efficiency", "AC Power (kW) + DC Power (kW) OR DC Current (A)", "—"),
-        ("Box plot", "AC Power (kW) + DC Power (kW) OR DC Current (A)", "—"),
-        ("Clipping by current", "DC Current (A) + Irradiance/POA or GHI", "Architecture hierarchy + strings_per_scb"),
-        ("Disconnected strings", "DC Current (A) + Irradiance/POA or GHI", "Architecture hierarchy"),
-        ("Module damage", "DC Voltage (V)", "Architecture hierarchy"),
-        ("String outlier", "DC Current (A)", "—"),
+        ("Clipping by power (fault)", "AC Power (kW) + Irradiance/POA or GHI (W/m2)", "Inverter AC ratings (architecture)"),
+        ("Inverter efficiency (fault)", "AC Power (kW) + DC Power (kW) OR DC Current (A)", "—"),
+        (
+            "Box plot analysis (diagnostic — not a fault)",
+            "AC Power (kW) + DC Power (kW) OR DC Current (A)",
+            "—",
+        ),
+        ("Clipping by current (fault)", "DC Current (A) + Irradiance/POA or GHI", "Architecture hierarchy + strings_per_scb"),
+        ("Disconnected strings (fault)", "DC Current (A) + Irradiance/POA or GHI", "Architecture hierarchy"),
+        ("Module damage (fault)", "DC Voltage (V)", "Architecture hierarchy"),
+        ("String outlier (fault)", "DC Current (A)", "—"),
         ("Loss normalization", "—", "Plant/inverter/SCB DC (kWp) + AC (kW) capacities"),
     ]
     for row in checklist:

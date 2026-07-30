@@ -10,6 +10,7 @@ import logging
 import time
 from dataclasses import dataclass, field
 
+from analytics.common.module_kinds import module_kind
 from analytics.common.prerequisites import (
     ALGORITHM_PREREQUISITES,
     actionable_unavailable_message,
@@ -59,10 +60,17 @@ class AnalysisOrchestrator:
                 continue
 
             missing = self._missing_fields(context, spec)
+            kind = module_kind(algorithm_id)
             if missing:
                 logger.info("algorithm=%s unavailable missing_fields=%s", algorithm_id, sorted(missing))
                 reason = actionable_unavailable_message(algorithm_id, missing)
-                unavailable = ResultObject.unavailable(algorithm_id, spec.version, reason=reason)
+                unavailable = ResultObject.unavailable(
+                    algorithm_id,
+                    spec.version,
+                    reason=reason,
+                    missing_fields=sorted(missing),
+                    module_kind=kind,
+                )
                 prereq = ALGORITHM_PREREQUISITES.get(algorithm_id)
                 if prereq:
                     unavailable.title = prereq.title
@@ -73,6 +81,8 @@ class AnalysisOrchestrator:
             try:
                 result = spec.fn(context)
                 result.execution_time_ms = (time.perf_counter() - start) * 1000.0
+                if not result.module_kind:
+                    result.module_kind = kind
                 logger.info(
                     "algorithm=%s status=%s duration_ms=%.1f",
                     algorithm_id,
@@ -85,6 +95,7 @@ class AnalysisOrchestrator:
                 result = ResultObject.error_result(
                     algorithm_id, spec.version, error=str(exc)[:500], execution_time_ms=duration_ms
                 )
+                result.module_kind = kind
             run.results.append(result)
             run.total_execution_time_ms += result.execution_time_ms
 

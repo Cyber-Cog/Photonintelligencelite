@@ -45,15 +45,16 @@ export const ALGORITHM_DOCS: AlgorithmDoc[] = [
   },
   {
     id: "box_plot",
-    title: "Inverter Efficiency Box Plot",
-    version: "1.0-port",
-    summary: "Distribution of per-sample inverter efficiency — min, Q1, median, Q3, max per inverter.",
+    title: "Box Plot Analysis (diagnostic)",
+    version: "1.1-port",
+    summary:
+      "Distribution of per-sample inverter efficiency — min, Q1, median, Q3, max for all inverters together. Analysis tool, not a fault detector.",
     inputs: ["Same as inverter efficiency"],
     formula: "Box stats on efficiency % samples per inverter_id",
     steps: [
       "Reuse the shared efficiency frame (never disagrees with efficiency module).",
-      "Compute quartiles per inverter; clamp to plausible 0–100% range.",
-      "Render categorical box plot with whiskers = min/max.",
+      "Compute quartiles per inverter; clamp to a plausible range.",
+      "Render categorical box plot with all inverters on one chart (user can hide units in Results).",
     ],
     thresholds: ["Plausible efficiency clamp range"],
     outputs: ["Box plot chart", "Distribution statistics table"],

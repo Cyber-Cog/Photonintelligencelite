@@ -41,9 +41,6 @@ export interface OwnerActionCenterModel {
   totalLossKwh: number | null;
 }
 
-/** How many full PROBLEM cards to show before compact rows. */
-export const OWNER_ACTION_EXPANDED_LIMIT = 5;
-
 const SEVERITY_RANK: Record<string, number> = {
   critical: 0,
   high: 1,
@@ -101,10 +98,6 @@ const OWNER_COPY: Record<
         ? `${count} inverters show sustained conversion loss (e.g. ${equipment}).`
         : `Inverter conversion efficiency is below normal${equipment !== "—" ? ` (${equipment})` : ""}.`,
     next: "Review DC vs AC on the worst units; Investigate evidence and schedule inverter service if sustained.",
-  },
-  box_plot: {
-    problem: () => "Inverter efficiency spread looks unusual across the fleet.",
-    next: "Open the efficiency box plot in diagnostics and compare outliers to peers.",
   },
 };
 
@@ -189,6 +182,8 @@ export function buildOwnerActions(
   for (const [algorithmId, rows] of faultByAlgo) {
     const result = byAlgo.get(algorithmId);
     if (!result || result.status !== "ok") continue;
+    // Analysis modules excluded upstream by buildFaultRows; belt-and-suspenders:
+    if (algorithmId === "box_plot") continue;
 
     const copy = OWNER_COPY[algorithmId];
     const equipmentSample = rows
@@ -291,7 +286,7 @@ export function buildOwnerActions(
     });
   }
 
-  // Sort by priority (severity/impact). UI shows top N expanded + compact rest — no hard page-height stack.
+  // Sort by priority (severity/impact). Action Centre list + detail panel shows all.
   cards.sort((a, b) => {
     const lossDiff = (b.lossKwh ?? 0) - (a.lossKwh ?? 0);
     if (a.priority !== b.priority) return a.priority - b.priority;

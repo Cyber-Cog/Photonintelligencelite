@@ -25,7 +25,8 @@ UI: **Landing** and **Upload** pages — “Download complete analysis template�
 ## 1. What is necessary for ALL faults to run
 
 Point this out first — if any of these are missing, Validation will correctly show
-**Blocked** / Results **Needs input** for the affected modules.
+**Needs data** (with explicit missing signals) / Results unavailable for the affected modules.
+Box plot is a **diagnostic / distribution** tool, not a fault module.
 
 | # | Necessity | Why |
 |---|---|---|
@@ -142,7 +143,7 @@ adopt the column/ID conventions from this pack.
 | Plant KPIs | `ac_power_kw` | Plant AC/DC capacity (from architecture plant row) |
 | Clipping by power | `ac_power_kw` + (`poa_w_m2` ∨ `ghi_w_m2`) | Inverter ratings |
 | Inverter efficiency | `ac_power_kw` + (`dc_power_kw` ∨ `dc_current_a`) | — |
-| Box plot | same as efficiency | — |
+| Box plot analysis (**diagnostic, not a fault**) | same as efficiency | — |
 | Clipping by current | `dc_current_a` + (`poa_w_m2` ∨ `ghi_w_m2`) | Architecture |
 | Disconnected strings | `dc_current_a` + (`poa_w_m2` ∨ `ghi_w_m2`) | Architecture |
 | Module damage | `dc_voltage_v` | Architecture |

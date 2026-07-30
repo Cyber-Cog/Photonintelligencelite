@@ -113,6 +113,7 @@ export interface ModuleReadiness {
   missing_config: string[];
   message: string;
   how_to_fix: string;
+  module_kind?: string;
 }
 
 export interface ValidationIssue {
@@ -286,6 +287,11 @@ export interface ResultObject {
   evidence: EvidenceRef;
   execution_time_ms: number;
   error: string | null;
+  /** Canonical fields missing when status=unavailable (honest Needs: messaging). */
+  missing_fields?: string[];
+  missing_config?: string[];
+  /** "fault" | "analysis" | "kpi" — guides Diagnostics framing. */
+  module_kind?: string | null;
 }
 
 export interface ResultsResponse {

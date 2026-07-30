@@ -91,7 +91,7 @@ function KpiCell({ item, index }: { item: KpiStripItem; index: number }) {
 
   return (
     <div
-      className="kpi-card group relative min-w-0 overflow-hidden px-2.5 py-1.5 sm:px-3"
+      className="kpi-card group relative min-w-0 overflow-hidden px-3 py-2 sm:px-3.5"
       style={{ animationDelay: `${delay}ms` }}
     >
       <svg

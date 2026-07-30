@@ -1,4 +1,5 @@
 /** Flatten ResultObject findings into unified fault rows for the Results table. */
+import { isAnalysisModule } from "@/lib/diagnosticsModules";
 import type { ChartSpec, ResultObject } from "@/types";
 
 export interface FaultRow {
@@ -45,6 +46,8 @@ export function buildFaultRows(results: ResultObject[]): FaultRow[] {
 
   for (const result of results) {
     if (result.status !== "ok") continue;
+    // Box plot / analysis tools are never fault findings (their stats tables are not faults).
+    if (isAnalysisModule(result.algorithm_id, result)) continue;
     const window = timeWindow(result);
 
     if (!result.tables.length) {

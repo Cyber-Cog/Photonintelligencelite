@@ -75,6 +75,11 @@ class ResultObject(BaseModel):
     """PIC-style diagnostic charts: reference vs actual, shaded fault windows — shown in Investigate."""
     execution_time_ms: float = 0.0
     error: Optional[str] = None
+    # Populated when status=unavailable so UI can show "Needs: …" without parsing prose.
+    missing_fields: list[str] = Field(default_factory=list)
+    missing_config: list[str] = Field(default_factory=list)
+    # "fault" | "analysis" | "kpi" — set by orchestrator; guides Results framing.
+    module_kind: Optional[str] = None
 
     @classmethod
     def unavailable(
@@ -83,6 +88,10 @@ class ResultObject(BaseModel):
         algorithm_version: str,
         reason: str,
         execution_time_ms: float = 0.0,
+        *,
+        missing_fields: Optional[list[str]] = None,
+        missing_config: Optional[list[str]] = None,
+        module_kind: Optional[str] = None,
     ) -> "ResultObject":
         return cls(
             algorithm_id=algorithm_id,
@@ -91,6 +100,9 @@ class ResultObject(BaseModel):
             title=algorithm_id.replace("_", " ").title(),
             summary=reason,
             execution_time_ms=execution_time_ms,
+            missing_fields=list(missing_fields or []),
+            missing_config=list(missing_config or []),
+            module_kind=module_kind,
         )
 
     @classmethod
