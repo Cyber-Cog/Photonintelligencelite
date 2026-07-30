@@ -25,7 +25,7 @@ export const ALGORITHM_DOCS: AlgorithmDoc[] = [
       "Availability: daylight hours (irradiance above floor) where plant AC is negligible vs nameplate.",
     ],
     thresholds: ["Daylight irradiance floor for availability", "PR benchmark (optional plant config)"],
-    outputs: ["Performance ratio %", "Specific yield kWh/kWp", "Plant availability %", "Total AC energy"],
+    outputs: ["Performance ratio %", "Specific yield kWh/kWp", "Plant availability %", "Total AC energy", "Per-inverter PR (Summary)"],
   },
   {
     id: "inverter_efficiency",
@@ -124,20 +124,5 @@ export const ALGORITHM_DOCS: AlgorithmDoc[] = [
     ],
     thresholds: ["bypass_pct_lo/hi", "damage_pct_min/max", "min_persist_samples"],
     outputs: ["Loss by SCB", "Investigate chart (reference vs measured V + fault bands)", "Fault kind table"],
-  },
-  {
-    id: "string_outlier",
-    title: "String Current Outlier",
-    version: "1.0-port",
-    summary: "Flags strings/SCBs persistently below peer-group median current; estimates proxy loss.",
-    inputs: ["SCB or string DC current (A)"],
-    formula: "Deviation = group_median − measured; loss_proxy = deviation × V × Δt",
-    steps: [
-      "Group peers by inverter + timestamp.",
-      "Flag samples below median × (1 − threshold) for min_persist_samples.",
-      "Sum proxy energy loss (labeled as estimate, not confirmed balance).",
-    ],
-    thresholds: ["low_current_ratio", "min_persist_samples"],
-    outputs: ["Outlier loss by equipment", "Recommendation text"],
   },
 ];

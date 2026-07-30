@@ -48,6 +48,8 @@ export function buildFaultRows(results: ResultObject[]): FaultRow[] {
     if (result.status !== "ok") continue;
     // Box plot / analysis tools are never fault findings (their stats tables are not faults).
     if (isAnalysisModule(result.algorithm_id, result)) continue;
+    // Retired from product surface (old job payloads may still include it).
+    if (result.algorithm_id === "string_outlier") continue;
     const window = timeWindow(result);
 
     if (!result.tables.length) {

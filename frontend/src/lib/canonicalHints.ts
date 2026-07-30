@@ -7,5 +7,4 @@ export const ALGORITHM_FIELD_HINTS: Record<string, string> = {
   clipping_current: "dc_current_a",
   module_damage: "dc_voltage_v",
   disconnected_strings: "dc_current_a",
-  string_outlier: "dc_current_a",
 };

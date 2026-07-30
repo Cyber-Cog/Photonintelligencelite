@@ -32,7 +32,6 @@ const DIAG_ORDER: Record<string, number> = {
   clipping_current: 30,
   disconnected_strings: 40,
   module_damage: 50,
-  string_outlier: 60,
 };
 
 const DIAG_LABELS: Record<string, string> = {
@@ -41,7 +40,6 @@ const DIAG_LABELS: Record<string, string> = {
   clipping_current: "Clipping (current)",
   disconnected_strings: "Disconnected strings",
   module_damage: "Module damage / diode",
-  string_outlier: "String outlier",
 };
 
 function kwhToMwh(kwh: number): number {

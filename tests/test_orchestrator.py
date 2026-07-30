@@ -20,9 +20,13 @@ def test_full_registry_runs_and_every_algorithm_returns_a_result(demo_context):
         "clipping_power",
         "clipping_current",
         "disconnected_strings",
-        "string_outlier",
     }
     assert expected.issubset(algorithm_ids)
+    # string_outlier remains registered but disabled on product surface
+    assert "string_outlier" not in algorithm_ids
+    from analytics.core.registry import get_registry
+
+    assert get_registry()["string_outlier"].enabled is False
     for result in run.results:
         assert result.status in (ResultStatus.OK, ResultStatus.UNAVAILABLE, ResultStatus.ERROR)
 

@@ -17,14 +17,13 @@ Ported from `backend/engine/ds_detection.py::run_ds_detection`.
   hardcoded `"TIGER" in plant_id` string check in the source). PIC Lite has no equivalent
   plant-name hack and no generic way to detect "MPPT-style SCB" from a CSV upload alone;
   only the SCB central-inverter comparison path is implemented. If a real MPPT-style export
-  is supplied, string_outlier and disconnected_strings will run in SCB mode, which is more
+  is supplied, disconnected_strings will run in SCB mode, which is more
   conservative (see `docs/PRD.md §0` OEM alias note — revisit once real exports are supplied).
 - **Ported (2026-07-20)**: the smoothing rolling-median step (Step 5b in the source) is now
   implemented (`_smooth_measurements`, per-SCB centered rolling median on current/voltage,
   window `rolling_median_window`=5). The string-level detection variant
-  (`run_ds_detection_string_level`) is still **not ported** — string-level DS is instead
-  covered by `string_outlier.py`'s low-current rule, a reasonable proxy for MVP that avoids
-  maintaining two near-duplicate persistence-window implementations.
+  (`run_ds_detection_string_level`) is still **not ported** — string-level DS detail remains
+  limited; `string_outlier.py` exists but is **disabled on the product surface**.
 - **Ported (2026-07-20)**: spare-SCB support. Architecture entries may carry `spare_flag`;
   spare SCBs are excluded from DS detection exactly as PIC's `spare_scbs` set does, so a
   parked/spare combiner is never reported as a disconnected string.
@@ -101,22 +100,23 @@ Q3/max, clamped to a plausible efficiency range) are computed identically; both 
 share `inverter_efficiency.compute_efficiency_frame` so they never disagree on the
 underlying per-sample values.
 
-## String outlier (`analytics/algorithms/string_outlier.py`)
+## String outlier (`analytics/algorithms/string_outlier.py`) — **not product-facing**
 
-PRD gap fix #2: promoted from `backend/modules/fault_diagnostics/fault_engine.py`'s
-`low_current_fault` and `scb_unbalance` placeholders. Two behavioral upgrades over the
-source: (1) a persistence filter (`min_persist_samples`) is applied — the source flagged
-every single low/imbalanced sample with no run-length requirement, which would be far too
-noisy for a production result card; (2) the loss estimate (deviation-from-group-median ×
-voltage × Δt) is new — the source placeholders returned fault *rows* with no loss
-quantification at all. This loss number is explicitly labeled a proxy, not a confirmed
-energy balance, in the result's recommendation text.
+Algorithm file retained for parity tests; **disabled in the registry** (`enabled=False`)
+and removed from Diagnostics / owner actions / algorithm docs UI. Do not promise it as a
+run module.
+
+Historical notes: PRD gap fix #2 promoted from `fault_engine.py`'s `low_current_fault` /
+`scb_unbalance` placeholders with persistence + proxy loss. Re-enable only if product asks.
 
 ## KPIs (`analytics/algorithms/kpis.py`)
 
 Performance Ratio, Specific Yield, and Insolation formulas are ported unchanged from
 `backend/routers/dashboard.py::_plant_pr_pct` and
-`backend/dashboard_helpers.py::gti_insolation_kwh_m2_from_sums`. **Plant Availability is a
+`backend/dashboard_helpers.py::gti_insolation_kwh_m2_from_sums`. Per-inverter PR
+(`inverter_pr` on the KPI payload) uses the same formula with AC energy and DC kWp
+allocated per inverter (architecture SCB nameplates when present, else equal plant split).
+**Plant Availability is a
 documented MVP simplification**: the source computes availability by weighting
 inverter-shutdown/grid-breakdown fault-hours by impacted DC capacity
 (`backend/routers/faults.py` "Grid Availability" block), which requires engines

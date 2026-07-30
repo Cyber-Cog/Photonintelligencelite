@@ -202,7 +202,7 @@ The analysis engine processes data independently of the UI via an `AnalysisConte
 
 Every algorithm follows a consistent pipeline: input → validation → preprocessing → processing → loss calculation → chart generation → recommendation generation → result object.
 
-The platform supports at minimum: inverter efficiency loss, box plot analysis, module damage, bypass diode failure, disconnected strings, inverter clipping by power, inverter clipping by current, string outlier detection.
+The platform supports at minimum: inverter efficiency loss, box plot analysis, inverter PR comparison, module damage, bypass diode failure, disconnected strings, inverter clipping by power, inverter clipping by current.
 
 Future algorithms are pluggable via the registry without rewriting the core workflow.
 

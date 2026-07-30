@@ -10,7 +10,6 @@ export const FAULT_ALGORITHM_IDS = new Set([
   "clipping_current",
   "inverter_efficiency",
   "module_damage",
-  "string_outlier",
 ]);
 
 /** Preferred Diagnostics order: faults first, then analysis tools. */
@@ -20,7 +19,6 @@ export const DIAG_FAULT_ORDER = [
   "clipping_current",
   "inverter_efficiency",
   "module_damage",
-  "string_outlier",
 ] as const;
 
 export const DIAG_ANALYSIS_ORDER = ["box_plot"] as const;
@@ -156,6 +154,8 @@ export function orderDiagModules(results: ResultObject[]): {
   }
   for (const r of results) {
     if (placed.has(r.algorithm_id) || r.algorithm_id === "kpis") continue;
+    // Retired from product surface (may still appear on old job payloads).
+    if (r.algorithm_id === "string_outlier") continue;
     if (isAnalysisModule(r.algorithm_id, r)) analysis.push(r);
     else faults.push(r);
   }

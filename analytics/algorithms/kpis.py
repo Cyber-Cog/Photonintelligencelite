@@ -81,7 +81,81 @@ def _plant_availability_pct(context: AnalysisContext) -> Optional[float]:
     return round(max(0.0, min(100.0, availability)), 2)
 
 
-def compute_plant_kpis(context: AnalysisContext, results: list[ResultObject]) -> dict[str, float | None]:
+def _inverter_dc_kwp_map(context: AnalysisContext, inverter_ids: list[str]) -> dict[str, float]:
+    """DC kWp per inverter: architecture SCB nameplates, else equal plant split."""
+    by_inv: dict[str, float] = {}
+    for entry in (context.plant.architecture or {}).values():
+        inv = entry.get("inverter_id")
+        dc = entry.get("dc_capacity_kwp")
+        if not inv or dc is None:
+            continue
+        try:
+            dc_f = float(dc)
+        except (TypeError, ValueError):
+            continue
+        if dc_f > 0:
+            by_inv[str(inv)] = by_inv.get(str(inv), 0.0) + dc_f
+
+    if by_inv:
+        return by_inv
+
+    plant_dc = context.plant.dc_capacity_kwp
+    if plant_dc <= 0 or not inverter_ids:
+        return {}
+    share = plant_dc / len(inverter_ids)
+    return {inv: share for inv in inverter_ids}
+
+
+def _inverter_pr_rows(context: AnalysisContext) -> list[dict[str, float | str]]:
+    """Per-inverter PR for Results Summary comparison (not a fault module).
+
+    PR%_i = AC_kWh_i / (DC_kWp_i × insolation_kWh/m²) × 100 — same formula as plant PR.
+    """
+    insolation = _insolation_kwh_m2(context)
+    if insolation is None or insolation <= 0:
+        return []
+
+    ac = context.canonical.frame(columns=["timestamp_utc", "device_type", "inverter_id", "ac_power_kw"])
+    ac = ac[ac["device_type"] == "inverter"].dropna(subset=["inverter_id"])
+    if ac.empty:
+        return []
+
+    interval_h = context.sample_interval_minutes / 60.0
+    ac = ac.copy()
+    ac["ac_power_kw"] = pd.to_numeric(ac["ac_power_kw"], errors="coerce").fillna(0.0)
+    energy = (
+        ac.groupby("inverter_id", sort=True)["ac_power_kw"]
+        .sum()
+        .mul(interval_h)
+        .rename("ac_energy_kwh")
+        .reset_index()
+    )
+    inv_ids = [str(x) for x in energy["inverter_id"].tolist()]
+    dc_map = _inverter_dc_kwp_map(context, inv_ids)
+    if not dc_map:
+        return []
+
+    rows: list[dict[str, float | str]] = []
+    for _, r in energy.iterrows():
+        inv = str(r["inverter_id"])
+        dc_kwp = float(dc_map.get(inv, 0.0))
+        if dc_kwp <= 0:
+            continue
+        ac_kwh = float(r["ac_energy_kwh"])
+        pr = (ac_kwh / (dc_kwp * insolation)) * 100.0
+        rows.append(
+            {
+                "inverter_id": inv,
+                "pr_pct": round(pr, 2),
+                "ac_energy_kwh": round(ac_kwh, 2),
+                "dc_kwp": round(dc_kwp, 3),
+            }
+        )
+    rows.sort(key=lambda x: (-float(x["pr_pct"]), str(x["inverter_id"])))
+    return rows
+
+
+def compute_plant_kpis(context: AnalysisContext, results: list[ResultObject]) -> dict:
     ac = context.canonical.frame(columns=["timestamp_utc", "device_type", "ac_power_kw"])
     ac = ac[ac["device_type"] == "inverter"]
 
@@ -113,4 +187,5 @@ def compute_plant_kpis(context: AnalysisContext, results: list[ResultObject]) ->
         "revenue_loss_available": context.plant.tariff_inr_per_kwh is not None,
         "fault_count": fault_count,
         "total_ac_energy_kwh": round(total_ac_kwh, 2) if total_ac_kwh is not None else None,
+        "inverter_pr": _inverter_pr_rows(context),
     }

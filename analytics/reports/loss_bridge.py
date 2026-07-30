@@ -12,7 +12,6 @@ _DIAG_ORDER = {
     "clipping_current": 30,
     "disconnected_strings": 40,
     "module_damage": 50,
-    "string_outlier": 60,
 }
 
 _DIAG_LABELS = {
@@ -21,7 +20,6 @@ _DIAG_LABELS = {
     "clipping_current": "Clipping (current)",
     "disconnected_strings": "Disconnected strings",
     "module_damage": "Module damage / diode",
-    "string_outlier": "String outlier",
 }
 
 

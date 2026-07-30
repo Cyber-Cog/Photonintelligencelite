@@ -26,7 +26,7 @@ logger = logging.getLogger("pic_lite.analytics.orchestrator")
 @dataclass
 class OrchestratorRun:
     results: list[ResultObject] = field(default_factory=list)
-    kpis: dict[str, float | None] = field(default_factory=dict)
+    kpis: dict = field(default_factory=dict)
     total_execution_time_ms: float = 0.0
 
     def by_status(self, status: ResultStatus) -> list[ResultObject]:

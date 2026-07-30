@@ -71,13 +71,6 @@ const OWNER_COPY: Record<
         : `Voltage drop suggests bypass diode or module damage${equipment !== "—" ? ` on ${equipment}` : ""}.`,
     next: "Inspect the affected modules for damage or diode activation; Investigate evidence for the voltage reference.",
   },
-  string_outlier: {
-    problem: ({ equipment, count }) =>
-      count > 1
-        ? `${count} strings/SCBs are running well below their peers (e.g. ${equipment}).`
-        : `A string/SCB is running well below its peers${equipment !== "—" ? ` (${equipment})` : ""}.`,
-    next: "Compare DC current on the peer group, then Investigate evidence or walk down the underperforming unit.",
-  },
   clipping_power: {
     problem: ({ equipment, count }) =>
       count > 1
@@ -107,7 +100,6 @@ const BLOCKED_PRIORITY = new Set([
   "clipping_power",
   "clipping_current",
   "inverter_efficiency",
-  "string_outlier",
 ]);
 
 function fmtKwh(v: number | null | undefined): string | null {
@@ -229,6 +221,7 @@ export function buildOwnerActions(
 
   // 2) Blocked / unavailable modules that matter to an owner
   for (const result of results) {
+    if (result.algorithm_id === "string_outlier") continue;
     if (result.status !== "unavailable" && result.status !== "error") continue;
     if (!BLOCKED_PRIORITY.has(result.algorithm_id) && result.status !== "error") continue;
 

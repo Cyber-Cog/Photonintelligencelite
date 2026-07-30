@@ -4,6 +4,7 @@ import { ApiError, getResults, reportUrl } from "@/api/client";
 import { BoxPlotAnalysisPanel } from "@/components/BoxPlotAnalysisPanel";
 import { EvidenceInvestigateModal } from "@/components/EvidenceInvestigateModal";
 import { FaultsTable } from "@/components/FaultsTable";
+import { InverterComparisonPanel } from "@/components/InverterComparisonPanel";
 import { JobNav } from "@/components/JobNav";
 import { KpiStrip, type KpiStripItem } from "@/components/KpiStrip";
 import { LossWaterfallBridge } from "@/components/LossWaterfallBridge";
@@ -652,6 +653,8 @@ export function DashboardPage() {
                       No owner actions for this run.
                     </div>
                   )}
+
+                  <InverterComparisonPanel rows={data.kpis.inverter_pr ?? []} />
 
                   <SummaryInsightPanels
                     worstInverters={worstInverters}

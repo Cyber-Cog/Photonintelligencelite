@@ -32,7 +32,9 @@ def _grouped_persistence(mask: pd.Series, groups: pd.Series, min_run: int) -> pd
     return mask & (run_sizes >= min_run)
 
 
-@register_algorithm(ALGORITHM_ID, VERSION, required_fields=("dc_current_a",))
+# Disabled on product surface (orchestrator skips enabled=False). Module kept for
+# parity tests / optional re-enable — do not list as a fault or run module in UI.
+@register_algorithm(ALGORITHM_ID, VERSION, required_fields=("dc_current_a",), enabled=False)
 def run(context: AnalysisContext) -> ResultObject:
     t = context.threshold_group(ALGORITHM_ID)
     low_current_frac = t.get("low_current_fraction_of_median", 0.5)

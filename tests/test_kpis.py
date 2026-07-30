@@ -18,6 +18,10 @@ def test_kpis_are_computed_and_revenue_loss_available(demo_context):
     assert kpis["specific_yield_kwh_per_kwp"] is not None
     assert kpis["estimated_energy_loss_kwh"] >= 0
     assert kpis["fault_count"] >= 1
+    inv_pr = kpis["inverter_pr"]
+    assert isinstance(inv_pr, list) and len(inv_pr) >= 2
+    assert all("inverter_id" in r and "pr_pct" in r for r in inv_pr)
+    assert inv_pr[0]["pr_pct"] >= inv_pr[-1]["pr_pct"]
 
 
 def test_compute_plant_kpis_matches_orchestrator(demo_context):

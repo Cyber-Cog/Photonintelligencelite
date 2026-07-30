@@ -239,6 +239,13 @@ class JobStatusResponse(BaseModel):
     is_demo: bool = False
     original_filename: Optional[str] = None
 
+class InverterPrRow(BaseModel):
+    inverter_id: str
+    pr_pct: float
+    ac_energy_kwh: float
+    dc_kwp: float
+
+
 class KpiResponse(BaseModel):
     plant_availability_pct: Optional[float]
     performance_ratio_pct: Optional[float]
@@ -248,6 +255,7 @@ class KpiResponse(BaseModel):
     revenue_loss_available: bool
     fault_count: int
     total_ac_energy_kwh: Optional[float]
+    inverter_pr: list[InverterPrRow] = Field(default_factory=list)
 
 
 class ResultsResponse(BaseModel):

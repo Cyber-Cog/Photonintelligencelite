@@ -82,7 +82,7 @@ export function SummaryInsightPanels({
 
       <SectionPanel
         title="String health"
-        description="Disconnected strings, outliers, voltage faults"
+        description="Disconnected strings and voltage faults"
         accent="amber"
         scrollMargin={false}
         bodyClassName="px-3.5 pb-2.5 pt-1"

@@ -176,6 +176,13 @@ export interface JobStatusResponse {
   original_filename?: string | null;
 }
 
+export interface InverterPrRow {
+  inverter_id: string;
+  pr_pct: number;
+  ac_energy_kwh: number;
+  dc_kwp: number;
+}
+
 export interface KpiResponse {
   plant_availability_pct: number | null;
   performance_ratio_pct: number | null;
@@ -185,6 +192,8 @@ export interface KpiResponse {
   revenue_loss_available: boolean;
   fault_count: number;
   total_ac_energy_kwh: number | null;
+  /** Per-inverter PR for Summary comparison (not a fault module). */
+  inverter_pr?: InverterPrRow[];
 }
 
 export interface ResultTable {

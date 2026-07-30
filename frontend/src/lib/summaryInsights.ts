@@ -84,7 +84,7 @@ export function worstInvertersFromResults(results: ResultObject[], limit = 5): S
     }));
 }
 
-/** String / SCB health from DS, outlier, and module-damage findings. */
+/** String / SCB health from disconnected-strings and module-damage findings. */
 export function stringHealthFromResults(results: ResultObject[], limit = 6): {
   rows: SummaryUnitRow[];
   healthyNote: string | null;
@@ -100,7 +100,7 @@ export function stringHealthFromResults(results: ResultObject[], limit = 6): {
 
   for (const r of results) {
     if (r.status !== "ok" || isAnalysisModule(r.algorithm_id, r)) continue;
-    if (!["disconnected_strings", "string_outlier", "module_damage"].includes(r.algorithm_id)) continue;
+    if (!["disconnected_strings", "module_damage"].includes(r.algorithm_id)) continue;
 
     for (const table of r.tables) {
       const eqI = colIndex(table.columns, "SCB", "SCB/MPPT", "String", "Equipment", "Inverter");
@@ -116,9 +116,7 @@ export function stringHealthFromResults(results: ResultObject[], limit = 6): {
         const titleHint =
           r.algorithm_id === "disconnected_strings"
             ? "Disconnected"
-            : r.algorithm_id === "module_damage"
-              ? kind || "Voltage fault"
-              : "Current outlier";
+            : kind || "Voltage fault";
         push({
           id: `${r.algorithm_id}-${label}`,
           label,
@@ -135,14 +133,13 @@ export function stringHealthFromResults(results: ResultObject[], limit = 6): {
 
   if (rows.length === 0) {
     const ds = results.find((r) => r.algorithm_id === "disconnected_strings");
-    const so = results.find((r) => r.algorithm_id === "string_outlier");
-    if (ds?.status === "ok" || so?.status === "ok") {
+    if (ds?.status === "ok") {
       return {
         rows: [],
         healthyNote: "No string/SCB fault findings in this run.",
       };
     }
-    if (ds?.status === "unavailable" || so?.status === "unavailable") {
+    if (ds?.status === "unavailable") {
       return {
         rows: [],
         healthyNote: "String health needs DC current (+ irradiance / architecture for disconnected strings).",

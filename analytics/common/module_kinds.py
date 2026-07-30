@@ -16,6 +16,7 @@ ANALYSIS_ALGORITHM_IDS: frozenset[str] = frozenset({"box_plot"})
 KPI_ALGORITHM_IDS: frozenset[str] = frozenset({"kpis"})
 
 # Codex-style fault / loss modules shown under Diagnostics → Fault modules.
+# string_outlier is intentionally omitted (disabled / not product-facing).
 FAULT_ALGORITHM_IDS: frozenset[str] = frozenset(
     {
         "disconnected_strings",
@@ -23,7 +24,6 @@ FAULT_ALGORITHM_IDS: frozenset[str] = frozenset(
         "clipping_current",
         "inverter_efficiency",
         "module_damage",
-        "string_outlier",
     }
 )
 

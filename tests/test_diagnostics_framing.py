@@ -80,3 +80,16 @@ def test_pack_checklist_labels_box_plot_as_diagnostic():
     rows = list(wb["fault_checklist"].iter_rows(values_only=True))
     box_row = next(r for r in rows if r[0] and "box plot" in str(r[0]).lower())
     assert "diagnostic" in str(box_row[0]).lower() or "not a fault" in str(box_row[0]).lower()
+
+
+def test_pack_checklist_omits_string_outlier_and_labels_inverter_pr():
+    from analytics.common.complete_analysis_pack import build_excel_bytes
+    from openpyxl import load_workbook
+    import io
+
+    wb = load_workbook(io.BytesIO(build_excel_bytes()))
+    rows = list(wb["fault_checklist"].iter_rows(values_only=True))
+    labels = [str(r[0]).lower() for r in rows if r[0]]
+    assert not any("string outlier" in lab for lab in labels)
+    pr_row = next(r for r in rows if r[0] and "inverter pr" in str(r[0]).lower())
+    assert "diagnostic" in str(pr_row[0]).lower() or "not a fault" in str(pr_row[0]).lower()

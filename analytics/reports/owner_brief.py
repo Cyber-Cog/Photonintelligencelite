@@ -26,7 +26,6 @@ _BLOCKED_PRIORITY = frozenset(
         "clipping_power",
         "clipping_current",
         "inverter_efficiency",
-        "string_outlier",
     }
 )
 
@@ -54,14 +53,6 @@ _OWNER_COPY: dict[str, tuple[_ProblemFn, str]] = {
             else f"Voltage drop suggests bypass diode or module damage{(' on ' + equipment) if equipment and equipment != '—' else ''}."
         ),
         "Inspect the affected modules for damage or diode activation; review evidence for the voltage reference.",
-    ),
-    "string_outlier": (
-        lambda equipment, count, _title: (
-            f"{count} strings/SCBs are running well below their peers (e.g. {equipment})."
-            if count > 1
-            else f"A string/SCB is running well below its peers{_equip_suffix(equipment)}."
-        ),
-        "Compare DC current on the peer group, then walk down the underperforming unit.",
     ),
     "clipping_power": (
         lambda equipment, count, _title: (
@@ -147,6 +138,8 @@ def _has_real_findings(r: ResultObject) -> bool:
         return False
     # Analysis tools (box plot, etc.) are never owner-brief "faults".
     if is_analysis_module(r.algorithm_id) or (r.module_kind == "analysis"):
+        return False
+    if r.algorithm_id == "string_outlier":
         return False
     if (r.loss_energy_kwh or 0) > 0:
         return True

@@ -254,7 +254,7 @@ def _readme_lines() -> list[str]:
         "3. Signals (units matter):",
         "   • AC Power (kW)          → KPIs, clipping-by-power, efficiency, box plot",
         "   • DC Power (kW) OR DC Current (A) → efficiency / box plot",
-        "   • DC Current (A)         → clipping-by-current, disconnected strings, string outlier",
+        "   • DC Current (A)         → clipping-by-current, disconnected strings",
         "   • DC Voltage (V)         → module damage",
         "   • POA or GHI (W/m²)      → clipping (power & current), disconnected strings",
         "4. Architecture sheet (this pack) — Plant → Inverter → SCB → String + nameplate capacities.",
@@ -276,7 +276,7 @@ def _readme_lines() -> list[str]:
         "Clipping by current     : DC Current + POA/GHI + architecture",
         "Disconnected strings    : DC Current + POA/GHI + architecture",
         "Module damage           : DC Voltage + architecture",
-        "String outlier          : DC Current",
+        "Inverter PR comparison  : AC Power + plant DC capacity + irradiance (Results Summary)",
         "",
         "HOW TO UPLOAD",
         "-" * 40,
@@ -343,7 +343,11 @@ def build_excel_bytes() -> bytes:
         ("Clipping by current (fault)", "DC Current (A) + Irradiance/POA or GHI", "Architecture hierarchy + strings_per_scb"),
         ("Disconnected strings (fault)", "DC Current (A) + Irradiance/POA or GHI", "Architecture hierarchy"),
         ("Module damage (fault)", "DC Voltage (V)", "Architecture hierarchy"),
-        ("String outlier (fault)", "DC Current (A)", "—"),
+        (
+            "Inverter PR comparison (diagnostic — Results Summary, not a fault)",
+            "AC Power (kW) + Irradiance/POA or GHI",
+            "Plant / SCB DC capacity (kWp)",
+        ),
         ("Loss normalization", "—", "Plant/inverter/SCB DC (kWp) + AC (kW) capacities"),
     ]
     for row in checklist:

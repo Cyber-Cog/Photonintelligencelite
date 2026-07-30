@@ -34,7 +34,7 @@ Box plot is a **diagnostic / distribution** tool, not a fault module.
 | 2 | **Resolvable equipment IDs** (inverter / SCB / string) | Peer groups, parent rollups, architecture join |
 | 3 | **AC power (kW)** | KPIs, clipping-by-power, efficiency, box plot |
 | 4 | **DC power (kW) *or* DC current (A)** | Efficiency / box plot (DC synthesizable from ΣI×V) |
-| 5 | **DC current (A)** at SCB or string | Clipping-by-current, disconnected strings, string outlier |
+| 5 | **DC current (A)** at SCB or string | Clipping-by-current, disconnected strings |
 | 6 | **DC voltage (V)** at SCB | Module damage / bypass diode |
 | 7 | **POA or GHI (W/m²)** | Clipping (power & current), disconnected strings |
 | 8 | **Plant architecture** (Plant → INV → SCB → String + capacities) | Current clipping, DS, module damage, loss normalization |
@@ -77,7 +77,7 @@ Optional explicit ID columns (instead of / in addition to hierarchical `Equipmen
 ```text
 INV-01                          ← inverter
 INV-01-SCB-01                   ← SMB / combiner / MPPT
-INV-01-SCB-01-STR-01            ← string (optional but enables string outlier / DS detail)
+INV-01-SCB-01-STR-01            ← string (optional but enables disconnected-strings detail)
 PLANT-WMS-01                    ← weather / meteo row (irradiance + temps)
 ```
 
@@ -147,7 +147,7 @@ adopt the column/ID conventions from this pack.
 | Clipping by current | `dc_current_a` + (`poa_w_m2` ∨ `ghi_w_m2`) | Architecture |
 | Disconnected strings | `dc_current_a` + (`poa_w_m2` ∨ `ghi_w_m2`) | Architecture |
 | Module damage | `dc_voltage_v` | Architecture |
-| String outlier | `dc_current_a` | — |
+| Inverter PR comparison (**Results Summary**, not a fault) | `ac_power_kw` + (`poa_w_m2` ∨ `ghi_w_m2`) | Plant / SCB DC capacity (kWp) |
 
 Source of truth in code: `analytics/common/prerequisites.py`.
 
@@ -159,7 +159,7 @@ Source of truth in code: `analytics/common/prerequisites.py`.
 irradiance (POA or GHI), inverter ratings, architecture.
 
 **Required only for full fault coverage:** DC current, DC voltage (and ideally
-string-level current for string outlier / DS detail).
+string-level current for disconnected-strings detail).
 
 **Optional:** module/ambient temperature, energy (kWh), GHI when POA exists,
 string-level rows when SCB aggregates are enough for plant-level screening.

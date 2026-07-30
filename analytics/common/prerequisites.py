@@ -108,12 +108,6 @@ ALGORITHM_PREREQUISITES: dict[str, AlgorithmPrerequisite] = {
             "Provide architecture so each SCB is linked to its parent inverter and string count."
         ),
     ),
-    "string_outlier": AlgorithmPrerequisite(
-        algorithm_id="string_outlier",
-        title="String Current Outlier",
-        required_fields=("dc_current_a",),
-        how_to_fix="Map string- or SCB-level DC current with resolvable equipment IDs.",
-    ),
 }
 
 
