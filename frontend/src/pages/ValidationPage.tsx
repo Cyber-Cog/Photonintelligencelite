@@ -3,7 +3,9 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   acknowledgeWarnings,
   ApiError,
+  downloadAuthenticated,
   getValidation,
+  parsedExcelUrl,
   retryValidation,
 } from "@/api/client";
 import { StepIndicator } from "@/components/StepIndicator";
@@ -138,6 +140,7 @@ export function ValidationPage() {
   const [error, setError] = useState<string | null>(null);
   const [acking, setAcking] = useState(false);
   const [retrying, setRetrying] = useState(false);
+  const [downloadingParsed, setDownloadingParsed] = useState(false);
 
   const reload = () => {
     if (!jobId) return;
@@ -215,6 +218,22 @@ export function ValidationPage() {
       setError(err instanceof ApiError ? err.message : "Could not retry validation.");
     } finally {
       setRetrying(false);
+    }
+  };
+
+  const handleDownloadParsed = async () => {
+    if (downloadingParsed) return;
+    setDownloadingParsed(true);
+    setError(null);
+    try {
+      await downloadAuthenticated(
+        parsedExcelUrl(jobId),
+        `pic_lite_parsed_${jobId.slice(0, 8)}.xlsx`,
+      );
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not download parsed Excel.");
+    } finally {
+      setDownloadingParsed(false);
     }
   };
 
@@ -393,6 +412,15 @@ export function ValidationPage() {
           {error && <p className="text-sm text-rose-600 dark:text-rose-400">{error}</p>}
 
           <div className="flex flex-wrap justify-end gap-3 border-t border-stone-200/80 pt-4 dark:border-stone-800/80">
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => void handleDownloadParsed()}
+              disabled={downloadingParsed}
+              title="Download tidy parsed data (official headers) for offline verify / edit / re-upload"
+            >
+              {downloadingParsed ? "Downloading…" : "Download parsed Excel"}
+            </button>
             <button
               type="button"
               className="btn-secondary"

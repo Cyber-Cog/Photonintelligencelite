@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { ApiError, detectEquipment, getSetupContext, submitMapping, submitPlantConfig } from "@/api/client";
+import {
+  ApiError,
+  detectEquipment,
+  downloadAuthenticated,
+  getSetupContext,
+  parsedExcelUrl,
+  submitMapping,
+  submitPlantConfig,
+} from "@/api/client";
 import { EquipmentStructurePanel } from "@/components/EquipmentStructurePanel";
 import { StepIndicator } from "@/components/StepIndicator";
 import { Badge } from "@/components/ui/Badge";
@@ -163,6 +171,7 @@ export function SetupPage() {
   );
   const [packArchImported, setPackArchImported] = useState(false);
   const [importedNameplate, setImportedNameplate] = useState<ImportedNameplate | null>(null);
+  const [downloadingParsed, setDownloadingParsed] = useState(false);
   const autoDetectDone = useRef(false);
   const focusApplied = useRef(false);
   const pendingFocusKey = useRef<string | null>(null);
@@ -403,6 +412,26 @@ export function SetupPage() {
     }
   }, [jobId, mapping]);
 
+  const downloadParsedExcel = useCallback(async () => {
+    if (!jobId || downloadingParsed) return;
+    setDownloadingParsed(true);
+    setError(null);
+    try {
+      const short = jobId.slice(0, 8);
+      const plantPart = plant.plant_name?.trim()
+        ? `_${plant.plant_name.trim().replace(/[^\w.\-]+/g, "_").slice(0, 40)}`
+        : "";
+      await downloadAuthenticated(
+        parsedExcelUrl(jobId),
+        `pic_lite_parsed${plantPart}_${short}.xlsx`,
+      );
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not download parsed Excel.");
+    } finally {
+      setDownloadingParsed(false);
+    }
+  }, [jobId, downloadingParsed, plant.plant_name]);
+
   useEffect(() => {
     if (!jobId || loadingContext || suggestions.length === 0 || autoDetectDone.current) return;
     if (packArchImported) {
@@ -603,6 +632,15 @@ export function SetupPage() {
                   : `${autoMapped.length} columns mapped`}
               </span>
             ) : null}
+            <button
+              type="button"
+              className="btn-secondary text-xs"
+              onClick={() => void downloadParsedExcel()}
+              disabled={!jobId || loadingContext || downloadingParsed}
+              title="Download tidy parsed data (official headers) for offline verify / edit / re-upload"
+            >
+              {downloadingParsed ? "Downloading…" : "Download parsed Excel"}
+            </button>
             <Link to={`/upload?replace=${encodeURIComponent(jobId)}`} className="btn-ghost text-xs">
               Replace files / Back to upload
             </Link>

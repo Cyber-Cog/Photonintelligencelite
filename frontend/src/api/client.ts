@@ -603,6 +603,11 @@ export function dataExportUrl(jobId: string, opts?: { start?: string | null; end
   return `${BASE_URL}/api/jobs/${jobId}/data-export.csv${qs ? `?${qs}` : ""}`;
 }
 
+/** Parsed SCADA Excel (pack headers) for offline verify / edit / re-upload. */
+export function parsedExcelUrl(jobId: string) {
+  return `${BASE_URL}/api/jobs/${jobId}/parsed.xlsx`;
+}
+
 export async function getArchitectureView(jobId: string) {
   return apiFetch<import("@/types").ArchitectureViewResponse>(`/api/jobs/${jobId}/architecture-view`);
 }

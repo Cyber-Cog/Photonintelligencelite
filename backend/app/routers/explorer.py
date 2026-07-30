@@ -23,6 +23,7 @@ from backend.app.services.explorer_service import (
     preview_data,
     query_timeseries,
 )
+from backend.app.services.parsed_export_service import export_parsed_excel
 from backend.app.services.merge_uploads import merge_csv_files
 from backend.app.services.storage import UploadTooLargeError, job_paths, sanitize_filename, save_upload_stream
 
@@ -88,6 +89,45 @@ def data_export_csv(
         content=content,
         media_type="text/csv",
         headers={"Content-Disposition": f'attachment; filename="pic-lite-{job_id[:8]}-{suffix}.csv"'},
+    )
+
+
+@router.get("/{job_id}/parsed.xlsx")
+def download_parsed_excel(
+    job_id: str,
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+    user: User | None = Depends(get_optional_user),
+):
+    """Download parsed SCADA as Complete Analysis Pack–compatible Excel.
+
+    Remaps ``raw/input.csv`` through the job mapping to official tidy headers
+    (Timestamp, Equipment ID, metrics). Includes ``column_mapping`` and
+    ``architecture`` sheets when available. Re-upload via normal upload.
+    """
+    job = _get_job_or_404(db, job_id, user)
+    paths = job_paths(settings.job_root_path, job_id)
+    raw_csv = paths.raw_dir / "input.csv"
+    if not raw_csv.exists() and not (
+        paths.canonical_dir.exists() and any(paths.canonical_dir.rglob("*.parquet"))
+    ):
+        raise HTTPException(404, "No parsed data available to export for this job.")
+    try:
+        content, filename = export_parsed_excel(
+            job_id=job_id,
+            raw_csv=raw_csv,
+            canonical_dir=paths.canonical_dir,
+            mapping_json=job.mapping_json,
+            plant_config_json=job.plant_config_json,
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(500, f"Could not export parsed Excel: {exc}") from exc
+    if not content:
+        raise HTTPException(404, "No parsed data available to export for this job.")
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
