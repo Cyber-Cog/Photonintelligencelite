@@ -48,6 +48,12 @@ has `render.yaml`, `vercel.json`, and Dockerfiles.
    - `MAX_CONCURRENT_JOBS=1`
    - `AUTH_AUTO_VERIFY=true`
    - `JOB_ROOT=/tmp/pic-lite-jobs`
+   - `REPORT_TTL_MINUTES=10080` ← keep completed results ~7 days (was historically 60 min)
+
+   **Ephemeral disk caveat:** free Render uses `/tmp` for `JOB_ROOT`. A service restart or
+   redeploy can delete job files even while Neon still has the job row (`completed` /
+   `cleaned_up`). TTL only governs intentional cleanup while the same disk is alive.
+   Upgrade to a persistent disk if you need restart-proof result files.
 
 3. Deploy, then open `https://<your-service>.onrender.com/api/health` — expect OK/JSON.
 4. Copy the public API base URL (no path), e.g. `https://pic-lite-api.onrender.com`.

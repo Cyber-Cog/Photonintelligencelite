@@ -1,5 +1,9 @@
-"""Report downloads. Cleanup fires once both PDF and Excel have been downloaded at least
-once, or at TTL expiry — whichever comes first (docs/PRD.md §7.12, §0)."""
+"""Report downloads. Files stay until report TTL expiry (default 7 days).
+
+Anonymous/demo jobs may still clean up immediately after both PDF and Excel are
+downloaded (disk pressure). Authenticated account jobs keep results for revisit
+until ``REPORT_TTL_MINUTES`` — downloading must not erase the dashboard.
+"""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -34,13 +38,21 @@ def _serve(
     action: str,
 ):
     job = load_job_authorized(db, job_id, user)
+    if job.state == JobState.CLEANED_UP.value:
+        raise HTTPException(
+            410,
+            "This report is no longer available — results were cleaned up after the retention window. Re-run analysis to generate a new report.",
+        )
     if job.state != JobState.COMPLETED.value:
         raise HTTPException(409, f"Job is in state '{job.state}'. Reports are only available once completed.")
 
     paths = job_paths(settings.job_root_path, job_id)
     file_path = paths.reports_dir / filename
     if not file_path.exists():
-        raise HTTPException(410, "This report is no longer available (cleaned up after its download window).")
+        raise HTTPException(
+            410,
+            "This report is no longer available (files were cleaned up or lost from ephemeral storage). Re-run analysis to regenerate.",
+        )
 
     setattr(job, mark_field, True)
     db.add(job)
@@ -55,10 +67,12 @@ def _serve(
         detail={"format": filename.split(".")[-1]},
     )
 
-    # Cleanup must run AFTER the file is streamed — FileResponse reads lazily, so deleting
-    # in-request causes 500 on the second (final) report download.
+    # Authenticated account jobs: keep disk artifacts until TTL so the user can
+    # revisit Results after downloading. Only anonymous/demo jobs clean up early.
     background = None
-    if job.downloaded_pdf and job.downloaded_excel:
+    retain_until_ttl = bool(job.user_id) and not bool(job.is_demo)
+    if not retain_until_ttl and job.downloaded_pdf and job.downloaded_excel:
+        # Cleanup must run AFTER the file is streamed — FileResponse reads lazily.
         background = BackgroundTask(cleanup_after_download, settings, job_id)
 
     return FileResponse(file_path, media_type=media_type, filename=filename, background=background)

@@ -170,6 +170,7 @@ Aborting Render CLI/API steps until key or service id is available.
             @{ key = "MAX_CONCURRENT_JOBS"; value = "1" }
             @{ key = "COOKIE_SECURE"; value = "true" }
             @{ key = "AUTH_AUTO_VERIFY"; value = "true" }
+            @{ key = "REPORT_TTL_MINUTES"; value = "10080" }
             @{ key = "DATABASE_URL"; value = $databaseUrl }
             @{ key = "CORS_ORIGINS"; value = $corsOrigins }
             @{ key = "PUBLIC_APP_URL"; value = $publicAppUrl }
@@ -196,6 +197,7 @@ Aborting Render CLI/API steps until key or service id is available.
           @{ key = "MAX_CONCURRENT_JOBS"; value = "1" }
           @{ key = "COOKIE_SECURE"; value = "true" }
           @{ key = "AUTH_AUTO_VERIFY"; value = "true" }
+          @{ key = "REPORT_TTL_MINUTES"; value = "10080" }
           @{ key = "DATABASE_URL"; value = $databaseUrl }
           @{ key = "CORS_ORIGINS"; value = $corsOrigins }
           @{ key = "PUBLIC_APP_URL"; value = $publicAppUrl }

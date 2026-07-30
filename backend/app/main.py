@@ -17,7 +17,11 @@ from backend.app.auth.seed import seed_superadmin
 from backend.app.config import get_settings
 from backend.app.database import SessionLocal, init_db
 from backend.app.routers import admin, auth, demo, explorer, intake, jobs, reports, results, templates, upload
-from backend.app.services.cleanup_service import periodic_cleanup_loop, reclaim_stale_jobs
+from backend.app.services.cleanup_service import (
+    align_account_job_report_ttl,
+    periodic_cleanup_loop,
+    reclaim_stale_jobs,
+)
 from backend.app.services.job_service import get_runner
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s")
@@ -31,16 +35,18 @@ async def lifespan(app: FastAPI):
     with SessionLocal() as db:
         seed_superadmin(db, settings)
     reclaim_stale_jobs(settings)
+    align_account_job_report_ttl(settings)
 
     runner = get_runner(settings)
     await runner.start()
     cleanup_task = asyncio.create_task(periodic_cleanup_loop(settings))
 
     logger.info(
-        "Photon Intelligence Center Lite API ready. free_tier=%s job_timeout_sec=%s max_concurrent_jobs=%s",
+        "Photon Intelligence Center Lite API ready. free_tier=%s job_timeout_sec=%s max_concurrent_jobs=%s report_ttl_minutes=%s",
         settings.free_tier,
         settings.limits.job_timeout_sec,
         settings.max_concurrent_jobs,
+        settings.limits.report_ttl_minutes,
     )
     yield
 

@@ -321,6 +321,7 @@ export function DashboardPage() {
   const [data, setData] = useState<ResultsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [errorStatus, setErrorStatus] = useState<number | null>(null);
   const [activeSection, setActiveSection] = useState<ResultsSectionId>("summary");
   const [activeModuleId, setActiveModuleId] = useState<string | null>(null);
   const [highlightId, setHighlightId] = useState<string | null>(null);
@@ -333,12 +334,17 @@ export function DashboardPage() {
     if (!jobId) return;
     let cancelled = false;
     setLoading(true);
+    setError(null);
+    setErrorStatus(null);
     getResults(jobId)
       .then((res) => {
         if (!cancelled) setData(res);
       })
       .catch((err) => {
-        if (!cancelled) setError(err instanceof ApiError ? err.message : "Could not load results.");
+        if (!cancelled) {
+          setError(err instanceof ApiError ? err.message : "Could not load results.");
+          setErrorStatus(err instanceof ApiError ? err.status : null);
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -499,7 +505,24 @@ export function DashboardPage() {
         </div>
       )}
 
-      {!loading && error && <ErrorState title="Could not load results" message={error} />}
+      {!loading && error && (
+        <div className="space-y-3">
+          <ErrorState
+            title="Could not load results"
+            message={error}
+            hint={
+              errorStatus === 410
+                ? "Result files for this job were removed after the retention window, or lost when the server restarted (ephemeral disk). Start a new analysis with the same data to regenerate."
+                : undefined
+            }
+          />
+          {errorStatus === 410 || errorStatus === 404 ? (
+            <button type="button" className="btn-primary text-sm" onClick={handleNewAnalysis}>
+              Re-run analysis
+            </button>
+          ) : null}
+        </div>
+      )}
 
       {!loading && data && (
         <>

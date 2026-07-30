@@ -1,6 +1,11 @@
 """Deterministic cleanup: stale-job reclaim, report TTL expiry, and download-triggered
 deletion. See docs/architecture_decisions.md §7 and docs/PRD.md §7.12, §11.
 
+Authenticated (non-demo) jobs keep disk artifacts until ``report_expires_at``
+(default 7 days via ``REPORT_TTL_MINUTES``). Download completion no longer erases
+those jobs early — see ``reports.py``. Anonymous/demo jobs may still clean up after
+both report formats are downloaded.
+
 No self-ping/keepalive is used to trigger this (docs/PRD.md §0) — it runs at process
 startup and on a periodic in-process timer while the app is awake, which is sufficient
 because the UI's own status polling keeps the instance warm during any active job.
@@ -9,7 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from analytics.core.job_states import JobState
 from backend.app.config import Settings
@@ -20,6 +25,48 @@ from backend.app.services.storage import delete_job_dir
 logger = logging.getLogger("pic_lite.cleanup")
 
 PERIODIC_INTERVAL_SEC = 300
+
+
+def align_account_job_report_ttl(settings: Settings) -> int:
+    """Re-apply current TTL to completed account jobs so a longer default takes effect
+    after deploy (jobs completed under the old 60-minute TTL would otherwise expire soon).
+
+    Only extends ``report_expires_at`` (never shortens). Skips demo/anonymous jobs.
+    """
+    ttl = timedelta(minutes=settings.limits.report_ttl_minutes)
+    now = datetime.now(timezone.utc)
+    updated = 0
+    with SessionLocal() as db:
+        rows = (
+            db.query(Job)
+            .filter(
+                Job.state == JobState.COMPLETED.value,
+                Job.user_id.isnot(None),
+                Job.is_demo.is_(False),
+                Job.completed_at.isnot(None),
+            )
+            .all()
+        )
+        for row in rows:
+            assert row.completed_at is not None
+            completed = row.completed_at
+            if completed.tzinfo is None:
+                completed = completed.replace(tzinfo=timezone.utc)
+            new_exp = completed + ttl
+            if new_exp <= now:
+                continue
+            current_exp = row.report_expires_at
+            if current_exp is not None and current_exp.tzinfo is None:
+                current_exp = current_exp.replace(tzinfo=timezone.utc)
+            if current_exp is None or current_exp < new_exp:
+                row.report_expires_at = new_exp
+                db.add(row)
+                updated += 1
+        if updated:
+            db.commit()
+    if updated:
+        logger.info("aligned report TTL on %d completed account job(s) → %s min", updated, settings.limits.report_ttl_minutes)
+    return updated
 
 
 def reclaim_stale_jobs(settings: Settings) -> int:
@@ -76,8 +123,6 @@ def cleanup_after_download(settings: Settings, job_id: str) -> None:
 
 def mark_abandoned_jobs(settings: Settings, *, hours: float = 24.0) -> int:
     """Flag incomplete funnels (job created but never finished) for superadmin intel."""
-    from datetime import timedelta
-
     from backend.app.auth.audit import record_audit
 
     cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)

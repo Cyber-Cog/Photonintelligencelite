@@ -133,13 +133,22 @@ Filesystem layout per job (ephemeral, under a per-job UUID directory):
   charts/*.png                # only if the user exports a chart
 ```
 
-Cleanup triggers: `finally` block around the pipeline, explicit user download completion,
-TTL expiry (report kept 1 hour), and a startup + periodic stale-job reclaim sweep that marks
-`running` jobs older than `JOB_TIMEOUT_SEC` as `failed` and deletes their directories.
+Cleanup triggers: `finally` block around the pipeline, optional early cleanup for
+anonymous/demo jobs after both report downloads, TTL expiry (completed reports kept
+**7 days** by default via `REPORT_TTL_MINUTES=10080`), and a startup + periodic
+stale-job reclaim sweep that marks `running` jobs older than `JOB_TIMEOUT_SEC` as
+`failed` and deletes their directories. Authenticated account jobs are **not** deleted
+immediately after download — they remain until TTL so users can revisit Results.
+
+On startup, completed account jobs have their `report_expires_at` realigned to the
+current TTL policy (extends only), so raising the default from 60 minutes takes effect
+for in-flight completed jobs after deploy.
 
 Postgres retains only: job status/timings/non-sensitive error summary rows, and saved
 column-mapping templates (keyed by detected OEM signature). No raw or canonical time-series
-data is ever written to Postgres or to logs.
+data is ever written to Postgres or to logs. Job meta rows remain after file cleanup
+(`cleaned_up` state) for history; full dashboard payload lives on disk under `JOB_ROOT`
+until expiry (Render free tier `/tmp` can still wipe files on restart independent of TTL).
 
 ## 8. Free-tier keep-warm (Render sleep)
 

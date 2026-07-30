@@ -23,7 +23,8 @@ deployment_limits:
   max_rows: 20000000
   max_columns: 500
   max_decompression_ratio: 40
-  report_ttl_minutes: 60
+  # Keep completed results available for revisit while the account is in use (7 days).
+  report_ttl_minutes: 10080
   poll_interval_sec: 2.5
   analysis_window_min_days: 1
   analysis_window_max_days: 31
@@ -36,7 +37,8 @@ free_tier_deployment_limits:
   max_rows: 3000000
   max_columns: 300
   max_decompression_ratio: 40
-  report_ttl_minutes: 60
+  # Same multi-day retention as non-free; ephemeral Render disk can still wipe on restart.
+  report_ttl_minutes: 10080
   poll_interval_sec: 2.5
   analysis_window_min_days: 1
   analysis_window_max_days: 31
