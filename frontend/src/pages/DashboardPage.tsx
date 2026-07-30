@@ -5,7 +5,7 @@ import { BoxPlotAnalysisPanel } from "@/components/BoxPlotAnalysisPanel";
 import { EvidenceInvestigateModal } from "@/components/EvidenceInvestigateModal";
 import { FaultsTable } from "@/components/FaultsTable";
 import { InverterComparisonPanel } from "@/components/InverterComparisonPanel";
-import { JobNav } from "@/components/JobNav";
+import { JobStatusChip, JobWorkspace } from "@/components/JobWorkspace";
 import { KpiStrip, type KpiStripItem } from "@/components/KpiStrip";
 import { LossWaterfallBridge } from "@/components/LossWaterfallBridge";
 import { OwnerActionCenter } from "@/components/OwnerActionCenter";
@@ -33,9 +33,6 @@ import {
   type ResultsSectionId,
 } from "@/lib/resultsNav";
 import type { ResultObject, ResultsResponse } from "@/types";
-
-/** App chrome: header + main py + footer — match Raw data / Explorer density. */
-const RESULTS_SHELL = "h-[calc(100dvh-8.75rem)] max-h-[calc(100dvh-8.75rem)]";
 
 function fmt(value: number | null, digits = 1): string | null {
   if (value === null || value === undefined) return null;
@@ -106,7 +103,7 @@ function DiagStatusBadge({ result }: { result: ResultObject }) {
   );
 }
 
-/** Flat 4-item Results nav — no nested Diagnostics children. */
+/** Flat Results section rail — lives in workspace aside (no nested card). */
 function ResultsSidebar({
   activeSection,
   onSelectSection,
@@ -119,15 +116,11 @@ function ResultsSidebar({
   issueCount: number;
 }) {
   return (
-    <nav
-      className="hidden h-fit w-[11.5rem] shrink-0 self-start rounded-xl border border-stone-200/90 bg-white/95 p-1 dark:border-stone-700 dark:bg-stone-900 lg:block"
-      aria-label="Results sections"
-      data-tour="results-sidebar"
-    >
-      <p className="px-2 pb-1 pt-1 text-[9px] font-bold uppercase tracking-[0.12em] text-stone-400">
-        Navigate
+    <nav className="p-2" aria-label="Results sections" data-tour="results-sidebar">
+      <p className="px-2 pb-2 pt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--pic-text-muted)]">
+        Sections
       </p>
-      <ul className="space-y-px">
+      <ul className="space-y-0.5">
         {RESULTS_SECTIONS.map((item) => {
           const active = item.id === activeSection;
           const badge =
@@ -144,19 +137,19 @@ function ResultsSidebar({
                 data-tour={item.tour}
                 aria-current={active ? "page" : undefined}
                 onClick={() => onSelectSection(item.id)}
-                className={`flex w-full items-center justify-between gap-1.5 rounded-lg px-2 py-1.5 text-left text-[12px] font-semibold transition duration-150 ${
+                className={`flex w-full items-center justify-between gap-2 rounded-pic px-2.5 py-2 text-left text-[13px] font-semibold transition duration-150 ${
                   active
                     ? "bg-brand-50 text-stone-900 ring-1 ring-brand-200/80 dark:bg-brand-950/40 dark:text-amber-100 dark:ring-brand-800/50"
-                    : "text-stone-600 hover:bg-stone-50 hover:text-stone-900 dark:text-stone-300 dark:hover:bg-stone-800/60 dark:hover:text-amber-100"
+                    : "text-[color:var(--pic-text-secondary)] hover:bg-white/80 hover:text-[color:var(--pic-text)] dark:hover:bg-stone-800/60"
                 }`}
               >
                 <span>{item.label}</span>
                 {badge != null ? (
                   <span
-                    className={`tabular-nums rounded px-1 py-px text-[10px] font-bold ${
+                    className={`tabular-nums rounded-pic-sm px-1.5 py-px text-[10px] font-bold ${
                       active
                         ? "bg-brand-600 text-white dark:bg-brand-500 dark:text-stone-950"
-                        : "bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-300"
+                        : "bg-[color:var(--pic-surface-muted)] text-[color:var(--pic-text-muted)]"
                     }`}
                   >
                     {badge}
@@ -225,24 +218,26 @@ function DiagnosticsFolderList({
 
   return (
     <nav
-      className="flex h-full min-h-0 w-full flex-col rounded-xl border border-stone-200/90 bg-white/95 dark:border-stone-700 dark:bg-stone-900"
+      className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-pic-lg border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)]"
       aria-label="Diagnostic modules"
       data-tour="diagnostics-folder-list"
     >
-      <div className="flex shrink-0 items-center gap-1.5 border-b border-stone-100 px-2.5 py-1.5 dark:border-stone-800">
+      <div className="flex shrink-0 items-center gap-2 border-b border-[color:var(--pic-border-subtle)] px-3 py-2.5">
         <span className="text-brand-600 dark:text-brand-400">
           <FolderIcon open />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-stone-400">Modules</p>
-          <p className="text-[11px] font-medium text-stone-500 dark:text-stone-400">
+          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--pic-text-muted)]">
+            Modules
+          </p>
+          <p className="text-[11px] font-medium text-[color:var(--pic-text-secondary)]">
             {total} {total === 1 ? "check" : "checks"}
           </p>
         </div>
         {onCollapse && (
           <button
             type="button"
-            className="btn-ghost hidden h-6 w-6 shrink-0 items-center justify-center p-0 text-stone-400 lg:inline-flex"
+            className="btn-ghost hidden h-7 w-7 shrink-0 items-center justify-center p-0 text-stone-400 lg:inline-flex"
             onClick={onCollapse}
             title="Collapse folder"
             aria-label="Collapse module folder"
@@ -254,14 +249,14 @@ function DiagnosticsFolderList({
         )}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1.5">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
         {total === 0 ? (
-          <p className="px-2 py-2 text-[11px] text-stone-400">No modules for this run</p>
+          <p className="px-2 py-3 text-[11px] text-[color:var(--pic-text-muted)]">No modules for this run</p>
         ) : (
           <ul className="space-y-0.5">
             {faultModules.length > 0 && (
-              <li className="pointer-events-none select-none px-1.5 pb-0.5 pt-1" aria-hidden="true">
-                <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.1em] text-stone-400">
+              <li className="pointer-events-none select-none px-2 pb-1 pt-1.5" aria-hidden="true">
+                <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.1em] text-[color:var(--pic-text-muted)]">
                   <FolderIcon open />
                   <span>Faults</span>
                 </div>
@@ -270,8 +265,8 @@ function DiagnosticsFolderList({
             {faultModules.map(renderItem)}
 
             {analysisModules.length > 0 && (
-              <li className="pointer-events-none select-none px-1.5 pb-0.5 pt-2" aria-hidden="true">
-                <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.1em] text-stone-400">
+              <li className="pointer-events-none select-none px-2 pb-1 pt-3" aria-hidden="true">
+                <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.1em] text-[color:var(--pic-text-muted)]">
                   <FolderIcon open />
                   <span>Box plot analysis</span>
                 </div>
@@ -528,76 +523,77 @@ export function DashboardPage() {
 
   const mobileTabs = RESULTS_SECTIONS.map(({ id, label }) => ({ id, label }));
 
-  return (
-    <div className={`tool-enter flex ${RESULTS_SHELL} flex-col gap-1.5 overflow-hidden`}>
-      <div className="flex shrink-0 flex-wrap items-end justify-between gap-2">
-        <div className="min-w-0" {...(data ? { "data-tour": "results-welcome" } : {})}>
-          <JobNav />
-          <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0">
-            <h2 className="font-display text-base font-semibold tracking-tight text-stone-900 dark:text-stone-50">
-              Results
-            </h2>
-            <p className="text-[11px] text-stone-500 dark:text-stone-400">
-              {data
-                ? `${okCount} ready · ${blockedCount} need data`
-                : "KPIs, actions, bridge, faults, diagnostics"}
-            </p>
-          </div>
-        </div>
-        {data ? (
-          <div className="flex shrink-0 flex-wrap items-center gap-1.5" data-tour="download-reports">
-            <a className="btn-secondary !px-2.5 !py-1 text-[11px]" href={reportUrl(jobId, "xlsx")}>
-              Excel
-            </a>
-            <a className="btn-primary !px-2.5 !py-1 text-[11px]" href={reportUrl(jobId, "pdf")}>
-              PDF
-            </a>
-          </div>
+  if (loading) {
+    return (
+      <div className="tool-enter flex h-[calc(100dvh-8.5rem)] items-center justify-center gap-3 text-sm text-[color:var(--pic-text-muted)]">
+        <Spinner className="h-5 w-5" /> Loading results…
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="tool-enter mx-auto flex max-w-lg flex-col gap-3 py-10">
+        <ErrorState
+          title="Could not load results"
+          message={error}
+          hint={
+            errorStatus === 410
+              ? "Result files for this job were removed after the retention window, or lost when the server restarted (ephemeral disk). Start a new analysis with the same data to regenerate."
+              : undefined
+          }
+        />
+        {errorStatus === 410 || errorStatus === 404 ? (
+          <button type="button" className="btn-primary text-sm" onClick={handleNewAnalysis}>
+            Re-run analysis
+          </button>
         ) : null}
       </div>
+    );
+  }
 
-      {loading && (
-        <div className="flex items-center gap-2 text-sm text-stone-500">
-          <Spinner className="h-4 w-4" /> Loading results…
+  if (!data) return null;
+
+  const statusTone = blockedCount > 0 && okCount > 0 ? "warn" : okCount > 0 ? "ok" : "warn";
+
+  return (
+    <JobWorkspace
+      title="Results"
+      titleTour="results-welcome"
+      subtitle={`${okCount} modules ready · ${blockedCount} need data`}
+      status={
+        <JobStatusChip tone={statusTone}>
+          {thinResults ? "Limited coverage" : blockedCount > 0 ? "Partial mapping" : "Analysis ready"}
+        </JobStatusChip>
+      }
+      actions={
+        <div className="flex shrink-0 flex-wrap items-center gap-2" data-tour="download-reports">
+          <a className="btn-secondary !px-3 !py-1.5 text-xs" href={reportUrl(jobId, "xlsx")}>
+            Excel
+          </a>
+          <a className="btn-primary !px-3 !py-1.5 text-xs" href={reportUrl(jobId, "pdf")}>
+            PDF
+          </a>
         </div>
-      )}
-
-      {!loading && error && (
-        <div className="space-y-2">
-          <ErrorState
-            title="Could not load results"
-            message={error}
-            hint={
-              errorStatus === 410
-                ? "Result files for this job were removed after the retention window, or lost when the server restarted (ephemeral disk). Start a new analysis with the same data to regenerate."
-                : undefined
-            }
-          />
-          {errorStatus === 410 || errorStatus === 404 ? (
-            <button type="button" className="btn-primary text-sm" onClick={handleNewAnalysis}>
-              Re-run analysis
-            </button>
-          ) : null}
-        </div>
-      )}
-
-      {!loading && data && (
+      }
+      chromeExtra={
         <>
-          <div className="tool-sticky-bar sticky top-14 z-10 w-full shrink-0 lg:hidden">
+          <div className="tool-sticky-bar lg:hidden">
             <SubnavTabs
               items={mobileTabs}
               activeId={activeSection}
               onSelect={(id) => selectSection(id as ResultsSectionId)}
               ariaLabel="Results sections"
+              inset
             />
           </div>
-
-          {thinResults && (
-            <div className="shrink-0">
+          <KpiStrip items={kpiItems} flush />
+          {thinResults ? (
+            <div className="border-t border-[color:var(--pic-border-subtle)] px-3 py-2 sm:px-4">
               <InfoBanner
                 tone="warning"
                 title="Limited module coverage"
-                className="!rounded-xl !px-3 !py-2"
+                className="!rounded-pic-lg !px-3 !py-2 !shadow-none"
                 actions={
                   <Link
                     to={`/jobs/${jobId}/setup#mapping&field=ac_power_kw`}
@@ -611,162 +607,143 @@ export function DashboardPage() {
                 mapped. String-level faults and inverter efficiency require additional DC and architecture inputs.
               </InfoBanner>
             </div>
-          )}
-
-          {/* Sticky KPIs — sit above the scroll pane so they stay visible across sections */}
-          <div className="shrink-0">
-            <KpiStrip items={kpiItems} />
-          </div>
-
-          <div className="flex min-h-0 flex-1 items-stretch gap-3 overflow-hidden">
-            <ResultsSidebar
-              activeSection={activeSection}
-              onSelectSection={selectSection}
-              faultCount={data.kpis.fault_count}
-              issueCount={ownerActions?.issueCount ?? 0}
-            />
-
-            <div
-              ref={mainPaneRef}
-              className={`min-h-0 min-w-0 flex-1 ${
-                activeSection === "diagnostics"
-                  ? "flex flex-col overflow-hidden"
-                  : "overflow-y-auto overscroll-contain"
-              }`}
-              data-tour="results-main"
-            >
-              {activeSection === "summary" && (
-                <div
-                  id="results-actions"
-                  data-results-pane="summary"
-                  className="flex flex-col gap-4 pb-2"
-                >
-                  {ownerActions ? (
-                    <OwnerActionCenter
-                      model={ownerActions}
-                      onInvestigate={investigateFinding}
-                      onModule={jumpToModule}
-                      onSection={(id) => selectSection(id)}
-                    />
-                  ) : (
-                    <div className="rounded-xl border border-stone-200/90 bg-white/95 px-4 py-6 text-sm text-stone-500 dark:border-stone-700 dark:bg-stone-900">
-                      No owner actions for this run.
-                    </div>
-                  )}
-
-                  <InverterComparisonPanel rows={data.kpis.inverter_pr ?? []} />
-
-                  <SummaryInsightPanels
-                    worstInverters={worstInverters}
-                    stringHealth={stringHealth.rows}
-                    stringHealthyNote={stringHealth.healthyNote}
-                    onModule={jumpToModule}
-                  />
-                </div>
-              )}
-
-              {activeSection === "bridge" && (
-                <div id="results-bridge" data-tour="loss-bridge" data-results-pane="bridge">
-                  <LossWaterfallBridge kpis={data.kpis} results={data.results} jobId={jobId} />
-                </div>
-              )}
-
-              {activeSection === "faults" && (
-                <div id="results-faults" data-tour="faults-table" data-results-pane="faults">
-                  <FaultsTable results={data.results} />
-                </div>
-              )}
-
-              {activeSection === "diagnostics" && (
-                <div
-                  className="flex min-h-0 flex-1 flex-col gap-2 lg:flex-row"
-                  data-tour="diagnostics"
-                  data-results-pane="diagnostics"
-                >
-                  {folderCollapsed && (
-                    <div className="hidden shrink-0 lg:flex lg:h-full lg:w-9 lg:flex-col">
-                      <button
-                        type="button"
-                        className="flex h-full w-full flex-col items-center gap-2 rounded-xl border border-stone-200/90 bg-white/95 px-1 py-2.5 text-stone-500 transition hover:border-brand-300 hover:bg-brand-50/40 hover:text-brand-700 dark:border-stone-700 dark:bg-stone-900 dark:hover:border-brand-700 dark:hover:bg-brand-950/30 dark:hover:text-brand-300"
-                        onClick={() => setFolderCollapsed(false)}
-                        title="Expand module folder"
-                        aria-label="Expand module folder"
-                        data-tour="diagnostics-folder-expand"
-                      >
-                        <FolderIcon open={false} />
-                        <span
-                          className="text-[9px] font-bold uppercase tracking-[0.14em]"
-                          style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
-                        >
-                          Modules
-                        </span>
-                      </button>
-                    </div>
-                  )}
-                  <div
-                    className={`max-h-[min(32vh,14rem)] min-w-0 shrink-0 overflow-hidden lg:max-h-none lg:h-full lg:w-[16rem] lg:max-w-[30%] lg:shrink-0 ${
-                      folderCollapsed ? "lg:hidden" : ""
-                    }`}
-                  >
-                    <DiagnosticsFolderList
-                      faultModules={faultModules}
-                      analysisModules={analysisModules}
-                      activeModuleId={activeModuleId}
-                      onSelectModule={selectModule}
-                      onCollapse={() => setFolderCollapsed(true)}
-                    />
-                  </div>
-
-                  <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain lg:h-full lg:min-w-[70%]">
-                    {!activeModule ? (
-                      <div
-                        className="flex h-full min-h-[12rem] flex-col items-center justify-center rounded-xl border border-dashed border-stone-300/90 bg-stone-50/60 px-4 py-8 text-center dark:border-stone-700 dark:bg-stone-900/40"
-                        data-tour="diagnostics-empty"
-                      >
-                        <p className="font-display text-sm font-semibold text-stone-800 dark:text-stone-100">
-                          Select a diagnostic module
-                        </p>
-                        <p className="mt-1 max-w-sm text-xs leading-relaxed text-stone-500 dark:text-stone-400">
-                          {diagModules.length === 0
-                            ? "No diagnostic modules available for this run."
-                            : "Choose a fault check or box plot analysis from the folder."}
-                        </p>
-                      </div>
-                    ) : (
-                      <div
-                        id={`module-${activeModule.algorithm_id}`}
-                        className={`transition ${
-                          highlightId === activeModule.algorithm_id
-                            ? "rounded-xl ring-2 ring-brand-500 ring-offset-1 dark:ring-offset-stone-950"
-                            : ""
-                        }`}
-                      >
-                        {activeModule.algorithm_id === "box_plot" &&
-                        activeModule.status === "ok" &&
-                        isAnalysisModule(activeModule.algorithm_id, activeModule) ? (
-                          <BoxPlotAnalysisPanel result={activeModule} />
-                        ) : (
-                          <ResultCard key={activeModule.algorithm_id} result={activeModule} standalone />
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {investigateRow && (
-            <EvidenceInvestigateModal row={investigateRow} onClose={() => setInvestigateRow(null)} />
-          )}
+          ) : null}
         </>
-      )}
-
-      <div className="flex shrink-0 justify-center border-t border-stone-200/80 pt-1 dark:border-stone-800/80">
+      }
+      aside={
+        <ResultsSidebar
+          activeSection={activeSection}
+          onSelectSection={selectSection}
+          faultCount={data.kpis.fault_count}
+          issueCount={ownerActions?.issueCount ?? 0}
+        />
+      }
+      flushMain={activeSection === "diagnostics"}
+      mainRef={mainPaneRef}
+      footer={
         <button type="button" className="btn-ghost !px-2 !py-0.5 text-[11px]" onClick={handleNewAnalysis}>
           Start new analysis
         </button>
-      </div>
-    </div>
+      }
+    >
+      {activeSection === "summary" && (
+        <div id="results-actions" data-results-pane="summary" className="job-pane flex flex-col gap-4 pb-6">
+          {ownerActions ? (
+            <OwnerActionCenter
+              model={ownerActions}
+              onInvestigate={investigateFinding}
+              onModule={jumpToModule}
+              onSection={(id) => selectSection(id)}
+            />
+          ) : (
+            <div className="rounded-pic-lg border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] px-4 py-6 text-sm text-[color:var(--pic-text-muted)]">
+              No owner actions for this run.
+            </div>
+          )}
+
+          <InverterComparisonPanel rows={data.kpis.inverter_pr ?? []} />
+
+          <SummaryInsightPanels
+            worstInverters={worstInverters}
+            stringHealth={stringHealth.rows}
+            stringHealthyNote={stringHealth.healthyNote}
+            onModule={jumpToModule}
+          />
+        </div>
+      )}
+
+      {activeSection === "bridge" && (
+        <div id="results-bridge" data-tour="loss-bridge" data-results-pane="bridge" className="job-pane pb-6">
+          <LossWaterfallBridge kpis={data.kpis} results={data.results} jobId={jobId} />
+        </div>
+      )}
+
+      {activeSection === "faults" && (
+        <div id="results-faults" data-tour="faults-table" data-results-pane="faults" className="job-pane pb-6">
+          <FaultsTable results={data.results} />
+        </div>
+      )}
+
+      {activeSection === "diagnostics" && (
+        <div
+          className="flex min-h-0 flex-1 flex-col gap-3 p-3 lg:flex-row"
+          data-tour="diagnostics"
+          data-results-pane="diagnostics"
+        >
+          {folderCollapsed && (
+            <div className="hidden shrink-0 lg:flex lg:h-full lg:w-10 lg:flex-col">
+              <button
+                type="button"
+                className="flex h-full w-full flex-col items-center gap-2 rounded-pic-lg border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] px-1 py-3 text-[color:var(--pic-text-muted)] transition hover:border-brand-300 hover:bg-brand-50/40 hover:text-brand-700 dark:hover:border-brand-700 dark:hover:bg-brand-950/30 dark:hover:text-brand-300"
+                onClick={() => setFolderCollapsed(false)}
+                title="Expand module folder"
+                aria-label="Expand module folder"
+                data-tour="diagnostics-folder-expand"
+              >
+                <FolderIcon open={false} />
+                <span
+                  className="text-[9px] font-bold uppercase tracking-[0.14em]"
+                  style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
+                >
+                  Modules
+                </span>
+              </button>
+            </div>
+          )}
+          <div
+            className={`max-h-[min(32vh,14rem)] min-w-0 shrink-0 overflow-hidden lg:max-h-none lg:h-full lg:w-[16rem] lg:max-w-[30%] lg:shrink-0 ${
+              folderCollapsed ? "lg:hidden" : ""
+            }`}
+          >
+            <DiagnosticsFolderList
+              faultModules={faultModules}
+              analysisModules={analysisModules}
+              activeModuleId={activeModuleId}
+              onSelectModule={selectModule}
+              onCollapse={() => setFolderCollapsed(true)}
+            />
+          </div>
+
+          <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain lg:h-full lg:min-w-[70%]">
+            {!activeModule ? (
+              <div
+                className="flex h-full min-h-[12rem] flex-col items-center justify-center rounded-pic-lg border border-dashed border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] px-4 py-8 text-center"
+                data-tour="diagnostics-empty"
+              >
+                <p className="font-display text-sm font-semibold text-[color:var(--pic-text)]">
+                  Select a diagnostic module
+                </p>
+                <p className="mt-1 max-w-sm text-xs leading-relaxed text-[color:var(--pic-text-muted)]">
+                  {diagModules.length === 0
+                    ? "No diagnostic modules available for this run."
+                    : "Choose a fault check or box plot analysis from the folder."}
+                </p>
+              </div>
+            ) : (
+              <div
+                id={`module-${activeModule.algorithm_id}`}
+                className={`transition ${
+                  highlightId === activeModule.algorithm_id
+                    ? "rounded-pic-lg ring-2 ring-brand-500 ring-offset-1 dark:ring-offset-stone-950"
+                    : ""
+                }`}
+              >
+                {activeModule.algorithm_id === "box_plot" &&
+                activeModule.status === "ok" &&
+                isAnalysisModule(activeModule.algorithm_id, activeModule) ? (
+                  <BoxPlotAnalysisPanel result={activeModule} />
+                ) : (
+                  <ResultCard key={activeModule.algorithm_id} result={activeModule} standalone />
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {investigateRow && (
+        <EvidenceInvestigateModal row={investigateRow} onClose={() => setInvestigateRow(null)} />
+      )}
+    </JobWorkspace>
   );
 }

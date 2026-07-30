@@ -580,10 +580,9 @@ export function SetupPage() {
     errorChipKeys.filter((k) => sectionForField(k) === step).length;
 
   return (
-    <div className="tool-enter mx-auto w-full max-w-3xl pb-24">
+    <div className="tool-enter flow-shell flow-stack pb-24">
       <StepIndicator current={2} jobId={jobId} />
       <PageHeader
-        className="mb-4"
         eyebrow="Configure job"
         title="Confirm columns and plant details"
         description={
@@ -596,14 +595,23 @@ export function SetupPage() {
           </>
         }
         actions={
-          <Link to={`/upload?replace=${encodeURIComponent(jobId)}`} className="btn-ghost text-xs">
-            Replace files / Back to upload
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            {suggestions.length > 0 ? (
+              <span className={`status-chip ${needsReview.length > 0 ? "status-chip-warn" : "status-chip-ok"}`}>
+                {needsReview.length > 0
+                  ? `${needsReview.length} columns to review`
+                  : `${autoMapped.length} columns mapped`}
+              </span>
+            ) : null}
+            <Link to={`/upload?replace=${encodeURIComponent(jobId)}`} className="btn-ghost text-xs">
+              Replace files / Back to upload
+            </Link>
+          </div>
         }
       />
 
       {looksLikePack === true && (
-        <InfoBanner className="mb-3" tone="success" title="Complete Analysis Pack detected">
+        <InfoBanner tone="success" title="Complete Analysis Pack detected">
           Headers match the official pack ({Math.round(packMatchRatio * 100)}% overlap). Columns are auto-mapped
           where confidence is high
           {packArchImported
@@ -613,14 +621,14 @@ export function SetupPage() {
       )}
 
       {packArchImported && looksLikePack !== true && (
-        <InfoBanner className="mb-3" tone="success" title="Architecture detected from upload">
+        <InfoBanner tone="success" title="Architecture detected from upload">
           Plant structure (inverter → SCB/SMB) was loaded from a companion sheet or ID columns in the uploaded
           workbook. Review Plant and Architecture — you can still override with a flat Excel table.
         </InfoBanner>
       )}
 
       {capacityWarnings.length > 0 && (activeStep === "plant" || activeStep === "architecture") && (
-        <InfoBanner className="mb-3" tone="warning" title="Capacity consistency">
+        <InfoBanner tone="warning" title="Capacity consistency">
           <ul className="mt-1 list-disc space-y-1 pl-4 text-sm">
             {capacityWarnings.map((w) => (
               <li key={w.code}>
@@ -639,7 +647,6 @@ export function SetupPage() {
 
       {looksLikePack === false && (
         <InfoBanner
-          className="mb-3"
           tone="warning"
           title={
             choseTemplatePath
@@ -654,7 +661,7 @@ export function SetupPage() {
       )}
 
       {revisingCompleted && (
-        <InfoBanner className="mb-3" tone="warning" title="Edit and re-run">
+        <InfoBanner tone="warning" title="Edit and re-run">
           This job already finished. Saving mapping or plant changes clears prior results and returns you to
           validation. Run analysis again after validation.
         </InfoBanner>
@@ -700,7 +707,7 @@ export function SetupPage() {
         </InfoBanner>
       )}
 
-      <div className="setup-workspace mb-3">
+      <div className="setup-workspace">
         <div className="setup-workspace-tabs">
           <SubnavTabs
             inset

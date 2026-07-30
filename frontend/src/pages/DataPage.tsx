@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { ApiError, dataExportUrl, getDataPreview } from "@/api/client";
-import { JobNav } from "@/components/JobNav";
+import { JobWorkspace } from "@/components/JobWorkspace";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
 import type { DataPreviewResponse } from "@/types";
@@ -125,47 +125,32 @@ export function DataPage() {
 
   if (!jobId) return null;
 
+  const subtitle = data
+    ? `${data.source ?? "…"}${
+        data.upload_sources && data.upload_sources.length > 1 ? ` · ${data.upload_sources.length} reports` : ""
+      }${data.original_filename ? ` · ${data.original_filename}` : ""}`
+    : "Browse mapped SCADA rows";
+
   return (
-    <div className="tool-enter flex h-[calc(100dvh-8.75rem)] max-h-[calc(100dvh-8.75rem)] flex-col gap-1.5 overflow-hidden">
-      <div className="flex shrink-0 flex-wrap items-end justify-between gap-2 [&_nav]:mb-0">
-        <div className="min-w-0">
-          <JobNav />
-          <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0">
-            <h2 className="font-display text-base font-semibold tracking-tight text-stone-900 dark:text-stone-50">
-              Raw data
-            </h2>
-            <p className="text-[11px] text-stone-500">
-              {data?.source ?? "…"}
-              {data?.upload_sources && data.upload_sources.length > 1
-                ? ` · ${data.upload_sources.length} reports`
-                : ""}
-              {data?.original_filename ? ` · ${data.original_filename}` : ""}
-            </p>
-          </div>
-        </div>
-        <a className="btn-secondary shrink-0 !px-2.5 !py-1 text-[11px]" href={exportHref} download>
+    <JobWorkspace
+      title="Raw data"
+      subtitle={subtitle}
+      actions={
+        <a className="btn-secondary shrink-0 !px-3 !py-1.5 text-xs" href={exportHref} download>
           {dateActive ? "CSV (filtered)" : "Download CSV"}
         </a>
-      </div>
-
-      {loading && !data && (
-        <div className="flex items-center gap-2 text-sm text-stone-500">
-          <Spinner className="h-4 w-4" /> Loading rows…
-        </div>
-      )}
-      {!loading && error && !data && <ErrorState title="Data preview unavailable" message={error} />}
-
-      {data && (
-        <>
+      }
+      chromeExtra={
+        data ? (
           <div
             data-tour="raw-data-filters"
-            className="flex shrink-0 flex-wrap items-end gap-1.5 rounded-xl border border-stone-200/90 bg-white/90 px-2.5 py-1.5 dark:border-stone-800 dark:bg-stone-900/70"
+            className="flex flex-wrap items-end gap-2 border-t border-[color:var(--pic-border-subtle)] bg-[color:var(--pic-surface-inset)] px-3 py-2.5 sm:px-4"
           >
             <label className="min-w-[9rem] flex-1 sm:max-w-[12rem]">
               <span className="label mb-0 text-[10px]">From</span>
               <input
                 type="datetime-local"
-                className="input !py-1 text-[11px]"
+                className="input !py-1.5 text-[11px]"
                 value={startInput}
                 onChange={(e) => setStartInput(e.target.value)}
                 max={endInput || undefined}
@@ -175,22 +160,22 @@ export function DataPage() {
               <span className="label mb-0 text-[10px]">To</span>
               <input
                 type="datetime-local"
-                className="input !py-1 text-[11px]"
+                className="input !py-1.5 text-[11px]"
                 value={endInput}
                 onChange={(e) => setEndInput(e.target.value)}
                 min={startInput || undefined}
               />
             </label>
-            <button type="button" className="btn-primary !py-1 text-[11px]" onClick={applyDates} disabled={loading}>
+            <button type="button" className="btn-primary !py-1.5 text-[11px]" onClick={applyDates} disabled={loading}>
               Apply
             </button>
-            <button type="button" className="btn-ghost !px-2 !py-1 text-[11px]" onClick={fullRange} disabled={loading}>
+            <button type="button" className="btn-ghost !px-2 !py-1.5 text-[11px]" onClick={fullRange} disabled={loading}>
               Full
             </button>
             <label className="min-w-[8rem] flex-1 sm:max-w-[11rem]">
               <span className="label mb-0 text-[10px]">Columns</span>
               <input
-                className="input !py-1 text-[11px]"
+                className="input !py-1.5 text-[11px]"
                 placeholder="Filter cols…"
                 value={columnFilter}
                 onChange={(e) => setColumnFilter(e.target.value)}
@@ -199,13 +184,13 @@ export function DataPage() {
             <label className="min-w-[8rem] flex-1 sm:max-w-[11rem]">
               <span className="label mb-0 text-[10px]">Search</span>
               <input
-                className="input !py-1 text-[11px]"
+                className="input !py-1.5 text-[11px]"
                 placeholder="Cell text…"
                 value={valueSearch}
                 onChange={(e) => setValueSearch(e.target.value)}
               />
             </label>
-            <label className="flex cursor-pointer items-center gap-1.5 pb-1 text-[11px] text-stone-600 dark:text-stone-300">
+            <label className="flex cursor-pointer items-center gap-1.5 pb-1.5 text-[11px] text-[color:var(--pic-text-secondary)]">
               <input type="checkbox" checked={hideEmpty} onChange={(e) => setHideEmpty(e.target.checked)} />
               Hide empty
             </label>
@@ -215,9 +200,25 @@ export function DataPage() {
               </p>
             )}
           </div>
+        ) : null
+      }
+      flushMain
+    >
+      {loading && !data && (
+        <div className="flex items-center gap-2 p-6 text-sm text-[color:var(--pic-text-muted)]">
+          <Spinner className="h-4 w-4" /> Loading rows…
+        </div>
+      )}
+      {!loading && error && !data && (
+        <div className="p-4">
+          <ErrorState title="Data preview unavailable" message={error} />
+        </div>
+      )}
 
-          <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 px-0.5">
-            <p className="text-[11px] text-stone-600 dark:text-stone-300">
+      {data && (
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[color:var(--pic-border-subtle)] px-4 py-2">
+            <p className="text-[11px] text-[color:var(--pic-text-secondary)]">
               {data.total_rows === 0 ? (
                 <>No rows{dateActive ? " in this date range" : ""}</>
               ) : (
@@ -227,23 +228,23 @@ export function DataPage() {
                   <span className="font-semibold tabular-nums">{data.total_rows.toLocaleString()}</span>
                   {dateActive ? " in range" : ""}
                   {dateActive && data.unfiltered_rows != null && (
-                    <span className="text-stone-400"> · {data.unfiltered_rows.toLocaleString()} total</span>
+                    <span className="text-[color:var(--pic-text-muted)]"> · {data.unfiltered_rows.toLocaleString()} total</span>
                   )}
                 </>
               )}
-              <span className="text-stone-400">
+              <span className="text-[color:var(--pic-text-muted)]">
                 {" "}
                 · {visibleCols.length}/{data.columns.length} cols
               </span>
               {debouncedSearch && (
-                <span className="text-stone-400"> · {visibleRows.length} match</span>
+                <span className="text-[color:var(--pic-text-muted)]"> · {visibleRows.length} match</span>
               )}
-              {loading && <span className="ml-1 text-stone-400">Updating…</span>}
+              {loading && <span className="ml-1 text-[color:var(--pic-text-muted)]">Updating…</span>}
             </p>
-            <div className="flex gap-1.5">
+            <div className="flex gap-2">
               <button
                 type="button"
-                className="btn-secondary !px-2 !py-0.5 text-[11px]"
+                className="btn-secondary !px-2.5 !py-1 text-[11px]"
                 disabled={offset === 0 || loading}
                 onClick={() => setOffset((o) => Math.max(0, o - PAGE))}
               >
@@ -251,7 +252,7 @@ export function DataPage() {
               </button>
               <button
                 type="button"
-                className="btn-secondary !px-2 !py-0.5 text-[11px]"
+                className="btn-secondary !px-2.5 !py-1 text-[11px]"
                 disabled={offset + PAGE >= data.total_rows || loading}
                 onClick={() => setOffset((o) => o + PAGE)}
               >
@@ -261,9 +262,11 @@ export function DataPage() {
           </div>
 
           {visibleCols.length === 0 ? (
-            <p className="text-sm text-stone-500">No columns to show. Adjust filters or uncheck “Hide empty”.</p>
+            <p className="p-4 text-sm text-[color:var(--pic-text-muted)]">
+              No columns to show. Adjust filters or uncheck “Hide empty”.
+            </p>
           ) : (
-            <div className="data-table-shell min-h-0 flex-1 !max-h-none !rounded-xl">
+            <div className="min-h-0 flex-1 overflow-auto">
               <table className="data-table !min-w-[480px] text-[11px]">
                 <thead className="sticky top-0 z-10">
                   <tr>
@@ -281,7 +284,7 @@ export function DataPage() {
                 <tbody>
                   {visibleRows.length === 0 ? (
                     <tr>
-                      <td colSpan={visibleCols.length} className="px-3 py-5 text-center text-stone-400">
+                      <td colSpan={visibleCols.length} className="px-3 py-5 text-center text-[color:var(--pic-text-muted)]">
                         {dateActive
                           ? "No rows in this date range for the current page filters."
                           : "No rows on this page match the value search."}
@@ -291,7 +294,7 @@ export function DataPage() {
                     visibleRows.map((row, ri) => (
                       <tr
                         key={ri}
-                        className="border-b border-stone-100 odd:bg-white even:bg-stone-50/70 hover:bg-brand-50/40 dark:border-stone-800 dark:odd:bg-stone-950/40 dark:even:bg-stone-900/40 dark:hover:bg-stone-800/50"
+                        className="border-b border-[color:var(--pic-border-subtle)] odd:bg-[color:var(--pic-surface-raised)] even:bg-[color:var(--pic-surface-inset)] hover:bg-brand-50/40 dark:hover:bg-stone-800/50"
                       >
                         {visibleCols.map((c) => {
                           const val = row[c.index];
@@ -299,8 +302,8 @@ export function DataPage() {
                           return (
                             <td
                               key={c.name}
-                              className={`whitespace-nowrap !px-2 !py-0.5 font-mono text-[10px] tabular-nums text-stone-700 dark:text-stone-300 ${
-                                isTsCol(c.name) ? "text-stone-800 dark:text-stone-100" : "max-w-[10rem] truncate"
+                              className={`whitespace-nowrap !px-2 !py-0.5 font-mono text-[10px] tabular-nums text-[color:var(--pic-text-secondary)] ${
+                                isTsCol(c.name) ? "text-[color:var(--pic-text)]" : "max-w-[10rem] truncate"
                               }`}
                               title={empty ? undefined : String(val)}
                             >
@@ -319,8 +322,8 @@ export function DataPage() {
               </table>
             </div>
           )}
-        </>
+        </div>
       )}
-    </div>
+    </JobWorkspace>
   );
 }

@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ApiError, getArchitectureView } from "@/api/client";
-import { JobNav } from "@/components/JobNav";
+import { JobWorkspace } from "@/components/JobWorkspace";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { InfoBanner } from "@/components/ui/InfoBanner";
-import { PageHeader } from "@/components/ui/PageHeader";
 import { SectionPanel } from "@/components/ui/SectionPanel";
 import { Spinner } from "@/components/ui/Spinner";
 import { equipmentBadgeLabel } from "@/lib/equipmentStructure";
@@ -51,17 +50,14 @@ export function ArchitecturePage() {
   if (!jobId) return null;
 
   return (
-    <div className="tool-enter" data-tour="architecture">
-      <JobNav />
-      <PageHeader
-        className="mb-4"
-        eyebrow="Plant structure"
-        title="Plant architecture"
-        description="Inverter → SCB/SMB → strings as configured during setup."
-      />
-
+    <JobWorkspace
+      title="Plant architecture"
+      subtitle="Inverter → SCB/SMB → strings as configured during setup."
+      titleTour="architecture"
+    >
+      <div className="job-pane space-y-4 pb-6">
       {loading && (
-        <div className="flex items-center gap-2 text-sm text-stone-500">
+        <div className="flex items-center gap-2 text-sm text-[color:var(--pic-text-muted)]">
           <Spinner className="h-4 w-4" /> Loading…
         </div>
       )}
@@ -74,19 +70,19 @@ export function ArchitecturePage() {
       )}
       {!loading && data && (
         <>
-          <div className="mb-4 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div className="stat-tile">
-              <p className="text-xs font-medium text-stone-500">Plant</p>
-              <p className="mt-1.5 text-sm font-semibold text-stone-900 dark:text-stone-50">{data.plant_name || "—"}</p>
+              <p className="text-xs font-medium text-[color:var(--pic-text-muted)]">Plant</p>
+              <p className="mt-1.5 text-sm font-semibold text-[color:var(--pic-text)]">{data.plant_name || "—"}</p>
             </div>
             <div className="stat-tile">
-              <p className="text-xs font-medium text-stone-500">Inverters</p>
-              <p className="mt-1 font-display text-xl font-semibold tabular-nums text-stone-900 dark:text-stone-50">
+              <p className="text-xs font-medium text-[color:var(--pic-text-muted)]">Inverters</p>
+              <p className="mt-1 font-display text-xl font-semibold tabular-nums text-[color:var(--pic-text)]">
                 {data.summary.inverter_count}
               </p>
             </div>
             <div className="stat-tile">
-              <p className="text-xs font-medium text-stone-500">SCBs / SMBs</p>
+              <p className="text-xs font-medium text-[color:var(--pic-text-muted)]">SCBs / SMBs</p>
               <p className="mt-1 font-display text-xl font-semibold tabular-nums text-stone-900 dark:text-stone-50">
                 {data.summary.scb_count}
               </p>
@@ -180,13 +176,14 @@ export function ArchitecturePage() {
                   </details>
                 ))}
                 {filtered.length === 0 && (
-                  <p className="text-sm text-stone-500">No inverters match “{filter}”.</p>
+                  <p className="text-sm text-[color:var(--pic-text-muted)]">No inverters match “{filter}”.</p>
                 )}
               </div>
             </>
           )}
         </>
       )}
-    </div>
+      </div>
+    </JobWorkspace>
   );
 }

@@ -24,7 +24,7 @@ export function StepIndicator({
   jobId?: string | null;
 }) {
   return (
-    <ol className="mb-6 flex items-center gap-1.5 pb-1">
+    <ol className="flex items-center gap-2 rounded-pic-xl border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] px-3 py-2.5 shadow-pic sm:px-4">
       {STEPS.map((step, idx) => {
         const stepNum = idx + 1;
         const isDone = stepNum < current;
@@ -42,8 +42,8 @@ export function StepIndicator({
               "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold transition-all duration-200",
               isDone && "bg-accent-600 text-white shadow-sm shadow-accent-600/25",
               isActive &&
-                "bg-brand-600 text-white shadow-sm shadow-brand-600/30 ring-2 ring-brand-400/35 ring-offset-2 ring-offset-stone-50 dark:ring-offset-stone-950",
-              !isDone && !isActive && "border border-stone-300/90 text-stone-400 dark:border-stone-600",
+                "bg-brand-600 text-white shadow-sm shadow-brand-600/30 ring-2 ring-brand-400/35 ring-offset-2 ring-offset-[color:var(--pic-surface-raised)]",
+              !isDone && !isActive && "border border-[color:var(--pic-border-strong)] text-[color:var(--pic-text-muted)]",
               linkHref && "group-hover:ring-2 group-hover:ring-brand-400/40",
             )}
           >
@@ -56,10 +56,10 @@ export function StepIndicator({
             className={clsx(
               "hidden text-xs font-semibold sm:inline",
               isActive
-                ? "text-stone-900 dark:text-stone-50"
+                ? "text-[color:var(--pic-text)]"
                 : isDone || earlySwap
                   ? "text-accent-700 dark:text-accent-400"
-                  : "text-stone-400",
+                  : "text-[color:var(--pic-text-muted)]",
               linkHref && "group-hover:underline",
             )}
           >
@@ -68,18 +68,18 @@ export function StepIndicator({
         );
 
         return (
-          <li key={step} className="flex flex-1 items-center gap-1.5">
+          <li key={step} className="flex flex-1 items-center gap-2">
             {linkHref ? (
               <Link
                 to={linkHref}
-                className="group flex items-center gap-1.5 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-brand-400/50"
+                className="group flex items-center gap-2 rounded-pic outline-none focus-visible:ring-2 focus-visible:ring-brand-400/50"
                 title={stepNum === 1 ? "Replace files / back to upload" : `Go to ${step}`}
               >
                 {circle}
                 {label}
               </Link>
             ) : (
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-2">
                 {circle}
                 {label}
               </div>
@@ -88,7 +88,7 @@ export function StepIndicator({
               <div
                 className={clsx(
                   "mx-0.5 h-px flex-1 transition-colors",
-                  isDone ? "bg-accent-400/70 dark:bg-accent-700/60" : "bg-stone-200 dark:bg-stone-800",
+                  isDone ? "bg-accent-400/70 dark:bg-accent-700/60" : "bg-[color:var(--pic-border)]",
                 )}
               />
             )}

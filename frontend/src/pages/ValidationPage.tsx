@@ -219,10 +219,9 @@ export function ValidationPage() {
   };
 
   return (
-    <div className="tool-enter mx-auto w-full max-w-3xl pb-8">
+    <div className="tool-enter flow-shell flow-stack pb-8">
       <StepIndicator current={3} jobId={jobId} />
       <PageHeader
-        className="mb-5"
         eyebrow="Gate before analysis"
         title="Data validation"
         description="Checked your upload for issues that could affect analysis accuracy. The upload is retained so you can fix mapping and retry without starting over."

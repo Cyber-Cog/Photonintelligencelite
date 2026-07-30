@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-/** Page title row: clear hierarchy, Outfit display type, room for actions. */
+/** Page title row for flow pages (Upload / Setup / Validate) — Outfit display, room for actions. */
 export function PageHeader({
   eyebrow,
   title,
@@ -15,18 +15,18 @@ export function PageHeader({
   className?: string;
 }) {
   return (
-    <div className={`flex flex-wrap items-start justify-between gap-3 ${className}`}>
+    <div className={`flex flex-wrap items-start justify-between gap-4 ${className}`}>
       <div className="min-w-0">
         {eyebrow ? (
-          <div className="mb-1.5">
+          <div className="mb-2">
             {typeof eyebrow === "string" ? <p className="tool-eyebrow">{eyebrow}</p> : eyebrow}
           </div>
         ) : null}
-        <h2 className="font-display text-xl font-semibold tracking-tight text-stone-900 dark:text-stone-50 sm:text-2xl">
+        <h2 className="font-display text-xl font-semibold tracking-tight text-[color:var(--pic-text)] sm:text-2xl">
           {title}
         </h2>
         {description ? (
-          <div className="mt-1.5 max-w-2xl text-sm leading-relaxed text-stone-500 dark:text-stone-400">
+          <div className="mt-2 max-w-2xl text-sm leading-relaxed text-[color:var(--pic-text-muted)]">
             {description}
           </div>
         ) : null}

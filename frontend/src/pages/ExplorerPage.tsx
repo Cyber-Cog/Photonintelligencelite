@@ -7,7 +7,7 @@ import {
   getExplorerTimeseries,
 } from "@/api/client";
 import { SyncedDualCharts, classifySignal } from "@/components/explorer/SyncedDualCharts";
-import { JobNav } from "@/components/JobNav";
+import { JobWorkspace } from "@/components/JobWorkspace";
 import { Spinner } from "@/components/ui/Spinner";
 import { useTheme } from "@/context/ThemeContext";
 import type { TimeseriesResponse } from "@/types";
@@ -18,9 +18,6 @@ const LEVELS = [
   { id: "string", label: "String" },
   { id: "wms", label: "WMS" },
 ] as const;
-
-/** App chrome: header 3.5rem + main py + footer — tight so charts dominate. */
-const VIEWPORT_SHELL = "h-[calc(100dvh-8.75rem)] max-h-[calc(100dvh-8.75rem)]";
 
 function useDebounced<T>(value: T, ms = 220): T {
   const [debounced, setDebounced] = useState(value);
@@ -180,97 +177,89 @@ export function ExplorerPage() {
   if (!jobId) return null;
 
   return (
-    <div className={`tool-enter flex ${VIEWPORT_SHELL} flex-col gap-1.5 overflow-y-auto xl:overflow-hidden`}>
-      <div className="flex shrink-0 flex-wrap items-end justify-between gap-2 [&_nav]:mb-0">
-        <div className="min-w-0">
-          <JobNav />
-          <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0" data-tour="signal-explorer">
-            <h2 className="font-display text-base font-semibold tracking-tight text-stone-900 dark:text-stone-50">
-              Signal Explorer
-            </h2>
-            <p className="text-[11px] text-stone-500">
-              Dual Current · Voltage when both selected · synced zoom
-            </p>
+    <JobWorkspace
+      title="Signal Explorer"
+      titleTour="signal-explorer"
+      subtitle="Dual Current · Voltage when both selected · synced zoom"
+      chromeExtra={
+        <div className="flex flex-wrap items-end gap-2 border-t border-[color:var(--pic-border-subtle)] bg-[color:var(--pic-surface-inset)] px-3 py-2.5 sm:px-4">
+          <label className="min-w-[9rem] flex-1 sm:max-w-[12rem]">
+            <span className="label mb-0 text-[10px]">From</span>
+            <input
+              type="datetime-local"
+              className="input !py-1.5 text-[11px]"
+              value={startInput}
+              onChange={(e) => setStartInput(e.target.value)}
+            />
+          </label>
+          <label className="min-w-[9rem] flex-1 sm:max-w-[12rem]">
+            <span className="label mb-0 text-[10px]">To</span>
+            <input
+              type="datetime-local"
+              className="input !py-1.5 text-[11px]"
+              value={endInput}
+              onChange={(e) => setEndInput(e.target.value)}
+            />
+          </label>
+          <button
+            type="button"
+            className="btn-ghost !px-2 !py-1.5 text-[11px]"
+            onClick={() => {
+              setStartInput("");
+              setEndInput("");
+            }}
+          >
+            Full range
+          </button>
+          {(hasCurrentHere || hasVoltageHere || knownSigLabels["dc_current_a"] || knownSigLabels["dc_voltage_v"]) && (
+            <button
+              type="button"
+              className="btn-ghost !px-2 !py-1.5 text-[11px]"
+              onClick={pairCurrentVoltage}
+              title="Add DC Current and DC Voltage to selection"
+            >
+              + I / V pair
+            </button>
+          )}
+          {(canDual || plottedDual) && (
+            <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-[color:var(--pic-text-secondary)]">
+              <input
+                type="checkbox"
+                checked={forceSingle}
+                onChange={(e) => setForceSingle(e.target.checked)}
+              />
+              Single chart
+            </label>
+          )}
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className="btn-primary !py-1.5 text-[11px]"
+              onClick={plot}
+              disabled={loading || !canPlot}
+              title={!canPlot ? "Select at least one equipment and one signal" : undefined}
+            >
+              {loading ? <Spinner className="h-3 w-3" /> : null}
+              Plot
+            </button>
           </div>
         </div>
-      </div>
-
-      {/* Compact range + plot controls */}
-      <div className="flex shrink-0 flex-wrap items-end gap-1.5 rounded-xl border border-stone-200/90 bg-gradient-to-br from-white/95 to-stone-50/80 px-2.5 py-1.5 shadow-sm shadow-stone-900/[0.03] dark:border-stone-800 dark:from-stone-900/70 dark:to-stone-950/50 dark:shadow-none">
-        <label className="min-w-[9rem] flex-1 sm:max-w-[12rem]">
-          <span className="label mb-0 text-[10px]">From</span>
-          <input
-            type="datetime-local"
-            className="input !py-1 text-[11px]"
-            value={startInput}
-            onChange={(e) => setStartInput(e.target.value)}
-          />
-        </label>
-        <label className="min-w-[9rem] flex-1 sm:max-w-[12rem]">
-          <span className="label mb-0 text-[10px]">To</span>
-          <input
-            type="datetime-local"
-            className="input !py-1 text-[11px]"
-            value={endInput}
-            onChange={(e) => setEndInput(e.target.value)}
-          />
-        </label>
-        <button
-          type="button"
-          className="btn-ghost !px-2 !py-1 text-[11px]"
-          onClick={() => {
-            setStartInput("");
-            setEndInput("");
-          }}
-        >
-          Full range
-        </button>
-        {(hasCurrentHere || hasVoltageHere || knownSigLabels["dc_current_a"] || knownSigLabels["dc_voltage_v"]) && (
-          <button
-            type="button"
-            className="btn-ghost !px-2 !py-1 text-[11px]"
-            onClick={pairCurrentVoltage}
-            title="Add DC Current and DC Voltage to selection"
-          >
-            + I / V pair
-          </button>
-        )}
-        {(canDual || plottedDual) && (
-          <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-stone-600 dark:text-stone-300">
-            <input
-              type="checkbox"
-              checked={forceSingle}
-              onChange={(e) => setForceSingle(e.target.checked)}
-            />
-            Single chart
-          </label>
-        )}
-        <div className="ml-auto flex flex-wrap items-center gap-1.5">
-          <button
-            type="button"
-            className="btn-primary !py-1 text-[11px]"
-            onClick={plot}
-            disabled={loading || !canPlot}
-            title={!canPlot ? "Select at least one equipment and one signal" : undefined}
-          >
-            {loading ? <Spinner className="h-3 w-3" /> : null}
-            Plot
-          </button>
-        </div>
-      </div>
-
-      <div className="grid min-h-0 flex-1 gap-1.5 overflow-hidden xl:grid-cols-[minmax(0,15.5rem)_minmax(0,1fr)]">
+      }
+      flushMain
+      className="xl:overflow-hidden"
+    >
+      <div className="grid min-h-0 flex-1 gap-0 overflow-y-auto xl:grid-cols-[minmax(0,15.5rem)_minmax(0,1fr)] xl:overflow-hidden">
         {/* Dense picker column */}
-        <div className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-stone-200/90 bg-white/95 shadow-sm shadow-stone-900/[0.03] dark:border-stone-800 dark:bg-stone-900/70 dark:shadow-none">
-          <div className="flex shrink-0 flex-wrap gap-0 border-b border-stone-200/80 dark:border-stone-800">
+        <div className="flex min-h-0 flex-col overflow-hidden border-b border-[color:var(--pic-border-subtle)] xl:border-b-0 xl:border-r">
+          <div className="flex shrink-0 flex-wrap gap-0 border-b border-[color:var(--pic-border-subtle)]">
             {LEVELS.map((l) => (
               <button
                 key={l.id}
                 type="button"
-                className={`px-2 py-1 text-[11px] font-semibold transition-all duration-150 ${
+                className={`px-2.5 py-2 text-[11px] font-semibold transition-all duration-150 ${
                   browseLevel === l.id
-                    ? "border-b-2 border-brand-600 text-stone-900 dark:border-brand-400 dark:text-stone-50"
-                    : "border-b-2 border-transparent text-stone-500 hover:text-stone-800 dark:hover:text-stone-200"
+                    ? "border-b-2 border-brand-600 text-[color:var(--pic-text)] dark:border-brand-400"
+                    : "border-b-2 border-transparent text-[color:var(--pic-text-muted)] hover:text-[color:var(--pic-text)]"
                 }`}
                 onClick={() => setBrowseLevel(l.id)}
               >
@@ -423,9 +412,9 @@ export function ExplorerPage() {
         </div>
 
         {/* Plot column — fills remaining height */}
-        <div className="flex min-h-0 min-w-0 flex-col overflow-hidden">
-          {note && <p className="mb-0.5 shrink-0 text-[11px] text-amber-700 dark:text-amber-400">{note}</p>}
-          {error && <p className="mb-0.5 shrink-0 text-[11px] text-rose-600">{error}</p>}
+        <div className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-[color:var(--pic-surface-inset)] p-3">
+          {note && <p className="mb-1 shrink-0 text-[11px] text-amber-700 dark:text-amber-400">{note}</p>}
+          {error && <p className="mb-1 shrink-0 text-[11px] text-rose-600">{error}</p>}
 
           {hasFigure && series ? (
             <SyncedDualCharts
@@ -435,16 +424,16 @@ export function ExplorerPage() {
               forceSingle={forceSingle}
             />
           ) : (
-            <div className="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-dashed border-stone-300/90 bg-gradient-to-br from-stone-50/80 to-brand-50/20 px-4 text-center dark:border-stone-600 dark:bg-stone-900/80 dark:bg-none">
-              <p className="max-w-sm text-[11px] leading-relaxed text-stone-500">
+            <div className="flex min-h-0 flex-1 items-center justify-center rounded-pic-lg border border-dashed border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] px-4 text-center">
+              <p className="max-w-sm text-[11px] leading-relaxed text-[color:var(--pic-text-muted)]">
                 Select equipment + signals (try{" "}
-                <span className="font-semibold text-stone-700 dark:text-stone-200">+ I / V pair</span>
-                ), then <span className="font-semibold text-stone-700 dark:text-stone-200">Plot</span>.
+                <span className="font-semibold text-[color:var(--pic-text)]">+ I / V pair</span>
+                ), then <span className="font-semibold text-[color:var(--pic-text)]">Plot</span>.
               </p>
             </div>
           )}
         </div>
       </div>
-    </div>
+    </JobWorkspace>
   );
 }

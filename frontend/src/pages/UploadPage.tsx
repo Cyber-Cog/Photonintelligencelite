@@ -268,10 +268,9 @@ export function UploadPage() {
   );
 
   return (
-    <div className="tool-enter mx-auto w-full max-w-2xl">
+    <div className="tool-enter flow-shell flow-stack">
       <StepIndicator current={1} jobId={replaceJobId} />
       <PageHeader
-        className="mb-4"
         eyebrow={replaceJobId ? "Replace files" : "Start analysis"}
         title={replaceJobId ? "Replace SCADA reports" : "Upload SCADA reports"}
         description={
@@ -295,31 +294,31 @@ export function UploadPage() {
       />
 
       {replaceJobId ? (
-        <InfoBanner className="mb-4" tone="info" title="Replacing files on this job">
+        <InfoBanner tone="info" title="Replacing files on this job">
           Plant ratings and architecture are kept. Column mapping is rematched for headers that still exist; new
           columns show up in Setup for you to map.
         </InfoBanner>
       ) : null}
 
       {!path && !replaceJobId && (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2">
           <button
             type="button"
             onClick={() => choosePath("template")}
-            className="group flex flex-col rounded-2xl border border-brand-200/80 bg-gradient-to-br from-brand-50/80 to-white p-4 text-left shadow-sm shadow-stone-900/[0.02] transition hover:border-brand-400 hover:shadow-md dark:border-brand-700/45 dark:bg-stone-900 dark:bg-none dark:shadow-none dark:hover:border-brand-500"
+            className="group flex flex-col rounded-pic-xl border border-brand-200/80 bg-gradient-to-br from-brand-50/90 to-[color:var(--pic-surface-raised)] p-5 text-left shadow-pic transition hover:border-brand-400 hover:shadow-pic-md dark:border-brand-700/45 dark:from-brand-950/30 dark:to-[color:var(--pic-surface-raised)] dark:hover:border-brand-500"
           >
             <span className="font-display text-[10px] font-semibold uppercase tracking-[0.14em] text-brand-700 dark:text-brand-300">
               Recommended
             </span>
-            <span className="mt-2 font-display text-base font-semibold tracking-tight text-stone-900 dark:text-stone-50">
+            <span className="mt-2 font-display text-base font-semibold tracking-tight text-[color:var(--pic-text)]">
               Use the Complete Analysis template
             </span>
-            <span className="mt-1.5 text-sm leading-relaxed text-stone-600 dark:text-stone-400">
+            <span className="mt-2 text-sm leading-relaxed text-[color:var(--pic-text-muted)]">
               Best for full fault coverage. Download the pack, fill SCADA + Architecture sheets, then upload —
               hierarchy and capacities import into Setup automatically. If you upload a different format, we detect
               it and send you to normal mapping.
             </span>
-            <span className="mt-4 text-xs font-semibold text-brand-700 group-hover:underline dark:text-brand-300">
+            <span className="mt-5 text-xs font-semibold text-brand-700 group-hover:underline dark:text-brand-300">
               Continue with template →
             </span>
           </button>
@@ -327,18 +326,18 @@ export function UploadPage() {
           <button
             type="button"
             onClick={() => choosePath("own")}
-            className="group flex flex-col rounded-2xl border border-stone-200/90 bg-stone-50/90 p-4 text-left shadow-sm shadow-stone-900/[0.02] transition hover:border-stone-400 hover:shadow-md dark:border-stone-600 dark:bg-stone-900 dark:shadow-none dark:hover:border-stone-500"
+            className="group flex flex-col rounded-pic-xl border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-muted)] p-5 text-left shadow-pic transition hover:border-[color:var(--pic-border-strong)] hover:shadow-pic-md"
           >
-            <span className="font-display text-[10px] font-semibold uppercase tracking-[0.14em] text-stone-500 dark:text-stone-400">
+            <span className="font-display text-[10px] font-semibold uppercase tracking-[0.14em] text-[color:var(--pic-text-muted)]">
               Alternate
             </span>
-            <span className="mt-2 font-display text-base font-semibold tracking-tight text-stone-900 dark:text-stone-50">
+            <span className="mt-2 font-display text-base font-semibold tracking-tight text-[color:var(--pic-text)]">
               Upload your own SCADA format
             </span>
-            <span className="mt-1.5 text-sm leading-relaxed text-stone-600 dark:text-stone-400">
+            <span className="mt-2 text-sm leading-relaxed text-[color:var(--pic-text-muted)]">
               Any CSV or Excel export. Map columns to PIC Lite fields in Setup.
             </span>
-            <span className="mt-4 text-xs font-semibold text-stone-700 group-hover:underline dark:text-stone-300">
+            <span className="mt-5 text-xs font-semibold text-[color:var(--pic-text-secondary)] group-hover:underline">
               Continue with own files →
             </span>
           </button>

@@ -112,14 +112,15 @@ export function Layout({ children }: { children: ReactNode }) {
   const location = useLocation();
   const isLanding = location.pathname === "/";
   const isProcessing = /\/jobs\/[^/]+\/processing\/?$/.test(location.pathname);
-  const shellMax = isProcessing ? "max-w-[90rem]" : "max-w-6xl";
+  const isJobView = /\/jobs\/[^/]+\/(dashboard|data|architecture|explore)\/?$/.test(location.pathname);
+  const shellMax = isProcessing || isJobView ? "max-w-[90rem]" : "max-w-6xl";
 
   useEffect(() => {
     rememberAppPath(`${location.pathname}${location.search}${location.hash}`);
   }, [location.pathname, location.search, location.hash]);
 
   return (
-    <div className="relative flex min-h-screen flex-col bg-stone-50 text-stone-900 dark:bg-stone-950 dark:text-stone-100">
+    <div className="relative flex min-h-screen flex-col bg-[color:var(--pic-surface)] text-[color:var(--pic-text)]">
       {!isLanding && <div className="hero-mesh" aria-hidden />}
       {connecting ? (
         <div
@@ -185,7 +186,7 @@ export function Layout({ children }: { children: ReactNode }) {
         className={
           isLanding
             ? "relative flex w-full flex-1 flex-col"
-            : isProcessing
+            : isProcessing || isJobView
               ? `relative mx-auto flex w-full ${shellMax} min-h-0 flex-1 flex-col px-3 py-3 sm:px-5`
               : `relative mx-auto flex w-full ${shellMax} flex-1 flex-col px-4 py-5 sm:px-6`
         }

@@ -279,30 +279,30 @@ export function OwnerActionCenter({
 
   return (
     <section
-      className="overflow-hidden rounded-xl border border-stone-200/90 bg-white/95 dark:border-stone-700 dark:bg-stone-900"
+      className="overflow-hidden rounded-pic-lg border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] shadow-pic"
       role="region"
       aria-label="Owner action center"
       data-tour="owner-actions"
     >
-      <div className="h-0.5 w-full bg-gradient-to-r from-brand-400/80 via-accent-400/40 to-brand-500/15" aria-hidden />
+      <div className="panel-rule" aria-hidden />
 
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-stone-100 px-4 py-4 dark:border-stone-800 sm:px-5 sm:py-4">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[color:var(--pic-border-subtle)] px-4 py-4 sm:px-5">
         <div className="min-w-0">
           <p className="tool-eyebrow">Owner action centre</p>
           <h3
             className={`mt-1.5 font-display text-lg font-semibold tracking-tight sm:text-xl ${
-              model.healthy ? "text-accent-800 dark:text-accent-300" : "text-stone-900 dark:text-stone-50"
+              model.healthy ? "text-accent-800 dark:text-accent-300" : "text-[color:var(--pic-text)]"
             }`}
           >
             {model.headline}
           </h3>
-          <p className="mt-1.5 max-w-2xl text-xs leading-relaxed text-stone-500 dark:text-stone-400">
+          <p className="mt-1.5 max-w-2xl text-xs leading-relaxed text-[color:var(--pic-text-muted)]">
             {model.subline}
           </p>
         </div>
         {summaryChip ? (
           <span
-            className="shrink-0 rounded-lg border border-amber-200/80 bg-amber-50/90 px-2.5 py-1 text-[11px] font-semibold text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100"
+            className="status-chip status-chip-warn shrink-0"
             data-tour="owner-actions-summary"
           >
             {summaryChip}
@@ -311,12 +311,12 @@ export function OwnerActionCenter({
       </div>
 
       {model.cards.length === 0 ? (
-        <p className="px-4 py-8 text-center text-sm text-stone-500 dark:text-stone-400 sm:px-5">
+        <p className="px-4 py-8 text-center text-sm text-[color:var(--pic-text-muted)] sm:px-5">
           No owner actions for this run. Use Loss bridge and Diagnostics for detail.
         </p>
       ) : (
         <>
-          <div className="flex flex-wrap gap-1.5 border-b border-stone-100 px-4 py-2.5 dark:border-stone-800 sm:px-5">
+          <div className="flex flex-wrap gap-2 border-b border-[color:var(--pic-border-subtle)] px-4 py-2.5 sm:px-5">
             <FilterChip active={filter === "all"} label="All" count={counts.all} onClick={() => setFilter("all")} />
             <FilterChip active={filter === "high"} label="High" count={counts.high} onClick={() => setFilter("high")} />
             <FilterChip
@@ -329,9 +329,9 @@ export function OwnerActionCenter({
           </div>
 
           <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
-            <div className="max-h-[22rem] space-y-0.5 overflow-y-auto overscroll-contain border-b border-stone-100 p-2 dark:border-stone-800 lg:max-h-[26rem] lg:border-b-0 lg:border-r">
+            <div className="max-h-[22rem] space-y-0.5 overflow-y-auto overscroll-contain border-b border-[color:var(--pic-border-subtle)] p-2 lg:max-h-[26rem] lg:border-b-0 lg:border-r">
               {filtered.length === 0 ? (
-                <p className="px-2.5 py-6 text-center text-xs text-stone-500">No issues in this severity band.</p>
+                <p className="px-2.5 py-6 text-center text-xs text-[color:var(--pic-text-muted)]">No issues in this severity band.</p>
               ) : (
                 filtered.map((card) => (
                   <ActionListItem
@@ -344,7 +344,7 @@ export function OwnerActionCenter({
               )}
             </div>
 
-            <div className="min-h-[14rem] bg-stone-50/40 dark:bg-stone-950/25">
+            <div className="min-h-[14rem] bg-[color:var(--pic-surface-inset)]">
               {selected ? (
                 <ActionDetail
                   card={selected}
@@ -353,7 +353,7 @@ export function OwnerActionCenter({
                   onSection={onSection}
                 />
               ) : (
-                <p className="px-5 py-10 text-center text-sm text-stone-500">Select an issue to see detail.</p>
+                <p className="px-5 py-10 text-center text-sm text-[color:var(--pic-text-muted)]">Select an issue to see detail.</p>
               )}
             </div>
           </div>

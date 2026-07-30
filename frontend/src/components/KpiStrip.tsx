@@ -91,7 +91,7 @@ function KpiCell({ item, index }: { item: KpiStripItem; index: number }) {
 
   return (
     <div
-      className="kpi-card group relative min-w-0 overflow-hidden px-3 py-2 sm:px-3.5"
+      className="kpi-card group relative min-w-0 overflow-hidden px-3 py-2.5 sm:px-4"
       style={{ animationDelay: `${delay}ms` }}
     >
       <svg
@@ -105,11 +105,11 @@ function KpiCell({ item, index }: { item: KpiStripItem; index: number }) {
         {ICON_PATHS[icon]}
       </svg>
 
-      <p className="truncate text-[9px] font-semibold uppercase tracking-[0.12em] text-stone-500 dark:text-stone-400">
+      <p className="truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-[color:var(--pic-text-muted)]">
         {item.label}
       </p>
       <p
-        className={`mt-0.5 font-display text-lg font-bold leading-none tracking-tight tabular-nums sm:text-xl ${valueClass}`}
+        className={`mt-1 font-display text-lg font-bold leading-none tracking-tight tabular-nums sm:text-xl ${valueClass}`}
       >
         {display}
         {!unavailable && item.unit ? (
@@ -118,18 +118,18 @@ function KpiCell({ item, index }: { item: KpiStripItem; index: number }) {
           </span>
         ) : null}
       </p>
-      <div className={`mt-1 h-[2px] w-7 rounded-full ${rule} opacity-80`} aria-hidden />
+      <div className={`mt-1.5 h-[2px] w-7 rounded-full ${rule} opacity-80`} aria-hidden />
 
       {unavailable && item.missingHint && item.missingHref ? (
         <a
           href={item.missingHref}
-          className="mt-0.5 block truncate text-[10px] leading-snug text-amber-800 underline-offset-2 hover:underline dark:text-amber-200"
+          className="mt-1 block truncate text-[10px] leading-snug text-amber-800 underline-offset-2 hover:underline dark:text-amber-200"
           title={item.missingHint}
         >
           {item.missingHint}
         </a>
       ) : unavailable && item.missingHint ? (
-        <p className="mt-0.5 truncate text-[10px] leading-snug text-amber-800/90 dark:text-amber-200/90" title={item.missingHint}>
+        <p className="mt-1 truncate text-[10px] leading-snug text-amber-800/90 dark:text-amber-200/90" title={item.missingHint}>
           {item.missingHint}
         </p>
       ) : null}
@@ -138,23 +138,37 @@ function KpiCell({ item, index }: { item: KpiStripItem; index: number }) {
 }
 
 /**
- * Compact single-row plant KPI bar — sticky chrome for Results.
- * Dividers instead of per-card borders; amber/emerald tones preserved.
+ * Plant KPI bar — flush in job chrome (no nested card border).
  */
-export function KpiStrip({ items }: { items: KpiStripItem[] }) {
-  return (
+export function KpiStrip({ items, flush = false }: { items: KpiStripItem[]; flush?: boolean }) {
+  const grid = (
     <div
-      className="overflow-hidden rounded-xl border border-stone-200/90 bg-white/95 shadow-sm shadow-stone-900/[0.03] dark:border-stone-700 dark:bg-stone-900 dark:shadow-none"
+      className={`grid grid-cols-2 divide-x divide-y divide-[color:var(--pic-border-subtle)] sm:grid-cols-3 xl:grid-cols-6 xl:divide-y-0 ${
+        flush ? "" : ""
+      }`}
       data-tour="summary-kpis"
       role="group"
       aria-label="Plant KPIs"
     >
-      <div className="h-0.5 w-full bg-gradient-to-r from-brand-400/80 via-accent-400/50 to-brand-500/20 dark:from-brand-500/50 dark:via-accent-500/35 dark:to-brand-800/15" aria-hidden />
-      <div className="grid grid-cols-2 divide-x divide-y divide-stone-100 sm:grid-cols-3 xl:grid-cols-6 xl:divide-y-0 dark:divide-stone-800">
-        {items.map((item, i) => (
-          <KpiCell key={item.label} item={item} index={i} />
-        ))}
+      {items.map((item, i) => (
+        <KpiCell key={item.label} item={item} index={i} />
+      ))}
+    </div>
+  );
+
+  if (flush) {
+    return (
+      <div className="border-t border-[color:var(--pic-border-subtle)] bg-[color:var(--pic-surface-inset)]">
+        <div className="panel-rule" aria-hidden />
+        {grid}
       </div>
+    );
+  }
+
+  return (
+    <div className="overflow-hidden rounded-pic-lg border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] shadow-pic">
+      <div className="panel-rule" aria-hidden />
+      {grid}
     </div>
   );
 }
