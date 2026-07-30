@@ -28,20 +28,24 @@ def get_db() -> Generator[Session, None, None]:
 
 
 def _ensure_columns(table: str, alters: list[tuple[str, str]]) -> None:
-    """create_all does not alter existing tables — add columns if missing."""
+    """create_all does not alter existing tables — add columns if missing.
+
+    Uses SQLAlchemy inspection so SQLite (pytest) and Postgres (prod) both work.
+    ``information_schema.columns`` is Postgres-only and breaks local auth tests.
+    """
+    from sqlalchemy import inspect
+
+    inspector = inspect(engine)
+    try:
+        existing = {c["name"] for c in inspector.get_columns(table)}
+    except Exception:
+        existing = set()
     with engine.begin() as conn:
         for col, ddl in alters:
-            exists = conn.execute(
-                text(
-                    """
-                    SELECT 1 FROM information_schema.columns
-                    WHERE table_name = :table AND column_name = :col
-                    """
-                ),
-                {"table": table, "col": col},
-            ).scalar()
-            if not exists:
-                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}"))
+            if col in existing:
+                continue
+            conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}"))
+            existing.add(col)
 
 
 def _ensure_job_columns() -> None:

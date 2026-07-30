@@ -56,6 +56,10 @@ def run(context: AnalysisContext) -> ResultObject:
     if working.empty:
         return ResultObject.unavailable(ALGORITHM_ID, VERSION, "No string- or SCB-level current telemetry with a resolvable group was found.")
 
+    # Persistence is run-length on consecutive rows per unit — must be unit-major ordered.
+    # Time-major SCADA (all devices at t, then t+1) would otherwise shatter every run to length 1.
+    working = working.sort_values([unit_col, "timestamp_utc"]).reset_index(drop=True)
+
     group_median = working.groupby(["timestamp_utc", group_col])["dc_current_a"].median().rename("group_median").reset_index()
     working = working.merge(group_median, on=["timestamp_utc", group_col], how="left")
     working["deviation_frac"] = np.where(working["group_median"] > 0, (working["dc_current_a"] - working["group_median"]).abs() / working["group_median"], 0.0)
