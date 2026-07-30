@@ -83,6 +83,44 @@ def _is_garbage_header(name: str) -> bool:
     return not n or n.startswith("unnamed") or n.startswith("column_")
 
 
+def _format_ts_sample(value: object) -> str:
+    """Human-readable timestamp for sample_values (avoid numpy/pandas repr noise)."""
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return ""
+    try:
+        ts = pd.Timestamp(value)
+        if pd.isna(ts):
+            return str(value)
+        return ts.strftime("%Y-%m-%d %H:%M:%S")
+    except (ValueError, TypeError, OverflowError):
+        return str(value)
+
+
+def _duplicate_key_samples(
+    timestamps: pd.Series,
+    equipment_ids: pd.Series | None,
+    *,
+    limit: int = 5,
+) -> list[str]:
+    """Up to ``limit`` duplicate key examples with occurrence counts."""
+    frame = pd.DataFrame({"ts": timestamps.to_numpy(), "eq": (
+        equipment_ids.astype(str).str.strip().to_numpy()
+        if equipment_ids is not None
+        else [""] * len(timestamps)
+    )})
+    if equipment_ids is None:
+        counts = frame.groupby("ts", sort=False).size()
+        counts = counts[counts > 1].head(limit)
+        return [f"{_format_ts_sample(ts)} (×{int(n)})" for ts, n in counts.items()]
+
+    counts = frame.groupby(["ts", "eq"], sort=False).size().reset_index(name="n")
+    counts = counts[counts["n"] > 1].head(limit)
+    return [
+        f"{_format_ts_sample(row.ts)} + {row.eq} (×{int(row.n)})"
+        for row in counts.itertuples(index=False)
+    ]
+
+
 def validate_raw_frame(
     df: pd.DataFrame,
     timestamp_column: str,
@@ -90,6 +128,7 @@ def validate_raw_frame(
     numeric_columns: list[str],
     *,
     drop_unparseable_timestamps: bool = False,
+    equipment_id_column: str | None = None,
 ) -> ValidationReport:
     report = ValidationReport(
         row_count=len(df),
@@ -215,20 +254,67 @@ def validate_raw_frame(
             )
         )
 
-    valid_ts = ts_parsed.dropna()
-    n_duplicate_ts = int(valid_ts.duplicated().sum())
-    if n_duplicate_ts > 0:
-        report.add(
-            ValidationIssue(
-                code="duplicate_timestamps",
-                severity="warning",
-                message=f"{n_duplicate_ts} duplicate timestamp value(s) found.",
-                likely_cause="Overlapping export windows or multiple loggers writing the same clock tick.",
-                blocks_analysis=False,
-                affected_rows=n_duplicate_ts,
-                affected_columns=[timestamp_column],
+    valid_mask = ts_parsed.notna()
+    valid_ts = ts_parsed[valid_mask]
+    eq_col = equipment_id_column if equipment_id_column and equipment_id_column in df.columns else None
+    if eq_col is not None:
+        eq_series = df.loc[valid_mask, eq_col]
+        # Blank equipment IDs still count as a key — they collide with each other.
+        key_frame = pd.DataFrame({"ts": valid_ts.to_numpy(), "eq": eq_series.astype(str).str.strip().to_numpy()})
+        n_duplicate_ts = int(key_frame.duplicated().sum())
+        affected_cols = [timestamp_column, eq_col]
+        if n_duplicate_ts > 0:
+            samples = _duplicate_key_samples(valid_ts, eq_series)
+            report.add(
+                ValidationIssue(
+                    code="duplicate_timestamps",
+                    severity="warning",
+                    message=(
+                        f"Same time appears more than once for the same equipment "
+                        f"({n_duplicate_ts:,} extra row(s))."
+                    ),
+                    likely_cause=(
+                        "Overlapping export windows, or the same logger wrote the same equipment twice. "
+                        "Shared clock times across different equipment IDs are normal and are not flagged."
+                    ),
+                    blocks_analysis=False,
+                    affected_rows=n_duplicate_ts,
+                    affected_columns=affected_cols,
+                    sample_values=samples,
+                    remediation=(
+                        "Download parsed Excel to inspect the duplicate rows. "
+                        "Analysis keeps one reading per equipment per time (first wins at merge; "
+                        "same-interval values are averaged). You can continue anyway."
+                    ),
+                )
             )
-        )
+    else:
+        n_duplicate_ts = int(valid_ts.duplicated().sum())
+        if n_duplicate_ts > 0:
+            samples = _duplicate_key_samples(valid_ts, None)
+            report.add(
+                ValidationIssue(
+                    code="duplicate_timestamps",
+                    severity="warning",
+                    message=(
+                        f"Same timestamp appears more than once "
+                        f"({n_duplicate_ts:,} extra row(s))."
+                    ),
+                    likely_cause=(
+                        "Overlapping export windows, multiple loggers on the same clock tick, "
+                        "or long-format SCADA without an Equipment ID column mapped."
+                    ),
+                    blocks_analysis=False,
+                    affected_rows=n_duplicate_ts,
+                    affected_columns=[timestamp_column],
+                    sample_values=samples,
+                    remediation=(
+                        "Download parsed Excel to inspect. If this is multi-equipment data, "
+                        "map an Equipment ID column in Setup. Otherwise keep one row per time. "
+                        "You can continue anyway — first reading per timestamp is kept when no ID is available."
+                    ),
+                )
+            )
 
     if len(valid_ts) > 1 and not valid_ts.is_monotonic_increasing:
         n_unsorted = int((valid_ts.diff().dropna() < pd.Timedelta(0)).sum())

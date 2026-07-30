@@ -19,7 +19,26 @@ import { ALGORITHM_FIELD_HINTS } from "@/lib/canonicalHints";
 import { fixHref } from "@/lib/missingReasons";
 import type { ValidationIssue, ValidationResponse } from "@/types";
 
-function issueFixHref(jobId: string, issue: ValidationIssue): string {
+/** Issue codes where Setup mapping cannot help — inspect data / continue instead. */
+const DATA_INSPECT_CODES = new Set([
+  "duplicate_timestamps",
+  "unsorted_timestamps",
+  "missing_timestamps",
+  "corrupted_rows",
+  "non_numeric_values",
+  "negative_values_where_impossible",
+]);
+
+type IssueCta =
+  | { kind: "setup"; href: string; label: string }
+  | { kind: "download_parsed"; label: string }
+  | { kind: "none" };
+
+function issueCta(jobId: string, issue: ValidationIssue): IssueCta {
+  if (DATA_INSPECT_CODES.has(issue.code)) {
+    return { kind: "download_parsed", label: "Download parsed Excel" };
+  }
+
   const col = issue.affected_columns[0];
   const plantCapacityCodes = new Set([
     "inverter_rating_mismatch",
@@ -41,7 +60,11 @@ function issueFixHref(jobId: string, issue: ValidationIssue): string {
   ]);
 
   if (architectureCodes.has(issue.code) || col === "architecture") {
-    return fixHref(jobId, { kind: "setup", hash: "architecture", field: "architecture" });
+    return {
+      kind: "setup",
+      href: fixHref(jobId, { kind: "setup", hash: "architecture", field: "architecture" }),
+      label: "Open field in Setup",
+    };
   }
   if (plantCapacityCodes.has(issue.code) || col === "inverter_capacity_kw" || col === "ac_capacity_mw" || col === "dc_capacity_mwp") {
     const field =
@@ -52,15 +75,27 @@ function issueFixHref(jobId: string, issue: ValidationIssue): string {
           : issue.code.includes("dc_capacity")
             ? "dc_capacity_mwp"
             : "inverter_capacity_kw";
-    return fixHref(jobId, { kind: "setup", hash: "plant", field });
+    return {
+      kind: "setup",
+      href: fixHref(jobId, { kind: "setup", hash: "plant", field }),
+      label: "Open field in Setup",
+    };
   }
   if (col) {
-    return `/jobs/${jobId}/setup#mapping&field=${encodeURIComponent(col)}`;
+    return {
+      kind: "setup",
+      href: `/jobs/${jobId}/setup#mapping&field=${encodeURIComponent(col)}`,
+      label: "Open field in Setup",
+    };
   }
   if (/timestamp/i.test(issue.code) || /timestamp/i.test(issue.message)) {
-    return `/jobs/${jobId}/setup#mapping&field=timestamp`;
+    return {
+      kind: "setup",
+      href: `/jobs/${jobId}/setup#mapping&field=timestamp`,
+      label: "Open field in Setup",
+    };
   }
-  return `/jobs/${jobId}/setup#mapping`;
+  return { kind: "setup", href: `/jobs/${jobId}/setup#mapping`, label: "Open field in Setup" };
 }
 
 function readinessFixHref(
@@ -83,33 +118,62 @@ function readinessFixHref(
   return fixHref(jobId, { kind: "setup", hash: "mapping" });
 }
 
-function IssueRow({ issue, jobId }: { issue: ValidationIssue; jobId: string }) {
-  const href = issueFixHref(jobId, issue);
+function IssueRow({
+  issue,
+  jobId,
+  onDownloadParsed,
+  downloadingParsed,
+}: {
+  issue: ValidationIssue;
+  jobId: string;
+  onDownloadParsed?: () => void;
+  downloadingParsed?: boolean;
+}) {
+  const cta = issueCta(jobId, issue);
+  const isDataInspect = DATA_INSPECT_CODES.has(issue.code);
   return (
     <li className="flex flex-col gap-1 border-b border-stone-100 py-3 last:border-0 dark:border-stone-800">
       <div className="flex items-center gap-2">
         <Badge tone={issue.severity === "blocker" ? "danger" : "warning"}>{issue.severity}</Badge>
-        <span className="font-mono text-xs text-stone-400">{issue.code}</span>
+        {!isDataInspect && <span className="font-mono text-xs text-stone-400">{issue.code}</span>}
       </div>
-      <p className="text-sm text-stone-700 dark:text-stone-200">{issue.message}</p>
-      <p className="text-xs text-stone-500">Likely cause: {issue.likely_cause}</p>
+      <p className="text-sm font-medium text-stone-800 dark:text-stone-100">{issue.message}</p>
+      <p className="text-xs text-stone-500">{issue.likely_cause}</p>
       {issue.remediation && (
-        <p className="text-xs text-brand-700 dark:text-brand-300">Next: {issue.remediation}</p>
-      )}
-      {issue.affected_columns.length > 0 && (
-        <p className="text-xs text-stone-400">Columns: {issue.affected_columns.join(", ")}</p>
+        <p className="text-xs text-brand-700 dark:text-brand-300">{issue.remediation}</p>
       )}
       {(issue.sample_values?.length ?? 0) > 0 && (
-        <p className="text-xs text-stone-400">
-          Sample values: {issue.sample_values!.map((v) => `"${v}"`).join(", ")}
-        </p>
+        <ul className="mt-0.5 list-disc space-y-0.5 pl-4 text-xs text-stone-600 dark:text-stone-300">
+          {issue.sample_values!.slice(0, 5).map((v) => (
+            <li key={v}>
+              <span className="font-mono">{v}</span>
+            </li>
+          ))}
+        </ul>
       )}
       {issue.affected_rows > 0 && (
-        <p className="text-xs text-stone-400">{issue.affected_rows.toLocaleString()} rows affected</p>
+        <p className="text-xs text-stone-400">{issue.affected_rows.toLocaleString()} extra row(s)</p>
       )}
-      <Link to={href} className="mt-1 w-fit text-xs font-semibold text-amber-800 underline dark:text-amber-200">
-        Open field in Setup
-      </Link>
+      {cta.kind === "download_parsed" && onDownloadParsed && (
+        <div className="mt-1.5 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            className="text-xs font-semibold text-amber-800 underline dark:text-amber-200"
+            onClick={() => onDownloadParsed()}
+            disabled={downloadingParsed}
+          >
+            {downloadingParsed ? "Downloading…" : cta.label}
+          </button>
+          {!issue.blocks_analysis && (
+            <span className="text-xs text-stone-500">Or continue anyway below</span>
+          )}
+        </div>
+      )}
+      {cta.kind === "setup" && (
+        <Link to={cta.href} className="mt-1 w-fit text-xs font-semibold text-amber-800 underline dark:text-amber-200">
+          {cta.label}
+        </Link>
+      )}
     </li>
   );
 }
@@ -303,7 +367,13 @@ export function ValidationPage() {
             >
               <ul>
                 {validation.blockers.map((b, i) => (
-                  <IssueRow key={i} issue={b} jobId={jobId} />
+                  <IssueRow
+                    key={i}
+                    issue={b}
+                    jobId={jobId}
+                    onDownloadParsed={() => void handleDownloadParsed()}
+                    downloadingParsed={downloadingParsed}
+                  />
                 ))}
               </ul>
 
@@ -356,7 +426,13 @@ export function ValidationPage() {
             >
               <ul>
                 {validation.warnings.map((w, i) => (
-                  <IssueRow key={i} issue={w} jobId={jobId} />
+                  <IssueRow
+                    key={i}
+                    issue={w}
+                    jobId={jobId}
+                    onDownloadParsed={() => void handleDownloadParsed()}
+                    downloadingParsed={downloadingParsed}
+                  />
                 ))}
               </ul>
             </SectionPanel>

@@ -18,15 +18,35 @@ from analytics.common.complete_analysis_pack import (
     build_excel_bytes,
     build_scada_csv_text,
     build_zip_bytes,
+    iter_scada_sample_rows,
     prefer_scada_sheet_bonus,
 )
+from analytics.preprocessing.validation import validate_raw_frame
 from analytics.common.prerequisites import evaluate_prerequisites
 from backend.app.services.excel_parser import parse_excel_to_csv
 from backend.app.services.mapping_service import suggest_mapping
 from backend.app.services.pack_architecture_import import plant_config_from_architecture_file
 
 
-def test_excel_pack_sheets_and_sample():
+def test_pack_sample_unique_timestamp_equipment_keys():
+    """Official pack sample must not trigger duplicate_timestamps (ts+equipment unique)."""
+    rows = list(iter_scada_sample_rows())
+    assert rows
+    keys = [(r[0], r[1]) for r in rows]
+    assert len(keys) == len(set(keys)), "duplicate (Timestamp, Equipment ID) in pack sample"
+
+    import pandas as pd
+
+    df = pd.DataFrame(rows, columns=list(SCADA_COLUMNS))
+    report = validate_raw_frame(
+        df,
+        "Timestamp",
+        list(SCADA_COLUMNS),
+        ["AC Power (kW)", "DC Current (A)", "Irradiance (W/m2)"],
+        equipment_id_column="Equipment ID",
+    )
+    assert "duplicate_timestamps" not in {i.code for i in report.issues}
+
     raw = build_excel_bytes()
     assert raw[:2] == b"PK"
     with zipfile.ZipFile(io.BytesIO(raw)) as zf:

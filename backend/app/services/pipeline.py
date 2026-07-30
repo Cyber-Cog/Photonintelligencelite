@@ -62,6 +62,9 @@ def _merge_reports(reports: list[ValidationReport]) -> ValidationReport:
                     existing.sample_values = list(issue.sample_values)
                 if issue.remediation and not existing.remediation:
                     existing.remediation = issue.remediation
+                # Prefer richer likely_cause / message templates from later chunks
+                if issue.likely_cause and len(issue.likely_cause) > len(existing.likely_cause or ""):
+                    existing.likely_cause = issue.likely_cause
             else:
                 by_code[issue.code] = ValidationIssue(
                     code=issue.code,
@@ -74,6 +77,20 @@ def _merge_reports(reports: list[ValidationReport]) -> ValidationReport:
                     sample_values=list(issue.sample_values),
                     remediation=issue.remediation,
                 )
+    # Refresh duplicate_timestamps count in the user-facing message after merge
+    dup = by_code.get("duplicate_timestamps")
+    if dup is not None and dup.affected_rows > 0:
+        has_equipment = len(dup.affected_columns) > 1
+        if has_equipment:
+            dup.message = (
+                f"Same time appears more than once for the same equipment "
+                f"({dup.affected_rows:,} extra row(s))."
+            )
+        else:
+            dup.message = (
+                f"Same timestamp appears more than once "
+                f"({dup.affected_rows:,} extra row(s))."
+            )
     # Recompute datetime blocker severity from merged totals
     dt = by_code.get("invalid_datetime_format")
     if dt is not None:
@@ -117,6 +134,15 @@ def parse_validate_standardize(
     required_columns = list(inputs.mapping.column_to_canonical.keys()) + [inputs.timestamp_column]
     numeric_targets = {"ac_power_kw", "dc_power_kw", "dc_current_a", "dc_voltage_v", "poa_w_m2", "ghi_w_m2", "energy_kwh"}
     numeric_columns = [c for c, f in inputs.mapping.column_to_canonical.items() if f in numeric_targets]
+    equipment_id_column = next(
+        (c for c, f in inputs.mapping.column_to_canonical.items() if f == "device_id"),
+        None,
+    )
+    if equipment_id_column is None:
+        equipment_id_column = next(
+            (c for c, f in inputs.mapping.column_to_canonical.items() if f == "inverter_id"),
+            None,
+        )
 
     reports: list[ValidationReport] = []
     total_written = 0
@@ -129,6 +155,7 @@ def parse_validate_standardize(
             required_columns,
             numeric_columns,
             drop_unparseable_timestamps=drop_unparseable_timestamps,
+            equipment_id_column=equipment_id_column,
         )
         reports.append(chunk_report)
         if chunk_report.has_blockers:
