@@ -24,8 +24,83 @@ from backend.app.services.storage import job_paths
 logger = logging.getLogger("pic_lite.validation_service")
 
 
+# Required PlantConfig dataclass fields — pack import may persist architecture before
+# Setup fills plant_name / capacities; constructing PlantConfig then raises TypeError → 500.
+_REQUIRED_PLANT_FIELDS = (
+    "plant_name",
+    "ac_capacity_mw",
+    "dc_capacity_mwp",
+    "module_rating_wp",
+    "inverter_capacity_kw",
+    "module_technology",
+    "bifacial",
+    "timezone",
+)
+
+
+def plant_dict_ready(plant: dict | None) -> bool:
+    """True when ``plant`` has the fields needed to build ``PlantConfig``."""
+    if not isinstance(plant, dict):
+        return False
+    for key in _REQUIRED_PLANT_FIELDS:
+        if key not in plant:
+            return False
+        val = plant[key]
+        if val is None or val == "":
+            return False
+        if key in {"ac_capacity_mw", "dc_capacity_mwp", "module_rating_wp", "inverter_capacity_kw"}:
+            try:
+                if float(val) <= 0:
+                    return False
+            except (TypeError, ValueError):
+                return False
+    return True
+
+
 def ready_for_validation(job: Job) -> bool:
-    return bool(job.mapping_json) and bool(job.plant_config_json)
+    if not job.mapping_json or not job.plant_config_json:
+        return False
+    plant = (job.plant_config_json or {}).get("plant")
+    return plant_dict_ready(plant if isinstance(plant, dict) else None)
+
+
+def build_plant_config(plant_cfg: dict):
+    """Build ``PlantConfig`` from job storage, raising ``ValueError`` on incomplete data."""
+    from analytics.core.context import PlantConfig
+
+    plant = plant_cfg.get("plant") if isinstance(plant_cfg, dict) else None
+    if not plant_dict_ready(plant if isinstance(plant, dict) else None):
+        missing = [
+            k
+            for k in _REQUIRED_PLANT_FIELDS
+            if not isinstance(plant, dict)
+            or k not in plant
+            or plant[k] in (None, "")
+            or (
+                k in {"ac_capacity_mw", "dc_capacity_mwp", "module_rating_wp", "inverter_capacity_kw"}
+                and (plant.get(k) is None or _safe_float(plant.get(k)) is None or _safe_float(plant.get(k)) <= 0)
+            )
+        ]
+        raise ValueError(
+            "Plant configuration is incomplete "
+            f"(missing or invalid: {', '.join(missing) or 'required fields'}). "
+            "Finish Setup → Plant details, then Continue again."
+        )
+    assert isinstance(plant, dict)
+    try:
+        return PlantConfig(**{k: v for k, v in plant.items() if k in PlantConfig.__dataclass_fields__})
+    except TypeError as exc:
+        raise ValueError(f"Plant configuration is incomplete: {exc}") from exc
+
+
+def _safe_float(value) -> float | None:
+    try:
+        out = float(value)
+    except (TypeError, ValueError):
+        return None
+    if out != out:  # NaN
+        return None
+    return out
 
 
 def _fields_present_in_canonical(paths) -> set[str]:
@@ -95,9 +170,7 @@ def run_validation_stage(
         detected_oem_signature=mapping_cfg.get("detected_oem_signature"),
     )
 
-    from analytics.core.context import PlantConfig
-
-    plant = PlantConfig(**{k: v for k, v in plant_cfg["plant"].items() if k in PlantConfig.__dataclass_fields__})
+    plant = build_plant_config(plant_cfg or {})
 
     inputs = pipeline.PipelineInputs(
         csv_path=paths.raw_dir / "input.csv",

@@ -112,3 +112,46 @@ def test_snapshot_imported_nameplate_from_pack_draft():
     assert snap["imported_equipment_ratings"]["INV-01"] == 90.0
     assert snap["imported_inverter_capacity_kw"] == 90.0
     assert snap["imported_ac_capacity_mw"] == 0.18
+
+
+def test_partial_pack_plant_not_ready_for_validation():
+    """Architecture-only import must not trigger PlantConfig(**…) TypeError on /mapping."""
+    from types import SimpleNamespace
+
+    from backend.app.services.validation_service import build_plant_config, plant_dict_ready, ready_for_validation
+
+    partial = {
+        "architecture": {"SCB-1": {"inverter_id": "INV-1"}},
+        "equipment_ratings": {"INV-1": 100.0},
+        "module_rating_wp": 545.0,
+        "module_technology": "Mono PERC",
+        "bifacial": False,
+        "timezone": "Asia/Kolkata",
+    }
+    assert not plant_dict_ready(partial)
+    job = SimpleNamespace(
+        mapping_json={"column_to_canonical": {"Timestamp": "timestamp"}, "timestamp_column": "Timestamp"},
+        plant_config_json={"plant": partial, "threshold_overrides": {}},
+    )
+    assert not ready_for_validation(job)
+    try:
+        build_plant_config({"plant": partial})
+        raise AssertionError("expected ValueError")
+    except ValueError as exc:
+        assert "incomplete" in str(exc).lower()
+
+
+def test_complete_plant_ready_for_validation():
+    from types import SimpleNamespace
+
+    from backend.app.services.validation_service import build_plant_config, plant_dict_ready, ready_for_validation
+
+    plant = _base_plant()
+    assert plant_dict_ready(plant)
+    cfg = build_plant_config({"plant": plant})
+    assert cfg.plant_name == "Test Plant"
+    job = SimpleNamespace(
+        mapping_json={"column_to_canonical": {"Timestamp": "timestamp"}, "timestamp_column": "Timestamp"},
+        plant_config_json={"plant": plant, "threshold_overrides": {}},
+    )
+    assert ready_for_validation(job)

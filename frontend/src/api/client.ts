@@ -102,17 +102,59 @@ function authHeaders(json = true): HeadersInit {
   return headers;
 }
 
+function formatApiDetail(detail: unknown, fallback: string): string {
+  if (typeof detail === "string") {
+    const trimmed = detail.trim();
+    return trimmed || fallback;
+  }
+  if (Array.isArray(detail)) {
+    const parts = detail.map((d: { msg?: string; message?: string } | string) => {
+      if (typeof d === "string") return d;
+      if (d && typeof d === "object") return d.msg || d.message || JSON.stringify(d);
+      return String(d);
+    });
+    const joined = parts.filter(Boolean).join("; ").trim();
+    return joined || fallback;
+  }
+  if (detail && typeof detail === "object") {
+    const obj = detail as { msg?: string; message?: string };
+    if (typeof obj.message === "string" && obj.message.trim()) return obj.message.trim();
+    if (typeof obj.msg === "string" && obj.msg.trim()) return obj.msg.trim();
+    try {
+      const s = JSON.stringify(detail);
+      if (s && s !== "{}" && s !== "null") return s;
+    } catch {
+      // ignore
+    }
+  }
+  return fallback;
+}
+
 async function handle<T>(res: Response): Promise<T> {
   if (!res.ok) {
-    let message = `Request failed (${res.status})`;
-    try {
-      const body = await res.json();
-      message = typeof body.detail === "string" ? body.detail : body.detail || message;
-      if (Array.isArray(body.detail)) {
-        message = body.detail.map((d: { msg?: string }) => d.msg || JSON.stringify(d)).join("; ");
+    const fallback = `Request failed (${res.status})`;
+    let message = fallback;
+    const raw = await res.text().catch(() => "");
+    if (raw) {
+      try {
+        const body = JSON.parse(raw) as { detail?: unknown; message?: string };
+        if (body.detail !== undefined) {
+          message = formatApiDetail(body.detail, fallback);
+        } else if (typeof body.message === "string" && body.message.trim()) {
+          message = body.message.trim();
+        }
+      } catch {
+        const clipped = raw.trim();
+        if (clipped && clipped.length < 400 && !clipped.startsWith("<")) {
+          message = clipped;
+        }
       }
-    } catch {
-      // ignore body parse failure
+    }
+    if (res.status === 502 || res.status === 504) {
+      message =
+        message === fallback
+          ? "The API timed out or is restarting. Wait a moment and try again."
+          : message;
     }
     throw new ApiError(res.status, message);
   }

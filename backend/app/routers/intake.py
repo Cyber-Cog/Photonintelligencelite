@@ -146,7 +146,12 @@ def _plant_fields_for_storage(payload: PlantConfigSubmission, existing_plant: di
     # ArchitectureEntry dumps as nested dicts — strip empty optional keys so fallbacks work cleanly.
     arch_out: dict[str, dict] = {}
     for scb_id, entry in (plant_fields.get("architecture") or {}).items():
-        cleaned = {"inverter_id": entry["inverter_id"]}
+        if not isinstance(entry, dict):
+            continue
+        inv_id = str(entry.get("inverter_id") or "").strip()
+        if not inv_id or not str(scb_id).strip():
+            continue
+        cleaned: dict = {"inverter_id": inv_id}
         if entry.get("strings_per_scb") is not None:
             cleaned["strings_per_scb"] = entry["strings_per_scb"]
         if entry.get("modules_per_string") is not None:
@@ -157,7 +162,7 @@ def _plant_fields_for_storage(payload: PlantConfigSubmission, existing_plant: di
             cleaned["dc_capacity_kwp"] = float(entry["dc_capacity_kwp"])
         if entry.get("ac_capacity_kw") is not None:
             cleaned["ac_capacity_kw"] = float(entry["ac_capacity_kw"])
-        arch_out[scb_id] = cleaned
+        arch_out[str(scb_id).strip()] = cleaned
     plant_fields["architecture"] = arch_out
 
     # Prefer freshly submitted import snapshot (Excel upload on Setup); else keep prior pack snapshot.
@@ -235,16 +240,22 @@ def submit_mapping(
         user_agent=request.headers.get("user-agent"),
     )
 
+    # Only validate when plant_config is complete enough for PlantConfig.
+    # Pack import may store architecture early; Continue saves mapping first then plant —
+    # validating here with an incomplete plant used to raise TypeError → HTTP 500.
     if validation_service.ready_for_validation(job):
-        validation_service.run_validation_stage(db, job, settings)
-        record_audit(
-            db,
-            action="job.validation",
-            user_id=user.id if user else None,
-            job_id=job.id,
-            ip=client_ip(request),
-            detail={"state": job.state},
-        )
+        try:
+            validation_service.run_validation_stage(db, job, settings)
+            record_audit(
+                db,
+                action="job.validation",
+                user_id=user.id if user else None,
+                job_id=job.id,
+                ip=client_ip(request),
+                detail={"state": job.state},
+            )
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(400, f"Could not validate mapped data: {exc}") from exc
     return {"job_id": job.id, "state": job.state, "requires_reanalysis": revised}
 
 
