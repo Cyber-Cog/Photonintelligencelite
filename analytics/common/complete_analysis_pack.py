@@ -257,16 +257,24 @@ def _readme_lines() -> list[str]:
         "   • DC Current (A)         → clipping-by-current, disconnected strings",
         "   • DC Voltage (V)         → module damage",
         "   • POA or GHI (W/m²)      → clipping (power & current), disconnected strings",
-        "4. Architecture sheet (this pack) — Plant → Inverter → SCB → String + nameplate capacities.",
+        "4. Architecture — flat SMB table recommended (Inverter ID, SCB/SMB ID, Rating kW,",
+        "   Strings per SCB). Hierarchy sheet in this pack is the advanced alternative.",
         "   Uploading this workbook auto-imports architecture into Setup (you can still override).",
         "",
-        "ARCHITECTURE SHEET (hierarchy)",
+        "ARCHITECTURE — FLAT (recommended for Indian sites)",
+        "-" * 40,
+        "One row per SMB/SCB. Headers may use OEM names (INV, SMB, Rating kW, No of Strings).",
+        "Canonical: inverter_id | inverter_rated_kw | scb_id | strings_per_scb | notes",
+        "Optional: dc_capacity_kwp, string_id. Sheet names: Architecture / Plant / Master / …",
+        "Same workbook as SCADA is fine — PIC Lite picks the architecture sheet automatically.",
+        "",
+        "ARCHITECTURE — HIERARCHY (advanced / this pack sample)",
         "-" * 40,
         "Columns: id | parent_id | device_type | ac_capacity_kw | dc_capacity_kwp | strings_per_scb | notes",
         "device_type: plant | inverter | scb | string  (smb/combiner aliases → scb)",
         "Units: AC capacity in kW · DC capacity in kWp (plant totals convert to MW/MWp in Setup).",
         "Why: faults normalize losses against nameplate capacity at the right hierarchy level",
-        "     without re-entering architecture later.",
+        "     without re-entering architecture later. See docs/ARCHITECTURE_INGEST.md.",
         "",
         "PER-FAULT CHECKLIST",
         "-" * 40,
@@ -282,9 +290,9 @@ def _readme_lines() -> list[str]:
         "-" * 40,
         "Accurate path (this pack):",
         "  A) Excel: upload pic_lite_complete_analysis_pack.xlsx — PIC Lite reads the 'scada'",
-        "     sheet for telemetry and auto-imports the 'architecture' sheet into Setup.",
+        "     sheet for telemetry and auto-imports architecture (flat or hierarchy) into Setup.",
         "  B) ZIP / CSV: upload 01_scada_long.csv; architecture from 02_architecture.xlsx is",
-        "     imported when you upload that file with the pack, or via Setup → Method A.",
+        "     imported when you upload that file with the pack, or via Setup → flat Excel.",
         "",
         "Flexible path (messy real SCADA): keep uploading multiple OEM files;",
         "fuzzy column mapping still works. This pack is the official clear path.",
@@ -293,7 +301,7 @@ def _readme_lines() -> list[str]:
         "  Power kW · Current A · Voltage V · Irradiance W/m² · Temperature °C",
         "  Architecture capacities: AC kW · DC kWp (plant MW/MWp = kW/1000)",
         "",
-        "See docs/COMPLETE_DATA_FORMAT.md in the repo for the full specification.",
+        "See docs/COMPLETE_DATA_FORMAT.md and docs/ARCHITECTURE_INGEST.md for the full specification.",
     ]
 
 
@@ -397,7 +405,9 @@ def prefer_scada_sheet_bonus(sheet_name: str) -> float:
     n = (sheet_name or "").strip().lower()
     if n == "scada":
         return 100.0
-    if n in {"readme", "instructions", "fault_checklist", "architecture"}:
+    if n in {"readme", "instructions", "fault_checklist", "architecture", "plant", "master", "hierarchy"}:
+        return -50.0
+    if any(h in n for h in ("inverter list", "equipment", "plant master", "smb list", "scb list")):
         return -50.0
     return 0.0
 

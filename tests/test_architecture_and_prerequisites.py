@@ -102,6 +102,67 @@ def test_missing_fields_for_orchestrator():
     assert "poa_w_m2" in missing or "ghi_w_m2" in missing
 
 
+def test_indian_flat_synonyms_and_plant_master_sheet():
+    """OEM headers + companion sheet name (not 'architecture') in same workbook as SCADA."""
+    wb = Workbook()
+    scada = wb.active
+    scada.title = "scada"
+    scada.append(["Timestamp", "Equipment ID", "AC Power (kW)", "Inverter ID", "SCB ID"])
+    scada.append(["2024-06-01 10:00:00", "INV-01-SCB-01", 80.0, "INV-01", "INV-01-SCB-01"])
+    plant = wb.create_sheet("Plant Master")
+    plant.append(["INV", "SMB", "Rating kW", "No of Strings", "DC Capacity"])
+    plant.append(["INV-01", "SMB-01", 1500, 24, 90])
+    plant.append(["INV-01", "SMB-02", 1500, 24, 90])
+    plant.append(["INV-02", "SMB-03", 1250, 20, 75])
+    buf = BytesIO()
+    wb.save(buf)
+    parsed = parse_architecture_excel(buf.getvalue())
+    assert parsed.ok
+    assert parsed.format == "flat"
+    assert parsed.source_sheet == "Plant Master"
+    assert len(parsed.architecture) == 3
+    assert parsed.equipment_ratings["INV-01"] == 1500.0
+    assert parsed.equipment_ratings["INV-02"] == 1250.0
+    assert parsed.architecture["SMB-01"]["strings_per_scb"] == 24
+    assert parsed.architecture["SMB-01"]["dc_capacity_kwp"] == 90.0
+    draft = parsed.to_plant_config_draft()
+    assert draft["architecture_imported"] is True
+    assert abs(draft["dc_capacity_mwp"] - 0.255) < 1e-9  # 90+90+75 kWp
+
+
+def test_flat_string_id_counts_strings_per_scb():
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Inverter List"
+    ws.append(["Inverter ID", "SCB ID", "String ID", "Inverter kW"])
+    ws.append(["INV-01", "SCB-01", "STR-01", 1000])
+    ws.append(["INV-01", "SCB-01", "STR-02", 1000])
+    ws.append(["INV-01", "SCB-01", "STR-03", 1000])
+    buf = BytesIO()
+    wb.save(buf)
+    parsed = parse_architecture_excel(buf.getvalue())
+    assert parsed.ok
+    assert parsed.architecture["SCB-01"]["strings_per_scb"] == 3
+    assert parsed.equipment_ratings["INV-01"] == 1000.0
+
+
+def test_scada_embedded_inv_scb_when_no_companion_sheet():
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "scada"
+    ws.append(["Timestamp", "Inverter ID", "SCB ID", "AC Power (kW)"])
+    ws.append(["2024-01-01 10:00:00", "INV-01", "SCB-A", 50])
+    ws.append(["2024-01-01 10:05:00", "INV-01", "SCB-A", 55])
+    ws.append(["2024-01-01 10:00:00", "INV-01", "SCB-B", 40])
+    buf = BytesIO()
+    wb.save(buf)
+    parsed = parse_architecture_excel(buf.getvalue())
+    assert parsed.ok
+    assert parsed.format == "scada_embedded"
+    assert set(parsed.architecture) == {"SCB-A", "SCB-B"}
+    assert parsed.architecture["SCB-A"]["inverter_id"] == "INV-01"
+
+
 def test_populated_columns_ignores_all_null_schema():
     """Empty schema columns must not count as available (Will run vs Needs input)."""
     import pandas as pd

@@ -25,6 +25,8 @@ interface Props {
   onArchitectureParsed?: (res: import("@/types").ArchitectureUploadResponse) => void;
   /** Flatten outer card when nested in Setup’s shared step shell. */
   embedded?: boolean;
+  /** True when architecture was auto-imported from the upload workbook. */
+  importedFromUpload?: boolean;
 }
 
 const DETAIL_PAGE_SIZE = 40;
@@ -42,6 +44,7 @@ export function EquipmentStructurePanel({
   onJumpToInverterRating,
   onArchitectureParsed,
   embedded = false,
+  importedFromUpload = false,
 }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -158,7 +161,8 @@ export function EquipmentStructurePanel({
               </h3>
             </div>
             <p className="mt-1 pl-3.5 text-xs text-stone-500">
-              For large plants, use Excel template, auto-detect from SCADA IDs, or apply a bulk pattern.
+              Prefer a simple flat SMB table (INV → SCB/SMB → strings). Upload can auto-detect it from the same
+              workbook as SCADA.
             </p>
           </div>
           <button type="button" className="btn-secondary text-xs" onClick={onDetect} disabled={detecting}>
@@ -173,6 +177,15 @@ export function EquipmentStructurePanel({
       </div>
 
       <div className="p-4 sm:p-5">
+      {importedFromUpload && summary.inverterCount > 0 && (
+        <div className="mb-4 rounded-lg border border-emerald-200/90 bg-emerald-50/80 px-3 py-2.5 text-xs text-emerald-900 dark:border-emerald-800/60 dark:bg-emerald-950/30 dark:text-emerald-100">
+          <p className="font-semibold">Detected from upload</p>
+          <p className="mt-0.5 text-emerald-800/90 dark:text-emerald-200/90">
+            Review the counts below. Override with a flat Excel table or bulk pattern only if needed.
+          </p>
+        </div>
+      )}
+
       {/* Summary tree */}
       <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <div className="rounded-lg border border-stone-200/90 bg-stone-50 px-3 py-2 dark:border-stone-700 dark:bg-stone-800/60">
@@ -203,13 +216,15 @@ export function EquipmentStructurePanel({
         </ul>
       )}
 
-      {/* Method A: Excel */}
+      {/* Recommended: flat Excel */}
       <div className="mb-3 rounded border border-stone-200 p-3 dark:border-stone-700">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Method A: Excel template</p>
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          Recommended: flat Excel (one row per SMB)
+        </p>
         <p className="mt-1 text-xs text-slate-500">
-          Download, complete offline (suitable for ~300 inverters / ~2000 SMBs), then upload. Flat columns:
-          inverter_id, inverter_rated_kw, scb_id, strings_per_scb — or hierarchy (Complete Analysis Pack): id,
-          parent_id, device_type, ac_capacity_kw, dc_capacity_kwp, strings_per_scb.
+          Columns like Inverter ID, SCB/SMB ID, Rating kW, Strings per SCB (Indian OEM headers accepted). Put the
+          sheet in the same workbook as SCADA — named Architecture, Plant, Master, or Inverter List — or upload
+          here. Advanced hierarchy (id / parent_id / device_type) still works.
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
           <a className="btn-secondary text-xs" href={architectureTemplateUrl()} download>
@@ -221,7 +236,7 @@ export function EquipmentStructurePanel({
             disabled={uploading}
             onClick={() => fileRef.current?.click()}
           >
-            {uploading ? "Uploading…" : "Upload files"}
+            {uploading ? "Uploading…" : "Upload Excel"}
           </button>
           <input
             ref={fileRef}
@@ -233,27 +248,31 @@ export function EquipmentStructurePanel({
         </div>
       </div>
 
-      {/* Method B: Auto-detect */}
+      {/* From SCADA IDs */}
       <div className="mb-3 rounded border border-stone-200 p-3 dark:border-stone-700">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Method B: Auto-detect from SCADA</p>
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">From SCADA / upload</p>
         <p className="mt-1 text-xs text-slate-500">
-          Map Device ID (or Inverter / SCB / String ID), then re-detect. If detection fails, the note above explains
-          the next step.
+          If the workbook already had an architecture sheet (or Inverter + SCB columns), it is imported on upload.
+          Otherwise map Device ID columns and re-detect.
         </p>
         <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-          <span className={detected ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}>
-            {detected ? "Structure detected from upload." : "Not detected yet. Map IDs or use Excel / pattern."}
+          <span className={detected || importedFromUpload ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}>
+            {importedFromUpload
+              ? "Detected from upload workbook."
+              : detected
+                ? "Structure detected from SCADA IDs."
+                : "Not detected yet — use flat Excel or re-detect after mapping IDs."}
           </span>
         </div>
       </div>
 
-      {/* Method C: Pattern */}
+      {/* Bulk pattern */}
       <div className="mb-3 rounded border border-stone-200 p-3 dark:border-stone-700">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-          Method C: Bulk pattern (exceptions via Excel)
+          Optional: bulk pattern (uniform plants)
         </p>
         <p className="mt-1 text-xs text-slate-500">
-          Apply “N SMBs × M strings” to all / generated inverters, then download template to edit exceptions.
+          Apply “N SMBs × M strings” when the plant is regular; edit exceptions via flat Excel.
         </p>
         <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
           <div>

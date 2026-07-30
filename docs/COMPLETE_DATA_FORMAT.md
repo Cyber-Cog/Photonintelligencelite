@@ -98,10 +98,30 @@ Other OEM naming still works via fuzzy mapping + Setup architecture.
 |---|---|---|
 | `README` | Instructions + necessities | Not ingested |
 | `scada` | Long-format sample / your filled telemetry | **Upload this workbook** on Upload page (parser prefers `scada`) |
-| `architecture` | Hierarchy: Plant → Inverter → SCB → String + capacities | **Auto-imported** on pack upload into Setup (override anytime) |
+| `architecture` | **Flat SMB table** (recommended) or hierarchy — auto-imported on upload | Same workbook as `scada`, or Setup Excel upload |
 | `fault_checklist` | Per-module column/config matrix | Reference only |
 
-### Architecture sheet (hierarchy)
+### Architecture — Method A (flat table, recommended for Indian sites)
+
+One row per SMB/SCB. OEM header synonyms accepted (`INV`, `SMB`, `Rating kW`, `No of Strings`, …).
+
+| Column (canonical) | Common aliases | Units |
+|---|---|---|
+| `inverter_id` | Inverter ID, INV, INV No | — |
+| `scb_id` | SCB ID, SMB, Combiner, AJB | — |
+| `inverter_rated_kw` | Rating kW, Inverter kW, Capacity kW | **kW** |
+| `strings_per_scb` | No of Strings, Strings per SMB | count |
+| `dc_capacity_kwp` (optional) | DC Capacity, kWp | **kWp** |
+| `string_id` (optional) | String ID, STR — counts strings when `strings_per_scb` blank | — |
+
+Sheet name heuristics: `architecture`, `plant`, `master`, `inverter list`, `equipment`, `hierarchy`, …
+
+### Architecture — Method B (embedded with SCADA)
+
+Put the flat table on a companion sheet in the **same** xlsx as telemetry, **or** include
+`Inverter ID` + `SCB ID` columns on the SCADA sheet (unique pairs become architecture).
+
+### Architecture — Method C (hierarchy, advanced / pack sample)
 
 | Column | Meaning | Units |
 |---|---|---|
@@ -118,8 +138,7 @@ On upload, PIC Lite converts plant `ac_capacity_kw` / `dc_capacity_kwp` → Setu
 `equipment_ratings`, and builds per-SCB `architecture` so faults can normalize
 losses against nameplate **without re-entering Setup architecture**.
 
-Flat fallback (Setup Method A / large plants): `inverter_id`, `inverter_rated_kw`,
-`scb_id`, `strings_per_scb`, `notes` — still accepted by the same parser.
+See `docs/ARCHITECTURE_INGEST.md` for detection rules.
 
 ---
 
@@ -129,7 +148,7 @@ Flat fallback (Setup Method A / large plants): `inverter_id`, `inverter_rated_kw
 |---|---|
 | `README.txt` | Same necessities + how-to |
 | `01_scada_long.csv` | Official long SCADA (upload on Upload page) |
-| `02_architecture.xlsx` | Matching hierarchy architecture (auto-import when uploaded with pack Excel; or Setup Method A) |
+| `02_architecture.xlsx` | Flat or hierarchy architecture (auto-import with pack Excel; or Setup flat Excel) |
 
 Clients who already export CSV SCADA can keep their multi-file habit and only
 adopt the column/ID conventions from this pack.
@@ -171,4 +190,5 @@ string-level rows when SCB aggregates are enough for plant-level screening.
 - Multi-file upload + timestamp join of inverter + WMS exports still works.
 - Fuzzy alias mapping and saved OEM templates still work.
 - The Complete Analysis Pack is the **official clear path**, not the only path.
-- Hierarchy architecture in the pack is preferred; flat SCB Excel remains supported.
+- Hierarchy architecture in the pack sample remains supported; **flat SCB Excel is the
+  primary recommendation for Indian sites** (see `docs/ARCHITECTURE_INGEST.md`).

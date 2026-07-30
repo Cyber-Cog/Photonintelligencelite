@@ -613,9 +613,9 @@ export function SetupPage() {
       )}
 
       {packArchImported && looksLikePack !== true && (
-        <InfoBanner className="mb-3" tone="success" title="Architecture imported from workbook">
-          Plant → Inverter → SCB hierarchy and nameplate capacities were loaded from the uploaded Excel. Review
-          Plant and Architecture steps — you can still override.
+        <InfoBanner className="mb-3" tone="success" title="Architecture detected from upload">
+          Plant structure (inverter → SCB/SMB) was loaded from a companion sheet or ID columns in the uploaded
+          workbook. Review Plant and Architecture — you can still override with a flat Excel table.
         </InfoBanner>
       )}
 
@@ -1033,6 +1033,7 @@ export function SetupPage() {
       {activeStep === "architecture" && (
         <EquipmentStructurePanel
           embedded
+          importedFromUpload={packArchImported}
           equipment={equipment}
           onChange={(next) => {
             clearFieldError("architecture");
