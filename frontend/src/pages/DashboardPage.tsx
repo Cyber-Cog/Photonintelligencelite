@@ -623,7 +623,7 @@ export function DashboardPage() {
                 <div
                   id="results-actions"
                   data-results-pane="summary"
-                  className="flex flex-col gap-3 pb-1"
+                  className="flex flex-col gap-4 pb-2"
                 >
                   {ownerActions ? (
                     <OwnerActionCenter

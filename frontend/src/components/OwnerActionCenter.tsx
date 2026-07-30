@@ -286,17 +286,17 @@ export function OwnerActionCenter({
     >
       <div className="h-0.5 w-full bg-gradient-to-r from-brand-400/80 via-accent-400/40 to-brand-500/15" aria-hidden />
 
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-stone-100 px-4 py-3.5 dark:border-stone-800 sm:px-5">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-stone-100 px-4 py-4 dark:border-stone-800 sm:px-5 sm:py-4">
         <div className="min-w-0">
-          <p className="tool-eyebrow !text-[10px]">Owner action centre</p>
+          <p className="tool-eyebrow">Owner action centre</p>
           <h3
-            className={`mt-1 font-display text-lg font-semibold tracking-tight ${
+            className={`mt-1.5 font-display text-lg font-semibold tracking-tight sm:text-xl ${
               model.healthy ? "text-accent-800 dark:text-accent-300" : "text-stone-900 dark:text-stone-50"
             }`}
           >
             {model.headline}
           </h3>
-          <p className="mt-1 max-w-2xl text-xs leading-relaxed text-stone-500 dark:text-stone-400">
+          <p className="mt-1.5 max-w-2xl text-xs leading-relaxed text-stone-500 dark:text-stone-400">
             {model.subline}
           </p>
         </div>
