@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Plot from "react-plotly.js";
 import { ChartDownloadButton } from "@/components/ChartDownloadButton";
 import { MissingReasonBanner } from "@/components/MissingReasonBanner";
@@ -78,26 +78,44 @@ export function LossWaterfallBridge({
   results,
   jobId,
   compact = false,
+  fillHeight = false,
 }: {
   kpis: KpiResponse;
   results: ResultObject[];
   jobId: string;
   /** Tighter chart for Summary composition. */
   compact?: boolean;
+  /** Bridge tab: chart owns the stage — tall + full width. */
+  fillHeight?: boolean;
 }) {
   const { theme } = useTheme();
   const [unit, setUnit] = useState<WaterfallUnit>("mwh");
   const chartHostRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const [stageH, setStageH] = useState(0);
   const dark = theme === "dark";
 
   const model = useMemo(() => buildLossBridge(kpis, results), [kpis, results]);
   const emptyGaps = useMemo(() => (model ? model.gaps : diagnoseBridgeGaps(kpis)), [model, kpis]);
 
+  useEffect(() => {
+    if (!fillHeight || !stageRef.current) return;
+    const el = stageRef.current;
+    const measure = () => setStageH(Math.floor(el.clientHeight));
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [fillHeight]);
+
   const chartHeight = useMemo(() => {
     const n = model?.segments.length ?? 0;
     if (compact) return Math.min(300, Math.max(220, n > 10 ? 280 : 240));
-    return Math.min(420, Math.max(280, n > 10 ? 360 : 300));
-  }, [model?.segments.length, compact]);
+    if (fillHeight && stageH > 0) {
+      return Math.max(360, Math.min(720, stageH));
+    }
+    return Math.min(560, Math.max(400, n > 10 ? 520 : 460));
+  }, [model?.segments.length, compact, fillHeight, stageH]);
 
   const scaled = useMemo(() => {
     if (!model) return [];
@@ -189,10 +207,11 @@ export function LossWaterfallBridge({
         </div>
       }
       scrollMargin={false}
-      bodyClassName="space-y-3 p-0"
+      className={fillHeight ? "flex h-full min-h-0 flex-1 flex-col" : ""}
+      bodyClassName={fillHeight ? "flex min-h-0 flex-1 flex-col space-y-0 p-0" : "space-y-3 p-0"}
     >
       {model.mode === "bridge" && (
-        <div className="grid grid-cols-2 gap-px border-b border-stone-200 bg-stone-200 dark:border-stone-800 dark:bg-stone-800 sm:grid-cols-4">
+        <div className="grid shrink-0 grid-cols-2 gap-px border-b border-stone-200 bg-stone-200 dark:border-stone-800 dark:bg-stone-800 sm:grid-cols-4">
           {[
             { label: "Expected", value: `${fmtMwh(model.expectedMwh)} MWh`, className: "text-stone-700 dark:text-stone-200" },
             { label: "Actual", value: `${fmtMwh(model.actualMwh)} MWh`, className: "text-emerald-700 dark:text-emerald-400" },
@@ -207,17 +226,17 @@ export function LossWaterfallBridge({
         </div>
       )}
 
-      <div className={`space-y-2 ${compact ? "p-3" : "p-2.5"}`}>
+      <div className={`flex min-h-0 flex-col space-y-2 ${compact ? "p-3" : "p-2.5"} ${fillHeight ? "flex-1" : ""}`}>
         {model.gaps.length > 0 && <MissingReasonBanner reasons={model.gaps} jobId={jobId} />}
 
         {model.note && (
-          <p className="rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
+          <p className="shrink-0 rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
             {model.note}
           </p>
         )}
 
         <div
-          className="flex flex-wrap gap-x-4 gap-y-1 rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-1.5 dark:border-stone-700 dark:bg-stone-800/40"
+          className="flex shrink-0 flex-wrap gap-x-4 gap-y-1 rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-1.5 dark:border-stone-700 dark:bg-stone-800/40"
           role="list"
           aria-label="Colours"
         >
@@ -238,56 +257,61 @@ export function LossWaterfallBridge({
         </div>
 
         <div
-          ref={chartHostRef}
-          className="plotly-chart-host w-full overflow-visible rounded-lg border border-stone-200 dark:border-stone-800"
+          ref={fillHeight ? stageRef : undefined}
+          className={fillHeight ? "relative min-h-[22rem] w-full flex-1" : "w-full"}
         >
-          <Plot
-            data={figureData}
-            layout={{
-              barmode: "stack",
-              autosize: true,
-              height: chartHeight,
-              margin: plotlySafeMargins({ b: compact ? Math.min(bottomPad, 72) : bottomPad, l: 52 }),
-              paper_bgcolor: "transparent",
-              plot_bgcolor: plotBg,
-              font: { color: fontColor, size: 11, family: "DM Sans, Segoe UI, system-ui, sans-serif" },
-              // No layout annotations — values only in hover (no sticky labels on bars).
-              annotations: [],
-              hoverlabel: plotlyHoverLabel(dark),
-              xaxis: {
-                tickangle: n > 5 ? -32 : 0,
-                tickfont: { size: 10, color: muted },
-                automargin: true,
-                showgrid: false,
-                linecolor: grid,
-                ticklen: 4,
-                categoryorder: "array",
-                categoryarray: xTicks,
-              },
-              yaxis: {
-                title: { text: yTitle, font: { size: 10, color: muted } },
-                tickfont: { size: 10, color: muted },
-                gridcolor: grid,
-                zeroline: false,
-                rangemode: "tozero",
-                range: [0, yMax + yHeadroom],
-                automargin: true,
-                ticksuffix: unit === "pct" ? "%" : "",
-              },
-              bargap: 0.28,
-              showlegend: false,
-              // closest clears on mouseleave — no sticky compare/unified box.
-              hovermode: "closest",
-            }}
-            config={plotlyUiConfig("energy_loss_bridge")}
-            style={{ width: "100%", height: chartHeight }}
-            useResizeHandler
-          />
+          <div
+            ref={chartHostRef}
+            className="plotly-chart-host w-full overflow-visible rounded-lg border border-stone-200 dark:border-stone-800"
+          >
+            <Plot
+              data={figureData}
+              layout={{
+                barmode: "stack",
+                autosize: true,
+                height: chartHeight,
+                margin: plotlySafeMargins({ b: compact ? Math.min(bottomPad, 72) : bottomPad, l: 52 }),
+                paper_bgcolor: "transparent",
+                plot_bgcolor: plotBg,
+                font: { color: fontColor, size: 11, family: "DM Sans, Segoe UI, system-ui, sans-serif" },
+                // No layout annotations — values only in hover (no sticky labels on bars).
+                annotations: [],
+                hoverlabel: plotlyHoverLabel(dark),
+                xaxis: {
+                  tickangle: n > 5 ? -32 : 0,
+                  tickfont: { size: 10, color: muted },
+                  automargin: true,
+                  showgrid: false,
+                  linecolor: grid,
+                  ticklen: 4,
+                  categoryorder: "array",
+                  categoryarray: xTicks,
+                },
+                yaxis: {
+                  title: { text: yTitle, font: { size: 10, color: muted } },
+                  tickfont: { size: 10, color: muted },
+                  gridcolor: grid,
+                  zeroline: false,
+                  rangemode: "tozero",
+                  range: [0, yMax + yHeadroom],
+                  automargin: true,
+                  ticksuffix: unit === "pct" ? "%" : "",
+                },
+                bargap: 0.28,
+                showlegend: false,
+                // closest clears on mouseleave — no sticky compare/unified box.
+                hovermode: "closest",
+              }}
+              config={plotlyUiConfig("energy_loss_bridge")}
+              style={{ width: "100%", height: chartHeight }}
+              useResizeHandler
+            />
+          </div>
         </div>
 
         {/* Full segment table on Bridge tab — Summary stays chart-forward */}
         {!compact && (
-          <div className="overflow-x-auto rounded-xl border border-stone-200/90 dark:border-stone-700">
+          <div className={`overflow-x-auto rounded-xl border border-stone-200/90 dark:border-stone-700 ${fillHeight ? "shrink-0" : ""}`}>
             <table className="w-full min-w-[28rem] text-left text-sm">
               <thead>
                 <tr className="border-b border-stone-200 bg-stone-50/90 text-[10px] font-semibold uppercase tracking-wide text-stone-400 dark:border-stone-700 dark:bg-stone-950/50">

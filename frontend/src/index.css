@@ -219,7 +219,7 @@
     align-items: flex-end;
     justify-content: space-between;
     gap: var(--pic-space-2) var(--pic-space-3);
-    padding: var(--pic-space-3) var(--pic-space-4);
+    padding: var(--pic-space-2) var(--pic-space-4);
   }
   .job-workspace-title {
     font-family: Outfit, "DM Sans", system-ui, sans-serif;
@@ -324,6 +324,10 @@
     background-color: var(--pic-surface);
     min-height: 3.25rem;
   }
+  .app-footer-compact {
+    min-height: 2.5rem;
+    padding-block: 0.5rem;
+  }
   .app-footer-landing {
     background-color: transparent;
   }
@@ -371,11 +375,15 @@
     animation-delay: 0.18s;
   }
 
-  /* Summary KPI strip — staggered enter, craft wash (not left-stripe SaaS) */
+  /* Summary KPI strip — quiet single-line metrics (not card tiles) */
+  .kpi-metric {
+    animation: kpiCardEnter 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
   .kpi-card {
     animation: kpiCardEnter 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
   }
   @media (prefers-reduced-motion: reduce) {
+    .kpi-metric,
     .kpi-card {
       animation: none;
     }

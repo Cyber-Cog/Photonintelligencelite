@@ -119,12 +119,18 @@ export function Layout({ children }: { children: ReactNode }) {
     rememberAppPath(`${location.pathname}${location.search}${location.hash}`);
   }, [location.pathname, location.search, location.hash]);
 
+  const fillViewport = isProcessing || isJobView;
+
   return (
-    <div className="relative flex min-h-screen flex-col bg-[color:var(--pic-surface)] text-[color:var(--pic-text)]">
+    <div
+      className={`relative flex flex-col bg-[color:var(--pic-surface)] text-[color:var(--pic-text)] ${
+        fillViewport ? "h-dvh overflow-hidden" : "min-h-screen"
+      }`}
+    >
       {!isLanding && <div className="hero-mesh" aria-hidden />}
       {connecting ? (
         <div
-          className="border-b border-amber-200/80 bg-amber-50 px-4 py-2 text-center text-sm text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100"
+          className="shrink-0 border-b border-amber-200/80 bg-amber-50 px-4 py-2 text-center text-sm text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100"
           role="status"
           aria-live="polite"
         >
@@ -133,7 +139,7 @@ export function Layout({ children }: { children: ReactNode }) {
       ) : null}
       {!connecting && apiUnreachable ? (
         <div
-          className="flex flex-wrap items-center justify-center gap-3 border-b border-rose-200/80 bg-rose-50 px-4 py-2 text-center text-sm text-rose-900 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-100"
+          className="flex shrink-0 flex-wrap items-center justify-center gap-3 border-b border-rose-200/80 bg-rose-50 px-4 py-2 text-center text-sm text-rose-900 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-100"
           role="alert"
         >
           <span>Can't reach the API right now.</span>
@@ -142,7 +148,7 @@ export function Layout({ children }: { children: ReactNode }) {
           </button>
         </div>
       ) : null}
-      <header className={`app-header ${isLanding ? "app-header-landing" : ""}`}>
+      <header className={`shrink-0 app-header ${isLanding ? "app-header-landing" : ""}`}>
         <div className={`mx-auto flex h-14 ${shellMax} items-center gap-3 px-4 sm:gap-4 sm:px-6`}>
           <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-5">
             <BrandWordmark variant="header" linkHome />
@@ -186,14 +192,14 @@ export function Layout({ children }: { children: ReactNode }) {
         className={
           isLanding
             ? "relative flex w-full flex-1 flex-col"
-            : isProcessing || isJobView
-              ? `relative mx-auto flex w-full ${shellMax} min-h-0 flex-1 flex-col px-3 py-3 sm:px-5`
+            : fillViewport
+              ? `relative mx-auto flex w-full ${shellMax} min-h-0 flex-1 flex-col overflow-hidden px-3 py-2 sm:px-4`
               : `relative mx-auto flex w-full ${shellMax} flex-1 flex-col px-4 py-5 sm:px-6`
         }
       >
         {children}
       </main>
-      <footer className={`app-footer ${isLanding ? "app-footer-landing" : ""}`}>
+      <footer className={`shrink-0 app-footer ${isLanding ? "app-footer-landing" : ""} ${fillViewport ? "app-footer-compact" : ""}`}>
         <div className={`mx-auto flex ${shellMax} flex-wrap items-center justify-center gap-x-1.5 gap-y-1 px-4 sm:px-6`}>
           <BrandWordmark variant="footer" />
           <span className="leading-none text-stone-300 dark:text-stone-600" aria-hidden>

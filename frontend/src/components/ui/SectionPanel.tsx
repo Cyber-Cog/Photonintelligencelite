@@ -46,8 +46,8 @@ export function SectionPanel({
           : "overflow-hidden rounded-pic-lg border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] shadow-pic"
       } ${scrollMargin ? "scroll-mt-44" : ""} ${className}`}
     >
-      {!embedded ? <div className="panel-rule" aria-hidden /> : null}
-      <div className="flex flex-wrap items-start justify-between gap-2 px-4 pb-0 pt-3 sm:px-4">
+      {!embedded ? <div className="panel-rule shrink-0" aria-hidden /> : null}
+      <div className="flex shrink-0 flex-wrap items-start justify-between gap-2 px-4 pb-0 pt-3 sm:px-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${ACCENT_DOT[accent]}`} aria-hidden />

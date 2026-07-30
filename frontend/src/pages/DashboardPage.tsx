@@ -525,7 +525,7 @@ export function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="tool-enter flex h-[calc(100dvh-8.5rem)] items-center justify-center gap-3 text-sm text-[color:var(--pic-text-muted)]">
+      <div className="tool-enter flex h-full min-h-0 flex-1 items-center justify-center gap-3 text-sm text-[color:var(--pic-text-muted)]">
         <Spinner className="h-5 w-5" /> Loading results…
       </div>
     );
@@ -618,7 +618,7 @@ export function DashboardPage() {
           issueCount={ownerActions?.issueCount ?? 0}
         />
       }
-      flushMain={activeSection === "diagnostics"}
+      flushMain={activeSection === "diagnostics" || activeSection === "bridge"}
       mainRef={mainPaneRef}
       footer={
         <button type="button" className="btn-ghost !px-2 !py-0.5 text-[11px]" onClick={handleNewAnalysis}>
@@ -627,7 +627,7 @@ export function DashboardPage() {
       }
     >
       {activeSection === "summary" && (
-        <div id="results-actions" data-results-pane="summary" className="job-pane flex flex-col gap-4 pb-6">
+        <div id="results-actions" data-results-pane="summary" className="job-pane flex flex-col gap-5 pb-6">
           {ownerActions ? (
             <OwnerActionCenter
               model={ownerActions}
@@ -653,8 +653,13 @@ export function DashboardPage() {
       )}
 
       {activeSection === "bridge" && (
-        <div id="results-bridge" data-tour="loss-bridge" data-results-pane="bridge" className="job-pane pb-6">
-          <LossWaterfallBridge kpis={data.kpis} results={data.results} jobId={jobId} />
+        <div
+          id="results-bridge"
+          data-tour="loss-bridge"
+          data-results-pane="bridge"
+          className="flex min-h-0 flex-1 flex-col p-3"
+        >
+          <LossWaterfallBridge kpis={data.kpis} results={data.results} jobId={jobId} fillHeight />
         </div>
       )}
 

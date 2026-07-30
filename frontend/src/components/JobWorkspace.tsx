@@ -1,8 +1,11 @@
 import type { ReactNode, RefObject } from "react";
 import { JobNav } from "@/components/JobNav";
 
-/** App chrome: header + main py + footer — viewport-bound job views. */
-export const JOB_VIEWPORT_SHELL = "h-[calc(100dvh-8.5rem)] max-h-[calc(100dvh-8.5rem)]";
+/**
+ * Fill the Layout job main (header + footer already claimed).
+ * Prefer flex fill over nested max-height calcs that create postage-stamp panes.
+ */
+export const JOB_VIEWPORT_SHELL = "h-full min-h-0 flex-1";
 
 /**
  * One composition shell for Results / Raw data / Explorer / Architecture.
@@ -33,7 +36,7 @@ export function JobWorkspace({
   aside?: ReactNode;
   children: ReactNode;
   mainClassName?: string;
-  /** Diagnostics-style: main pane manages its own overflow. */
+  /** Diagnostics / bridge: main pane manages its own overflow. */
   flushMain?: boolean;
   footer?: ReactNode;
   className?: string;
@@ -83,7 +86,7 @@ export function JobWorkspace({
         )}
 
         {footer ? (
-          <div className="flex shrink-0 items-center justify-center border-t border-[color:var(--pic-border-subtle)] px-3 py-2">
+          <div className="flex shrink-0 items-center justify-center border-t border-[color:var(--pic-border-subtle)] px-3 py-1.5">
             {footer}
           </div>
         ) : null}
