@@ -1,16 +1,19 @@
 import { FormEvent, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ApiError } from "@/api/client";
 import { RequireAuth } from "@/components/RequireAuth";
 import { useAuth } from "@/context/AuthContext";
 import { useDemoTour } from "@/context/DemoTourContext";
 import { useJob } from "@/context/JobContext";
+import { adminHrefFrom, stashAdminReturn } from "@/lib/adminReturn";
 
 function SettingsForm() {
   const { user, updateProfile, changePassword } = useAuth();
   const { prepareReplay, tourDone } = useDemoTour();
   const { jobId } = useJob();
   const navigate = useNavigate();
+  const location = useLocation();
+  const here = `${location.pathname}${location.search}${location.hash}`;
   const [name, setName] = useState(user?.name || "");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -148,7 +151,11 @@ function SettingsForm() {
 
       {user?.role === "superadmin" ? (
         <p className="text-sm">
-          <Link to="/admin" className="text-brand-700 hover:underline dark:text-brand-400">
+          <Link
+            to={adminHrefFrom(here)}
+            className="text-brand-700 hover:underline dark:text-brand-400"
+            onClick={() => stashAdminReturn(here)}
+          >
             Open superadmin console
           </Link>
         </p>

@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { BrandWordmark } from "@/components/BrandWordmark";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
+import { adminHrefFrom, rememberAppPath, stashAdminReturn } from "@/lib/adminReturn";
 
 function SunIcon() {
   return (
@@ -24,8 +25,11 @@ function MoonIcon() {
 function ProfileMenu() {
   const { user, logout, isSuperadmin } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const here = `${location.pathname}${location.search}${location.hash}`;
+  const adminTo = adminHrefFrom(here);
 
   useEffect(() => {
     const onDoc = (e: MouseEvent) => {
@@ -73,10 +77,13 @@ function ProfileMenu() {
           </Link>
           {isSuperadmin ? (
             <Link
-              to="/admin"
+              to={adminTo}
               role="menuitem"
               className="block px-3 py-2 text-sm text-stone-700 hover:bg-stone-50 dark:text-stone-200 dark:hover:bg-stone-800"
-              onClick={() => setOpen(false)}
+              onClick={() => {
+                stashAdminReturn(here);
+                setOpen(false);
+              }}
             >
               Admin
             </Link>
@@ -106,6 +113,10 @@ export function Layout({ children }: { children: ReactNode }) {
   const isLanding = location.pathname === "/";
   const isProcessing = /\/jobs\/[^/]+\/processing\/?$/.test(location.pathname);
   const shellMax = isProcessing ? "max-w-[90rem]" : "max-w-6xl";
+
+  useEffect(() => {
+    rememberAppPath(`${location.pathname}${location.search}${location.hash}`);
+  }, [location.pathname, location.search, location.hash]);
 
   return (
     <div className="relative flex min-h-screen flex-col bg-stone-50 text-stone-900 dark:bg-stone-950 dark:text-stone-100">

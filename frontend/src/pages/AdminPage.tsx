@@ -1,9 +1,16 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { adminApi, ApiError } from "@/api/client";
 import { RequireAuth } from "@/components/RequireAuth";
 import { Badge } from "@/components/ui/Badge";
 import { useAuth } from "@/context/AuthContext";
+import { useJob } from "@/context/JobContext";
+import {
+  clearAdminBackOnReload,
+  getLastAppPath,
+  resolveExitAdmin,
+} from "@/lib/adminReturn";
 import type { AdminJob, AdminSession, AdminUser, AuditEvent, FunnelStats } from "@/types";
 
 type EditDraft = { name: string; role: "user" | "superadmin" };
@@ -238,6 +245,9 @@ function UserActions({
 
 function AdminConsole() {
   const { user: me } = useAuth();
+  const { jobId } = useJob();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [tab, setTab] = useState<"users" | "sessions" | "jobs" | "audit">("users");
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [sessions, setSessions] = useState<AdminSession[]>([]);
@@ -247,6 +257,29 @@ function AdminConsole() {
   const [q, setQ] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<AdminUser | null>(null);
+
+  useEffect(() => {
+    clearAdminBackOnReload();
+  }, []);
+
+  const exitAdmin = () => {
+    const result = resolveExitAdmin(searchParams.get("returnTo"));
+    if (result.kind === "back") {
+      navigate(-1);
+      return;
+    }
+    // Prefer an active job route over a bare Analyze hub when we still have a job id.
+    if (result.path === "/upload" && jobId) {
+      const remembered = getLastAppPath();
+      if (remembered?.startsWith(`/jobs/${jobId}`)) {
+        navigate(remembered);
+        return;
+      }
+      navigate(`/jobs/${jobId}/processing`);
+      return;
+    }
+    navigate(result.path);
+  };
 
   const load = async () => {
     setError(null);
@@ -275,9 +308,21 @@ function AdminConsole() {
 
   return (
     <div className="tool-enter space-y-6 py-4">
-      <div>
-        <h1 className="font-display text-2xl font-semibold text-stone-900 dark:text-stone-50">Superadmin</h1>
-        <p className="mt-1 text-sm text-stone-500">Users, sessions, job funnel, and audit log.</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="font-display text-2xl font-semibold text-stone-900 dark:text-stone-50">Superadmin</h1>
+          <p className="mt-1 text-sm text-stone-500">
+            Temporary console — exit anytime to continue Analyze. Users, sessions, job funnel, and audit log.
+          </p>
+        </div>
+        <button
+          type="button"
+          className="btn-secondary shrink-0 text-sm"
+          onClick={exitAdmin}
+          title="Back to app"
+        >
+          Exit admin
+        </button>
       </div>
 
       {funnel ? (
