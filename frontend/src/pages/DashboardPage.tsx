@@ -4,14 +4,12 @@ import { ApiError, getResults, reportUrl } from "@/api/client";
 import { EvidenceInvestigateModal } from "@/components/EvidenceInvestigateModal";
 import { FaultsTable } from "@/components/FaultsTable";
 import { JobNav } from "@/components/JobNav";
-import { KpiCard } from "@/components/KpiCard";
+import { KpiStrip, type KpiStripItem } from "@/components/KpiStrip";
 import { LossWaterfallBridge } from "@/components/LossWaterfallBridge";
 import { OwnerActionCenter } from "@/components/OwnerActionCenter";
 import { ResultCard } from "@/components/ResultCard";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { InfoBanner } from "@/components/ui/InfoBanner";
-import { PageHeader } from "@/components/ui/PageHeader";
-import { SectionPanel } from "@/components/ui/SectionPanel";
 import { Spinner } from "@/components/ui/Spinner";
 import { SubnavTabs } from "@/components/ui/SubnavTabs";
 import { useJob } from "@/context/JobContext";
@@ -37,9 +35,8 @@ const DIAG_ORDER = [
   "box_plot",
 ];
 
-/** Desktop shell: fill viewport below app header + main padding (JobNav/header sit inside). */
-const RESULTS_SHELL =
-  "lg:h-[calc(100dvh-6rem)] lg:max-h-[calc(100dvh-6rem)] lg:overflow-hidden";
+/** App chrome: header + main py + footer — match Raw data / Explorer density. */
+const RESULTS_SHELL = "h-[calc(100dvh-8.75rem)] max-h-[calc(100dvh-8.75rem)]";
 
 function fmt(value: number | null, digits = 1): string | null {
   if (value === null || value === undefined) return null;
@@ -170,14 +167,14 @@ function ResultsSidebar({
 }) {
   return (
     <nav
-      className="hidden h-fit w-[220px] shrink-0 self-start rounded-2xl border border-stone-200/90 bg-white/95 p-2 dark:border-stone-700 dark:bg-stone-900 lg:block"
+      className="hidden h-fit w-[11.5rem] shrink-0 self-start rounded-xl border border-stone-200/90 bg-white/95 p-1 dark:border-stone-700 dark:bg-stone-900 lg:block"
       aria-label="Results sections"
       data-tour="results-sidebar"
     >
-      <p className="px-2.5 pb-2 pt-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-stone-400">
+      <p className="px-2 pb-1 pt-1 text-[9px] font-bold uppercase tracking-[0.12em] text-stone-400">
         Navigate
       </p>
-      <ul className="space-y-0.5">
+      <ul className="space-y-px">
         {RESULTS_SECTIONS.map((item) => {
           const active = item.id === activeSection;
           const badge =
@@ -194,7 +191,7 @@ function ResultsSidebar({
                 data-tour={item.tour}
                 aria-current={active ? "page" : undefined}
                 onClick={() => onSelectSection(item.id)}
-                className={`flex w-full items-center justify-between gap-2 rounded-xl px-2.5 py-2 text-left text-xs font-semibold transition duration-150 ${
+                className={`flex w-full items-center justify-between gap-1.5 rounded-lg px-2 py-1.5 text-left text-[12px] font-semibold transition duration-150 ${
                   active
                     ? "bg-brand-50 text-stone-900 ring-1 ring-brand-200/80 dark:bg-brand-950/40 dark:text-amber-100 dark:ring-brand-800/50"
                     : "text-stone-600 hover:bg-stone-50 hover:text-stone-900 dark:text-stone-300 dark:hover:bg-stone-800/60 dark:hover:text-amber-100"
@@ -203,7 +200,7 @@ function ResultsSidebar({
                 <span>{item.label}</span>
                 {badge != null ? (
                   <span
-                    className={`tabular-nums rounded-md px-1.5 py-0.5 text-[10px] font-bold ${
+                    className={`tabular-nums rounded px-1 py-px text-[10px] font-bold ${
                       active
                         ? "bg-brand-600 text-white dark:bg-brand-500 dark:text-stone-950"
                         : "bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-300"
@@ -235,16 +232,16 @@ function DiagnosticsFolderList({
 }) {
   return (
     <nav
-      className="flex h-full min-h-0 w-full flex-col rounded-2xl border border-stone-200/90 bg-white/95 dark:border-stone-700 dark:bg-stone-900"
+      className="flex h-full min-h-0 w-full flex-col rounded-xl border border-stone-200/90 bg-white/95 dark:border-stone-700 dark:bg-stone-900"
       aria-label="Diagnostic modules"
       data-tour="diagnostics-folder-list"
     >
-      <div className="flex shrink-0 items-center gap-1.5 border-b border-stone-100 px-2.5 py-2 dark:border-stone-800">
+      <div className="flex shrink-0 items-center gap-1.5 border-b border-stone-100 px-2 py-1.5 dark:border-stone-800">
         <span className="text-brand-600 dark:text-brand-400">
           <FolderIcon open />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-stone-400">Modules</p>
+          <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-stone-400">Modules</p>
           <p className="text-[11px] font-medium text-stone-500 dark:text-stone-400">
             {modules.length} {modules.length === 1 ? "check" : "checks"}
           </p>
@@ -252,7 +249,7 @@ function DiagnosticsFolderList({
         {onCollapse && (
           <button
             type="button"
-            className="btn-ghost hidden h-7 w-7 shrink-0 items-center justify-center p-0 text-stone-400 lg:inline-flex"
+            className="btn-ghost hidden h-6 w-6 shrink-0 items-center justify-center p-0 text-stone-400 lg:inline-flex"
             onClick={onCollapse}
             title="Collapse folder"
             aria-label="Collapse module folder"
@@ -264,12 +261,12 @@ function DiagnosticsFolderList({
         )}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1.5">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1">
         {modules.length === 0 ? (
-          <p className="px-2 py-3 text-[11px] text-stone-400">No modules for this run</p>
+          <p className="px-2 py-2 text-[11px] text-stone-400">No modules for this run</p>
         ) : (
-          <ul className="space-y-0.5">
-            <li className="pointer-events-none select-none px-2 py-1" aria-hidden="true">
+          <ul className="space-y-px">
+            <li className="pointer-events-none select-none px-1.5 py-0.5" aria-hidden="true">
               <div className="flex items-center gap-1.5 text-[11px] font-semibold text-stone-500 dark:text-stone-400">
                 <span className="text-stone-400 dark:text-stone-500">
                   <FolderIcon open />
@@ -280,16 +277,16 @@ function DiagnosticsFolderList({
             {modules.map((m) => {
               const active = activeModuleId === m.algorithm_id;
               return (
-                <li key={m.algorithm_id} className="pl-3">
+                <li key={m.algorithm_id} className="pl-2">
                   <button
                     type="button"
                     data-results-section={m.algorithm_id}
                     data-tour={`nav-diag-${m.algorithm_id}`}
                     aria-current={active ? "page" : undefined}
                     onClick={() => onSelectModule(m.algorithm_id)}
-                    className={`flex w-full items-start gap-1.5 rounded-lg px-2 py-1.5 text-left transition duration-150 ${
+                    className={`flex w-full items-start gap-1 rounded-md px-1.5 py-1 text-left transition duration-150 ${
                       active
-                        ? "bg-brand-50 text-stone-900 shadow-sm ring-1 ring-brand-300/90 dark:bg-brand-950/50 dark:text-amber-50 dark:ring-brand-700/60"
+                        ? "bg-brand-50 text-stone-900 ring-1 ring-brand-300/90 dark:bg-brand-950/50 dark:text-amber-50 dark:ring-brand-700/60"
                         : "text-stone-600 hover:bg-stone-50 hover:text-stone-900 dark:text-stone-300 dark:hover:bg-stone-800/70 dark:hover:text-amber-100"
                     }`}
                   >
@@ -298,7 +295,7 @@ function DiagnosticsFolderList({
                     >
                       <FileIcon />
                     </span>
-                    <span className="min-w-0 flex-1 break-words text-[12px] font-semibold leading-snug">
+                    <span className="min-w-0 flex-1 break-words text-[11px] font-semibold leading-snug">
                       {m.title}
                     </span>
                     <DiagStatusBadge result={m} />
@@ -437,6 +434,65 @@ export function DashboardPage() {
 
   const faultRows = useMemo(() => (data ? buildFaultRows(data.results) : []), [data]);
 
+  const kpiItems = useMemo((): KpiStripItem[] => {
+    if (!data || !jobId) return [];
+    const gaps = kpiGaps;
+    return [
+      {
+        label: "Performance ratio",
+        value: fmt(data.kpis.performance_ratio_pct),
+        unit: "%",
+        icon: "pr",
+        tone: "good",
+        missingHint: gaps?.performance_ratio_pct?.message,
+        missingHref: gaps?.performance_ratio_pct ? fixHref(jobId, gaps.performance_ratio_pct.fix) : null,
+      },
+      {
+        label: "Specific yield",
+        value: fmt(data.kpis.specific_yield_kwh_per_kwp),
+        unit: "kWh/kWp",
+        icon: "yield",
+        missingHint: gaps?.specific_yield_kwh_per_kwp?.message,
+        missingHref: gaps?.specific_yield_kwh_per_kwp
+          ? fixHref(jobId, gaps.specific_yield_kwh_per_kwp.fix)
+          : null,
+      },
+      {
+        label: "Plant availability",
+        value: fmt(data.kpis.plant_availability_pct),
+        unit: "%",
+        icon: "availability",
+        tone: "good",
+        missingHint: gaps?.plant_availability_pct?.message,
+        missingHref: gaps?.plant_availability_pct
+          ? fixHref(jobId, gaps.plant_availability_pct.fix)
+          : null,
+      },
+      {
+        label: "Energy loss",
+        value: fmt(data.kpis.estimated_energy_loss_kwh, 0),
+        unit: "kWh",
+        icon: "loss",
+        tone: data.kpis.estimated_energy_loss_kwh ? "bad" : "neutral",
+      },
+      {
+        label: "Revenue loss",
+        value: data.kpis.revenue_loss_available ? fmt(data.kpis.revenue_loss_inr, 0) : null,
+        unit: "₹",
+        icon: "revenue",
+        tone: "bad",
+        missingHint: gaps?.revenue_loss_inr?.message,
+        missingHref: gaps?.revenue_loss_inr ? fixHref(jobId, gaps.revenue_loss_inr.fix) : null,
+      },
+      {
+        label: "Faults",
+        value: data.kpis.fault_count,
+        icon: "faults",
+        tone: data.kpis.fault_count > 0 ? "bad" : "neutral",
+      },
+    ];
+  }, [data, kpiGaps, jobId]);
+
   const jumpToModule = useCallback(
     (algorithmId: string) => {
       selectModule(algorithmId);
@@ -470,33 +526,31 @@ export function DashboardPage() {
   const mobileTabs = RESULTS_SECTIONS.map(({ id, label }) => ({ id, label }));
 
   return (
-    <div className={`tool-enter flex flex-col pb-8 ${RESULTS_SHELL} lg:pb-0`}>
-      <div className="shrink-0">
-        <JobNav />
-
-        <div className="mb-3" {...(data ? { "data-tour": "results-welcome" } : {})}>
-          <PageHeader
-            eyebrow="Analysis output"
-            title="Results"
-            description={
-              data
-                ? `${okCount} modules ready · ${blockedCount} need input · KPIs, actions, bridge, faults, diagnostics`
-                : "Plant KPIs, owner actions, loss bridge, faults, and per-module diagnostics"
-            }
-            actions={
-              data ? (
-                <div className="flex flex-wrap items-center gap-2" data-tour="download-reports">
-                  <a className="btn-secondary text-xs" href={reportUrl(jobId, "xlsx")}>
-                    Download Excel
-                  </a>
-                  <a className="btn-primary text-xs" href={reportUrl(jobId, "pdf")}>
-                    Download PDF
-                  </a>
-                </div>
-              ) : undefined
-            }
-          />
+    <div className={`tool-enter flex ${RESULTS_SHELL} flex-col gap-1.5 overflow-hidden`}>
+      <div className="flex shrink-0 flex-wrap items-end justify-between gap-2">
+        <div className="min-w-0" {...(data ? { "data-tour": "results-welcome" } : {})}>
+          <JobNav />
+          <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0">
+            <h2 className="font-display text-base font-semibold tracking-tight text-stone-900 dark:text-stone-50">
+              Results
+            </h2>
+            <p className="text-[11px] text-stone-500 dark:text-stone-400">
+              {data
+                ? `${okCount} ready · ${blockedCount} need input`
+                : "KPIs, actions, bridge, faults, diagnostics"}
+            </p>
+          </div>
         </div>
+        {data ? (
+          <div className="flex shrink-0 flex-wrap items-center gap-1.5" data-tour="download-reports">
+            <a className="btn-secondary !px-2.5 !py-1 text-[11px]" href={reportUrl(jobId, "xlsx")}>
+              Excel
+            </a>
+            <a className="btn-primary !px-2.5 !py-1 text-[11px]" href={reportUrl(jobId, "pdf")}>
+              PDF
+            </a>
+          </div>
+        ) : null}
       </div>
 
       {loading && (
@@ -506,7 +560,7 @@ export function DashboardPage() {
       )}
 
       {!loading && error && (
-        <div className="space-y-3">
+        <div className="space-y-2">
           <ErrorState
             title="Could not load results"
             message={error}
@@ -526,8 +580,7 @@ export function DashboardPage() {
 
       {!loading && data && (
         <>
-          {/* Mobile: flat section tabs */}
-          <div className="tool-sticky-bar sticky top-14 z-10 mb-3 w-full shrink-0 lg:hidden">
+          <div className="tool-sticky-bar sticky top-14 z-10 w-full shrink-0 lg:hidden">
             <SubnavTabs
               items={mobileTabs}
               activeId={activeSection}
@@ -537,10 +590,11 @@ export function DashboardPage() {
           </div>
 
           {thinResults && (
-            <div className="mb-3 shrink-0">
+            <div className="shrink-0">
               <InfoBanner
                 tone="warning"
                 title="Limited module coverage"
+                className="!rounded-xl !px-3 !py-2"
                 actions={
                   <Link
                     to={`/jobs/${jobId}/setup#mapping&field=ac_power_kw`}
@@ -556,7 +610,12 @@ export function DashboardPage() {
             </div>
           )}
 
-          <div className="flex min-h-0 flex-1 items-stretch gap-4 lg:overflow-hidden">
+          {/* Sticky KPIs — sit above the scroll pane so they stay visible across sections */}
+          <div className="shrink-0">
+            <KpiStrip items={kpiItems} />
+          </div>
+
+          <div className="flex min-h-0 flex-1 items-stretch gap-2 overflow-hidden">
             <ResultsSidebar
               activeSection={activeSection}
               onSelectSection={selectSection}
@@ -566,110 +625,29 @@ export function DashboardPage() {
 
             <div
               ref={mainPaneRef}
-              className={`min-h-0 min-w-0 flex-1 pb-2 ${
+              className={`min-h-0 min-w-0 flex-1 ${
                 activeSection === "diagnostics"
-                  ? "flex flex-col lg:overflow-hidden"
-                  : "lg:overflow-y-auto lg:overscroll-contain"
+                  ? "flex flex-col overflow-hidden"
+                  : "overflow-y-auto overscroll-contain"
               }`}
               data-tour="results-main"
             >
               {activeSection === "summary" && (
-                <div className="space-y-4" data-results-pane="summary">
-                  <SectionPanel
-                    id="results-summary"
-                    title="Summary"
-                    description="Plant KPIs for this run"
-                    scrollMargin={false}
-                  >
-                    <div
-                      className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-6"
-                      data-tour="summary-kpis"
-                    >
-                      <KpiCard
-                        label="Performance ratio"
-                        value={fmt(data.kpis.performance_ratio_pct)}
-                        unit="%"
-                        icon="pr"
-                        index={0}
-                        tone="good"
-                        missingHint={kpiGaps?.performance_ratio_pct?.message}
-                        missingHref={
-                          kpiGaps?.performance_ratio_pct ? fixHref(jobId, kpiGaps.performance_ratio_pct.fix) : null
-                        }
-                      />
-                      <KpiCard
-                        label="Specific yield"
-                        value={fmt(data.kpis.specific_yield_kwh_per_kwp)}
-                        unit="kWh/kWp"
-                        icon="yield"
-                        index={1}
-                        missingHint={kpiGaps?.specific_yield_kwh_per_kwp?.message}
-                        missingHref={
-                          kpiGaps?.specific_yield_kwh_per_kwp
-                            ? fixHref(jobId, kpiGaps.specific_yield_kwh_per_kwp.fix)
-                            : null
-                        }
-                      />
-                      <KpiCard
-                        label="Plant availability"
-                        value={fmt(data.kpis.plant_availability_pct)}
-                        unit="%"
-                        icon="availability"
-                        index={2}
-                        tone="good"
-                        missingHint={kpiGaps?.plant_availability_pct?.message}
-                        missingHref={
-                          kpiGaps?.plant_availability_pct
-                            ? fixHref(jobId, kpiGaps.plant_availability_pct.fix)
-                            : null
-                        }
-                      />
-                      <KpiCard
-                        label="Estimated energy loss"
-                        value={fmt(data.kpis.estimated_energy_loss_kwh, 0)}
-                        unit="kWh"
-                        icon="loss"
-                        index={3}
-                        tone={data.kpis.estimated_energy_loss_kwh ? "bad" : "neutral"}
-                      />
-                      <KpiCard
-                        label="Revenue loss"
-                        value={data.kpis.revenue_loss_available ? fmt(data.kpis.revenue_loss_inr, 0) : null}
-                        unit="₹"
-                        icon="revenue"
-                        index={4}
-                        tone="bad"
-                        missingHint={kpiGaps?.revenue_loss_inr?.message}
-                        missingHref={
-                          kpiGaps?.revenue_loss_inr ? fixHref(jobId, kpiGaps.revenue_loss_inr.fix) : null
-                        }
-                      />
-                      <KpiCard
-                        label="Faults detected"
-                        value={data.kpis.fault_count}
-                        icon="faults"
-                        index={5}
-                        tone={data.kpis.fault_count > 0 ? "bad" : "neutral"}
-                      />
-                    </div>
-                  </SectionPanel>
-
-                  <div
-                    id="results-actions"
-                    data-results-pane="actions"
-                    className="rounded-2xl border border-stone-200/90 bg-white/95 p-4 sm:p-5 dark:border-stone-700 dark:bg-stone-900"
-                  >
-                    {ownerActions ? (
-                      <OwnerActionCenter
-                        model={ownerActions}
-                        onInvestigate={investigateFinding}
-                        onModule={jumpToModule}
-                        onSection={(id) => selectSection(id)}
-                      />
-                    ) : (
-                      <p className="text-sm text-stone-500">No owner actions for this run.</p>
-                    )}
-                  </div>
+                <div
+                  id="results-actions"
+                  data-results-pane="summary"
+                  className="rounded-xl border border-stone-200/90 bg-white/95 p-3 dark:border-stone-700 dark:bg-stone-900"
+                >
+                  {ownerActions ? (
+                    <OwnerActionCenter
+                      model={ownerActions}
+                      onInvestigate={investigateFinding}
+                      onModule={jumpToModule}
+                      onSection={(id) => selectSection(id)}
+                    />
+                  ) : (
+                    <p className="text-sm text-stone-500">No owner actions for this run.</p>
+                  )}
                 </div>
               )}
 
@@ -687,16 +665,15 @@ export function DashboardPage() {
 
               {activeSection === "diagnostics" && (
                 <div
-                  className="flex min-h-0 flex-1 flex-col gap-3 lg:flex-row lg:gap-3"
+                  className="flex min-h-0 flex-1 flex-col gap-2 lg:flex-row"
                   data-tour="diagnostics"
                   data-results-pane="diagnostics"
                 >
-                  {/* Mobile: always show folder; desktop: ~188px or collapsed rail so detail ≥70% */}
                   {folderCollapsed && (
-                    <div className="hidden shrink-0 lg:flex lg:h-full lg:w-11 lg:flex-col">
+                    <div className="hidden shrink-0 lg:flex lg:h-full lg:w-9 lg:flex-col">
                       <button
                         type="button"
-                        className="flex h-full w-full flex-col items-center gap-2 rounded-2xl border border-stone-200/90 bg-white/95 px-1.5 py-3 text-stone-500 transition hover:border-brand-300 hover:bg-brand-50/40 hover:text-brand-700 dark:border-stone-700 dark:bg-stone-900 dark:hover:border-brand-700 dark:hover:bg-brand-950/30 dark:hover:text-brand-300"
+                        className="flex h-full w-full flex-col items-center gap-2 rounded-xl border border-stone-200/90 bg-white/95 px-1 py-2.5 text-stone-500 transition hover:border-brand-300 hover:bg-brand-50/40 hover:text-brand-700 dark:border-stone-700 dark:bg-stone-900 dark:hover:border-brand-700 dark:hover:bg-brand-950/30 dark:hover:text-brand-300"
                         onClick={() => setFolderCollapsed(false)}
                         title="Expand module folder"
                         aria-label="Expand module folder"
@@ -704,7 +681,7 @@ export function DashboardPage() {
                       >
                         <FolderIcon open={false} />
                         <span
-                          className="text-[10px] font-bold uppercase tracking-[0.14em]"
+                          className="text-[9px] font-bold uppercase tracking-[0.14em]"
                           style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
                         >
                           Modules
@@ -713,7 +690,7 @@ export function DashboardPage() {
                     </div>
                   )}
                   <div
-                    className={`max-h-[min(36vh,16rem)] shrink-0 overflow-hidden lg:max-h-none lg:h-full lg:w-[188px] lg:max-w-[22%] lg:shrink-0 ${
+                    className={`max-h-[min(32vh,14rem)] shrink-0 overflow-hidden lg:max-h-none lg:h-full lg:w-[11rem] lg:max-w-[20%] lg:shrink-0 ${
                       folderCollapsed ? "lg:hidden" : ""
                     }`}
                   >
@@ -728,13 +705,13 @@ export function DashboardPage() {
                   <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain lg:h-full lg:min-w-[70%]">
                     {!activeModule ? (
                       <div
-                        className="flex min-h-[20rem] h-full flex-col items-center justify-center rounded-2xl border border-dashed border-stone-300/90 bg-stone-50/60 px-6 py-12 text-center dark:border-stone-700 dark:bg-stone-900/40"
+                        className="flex h-full min-h-[12rem] flex-col items-center justify-center rounded-xl border border-dashed border-stone-300/90 bg-stone-50/60 px-4 py-8 text-center dark:border-stone-700 dark:bg-stone-900/40"
                         data-tour="diagnostics-empty"
                       >
                         <p className="font-display text-sm font-semibold text-stone-800 dark:text-stone-100">
                           Select a diagnostic module
                         </p>
-                        <p className="mt-1.5 max-w-sm text-xs leading-relaxed text-stone-500 dark:text-stone-400">
+                        <p className="mt-1 max-w-sm text-xs leading-relaxed text-stone-500 dark:text-stone-400">
                           {diagModules.length === 0
                             ? "No diagnostic modules available for this run."
                             : "Choose a module from the folder — summary and findings open here; charts via Investigate."}
@@ -745,7 +722,7 @@ export function DashboardPage() {
                         id={`module-${activeModule.algorithm_id}`}
                         className={`transition ${
                           highlightId === activeModule.algorithm_id
-                            ? "rounded-2xl ring-2 ring-brand-500 ring-offset-2 dark:ring-offset-stone-950"
+                            ? "rounded-xl ring-2 ring-brand-500 ring-offset-1 dark:ring-offset-stone-950"
                             : ""
                         }`}
                       >
@@ -764,8 +741,8 @@ export function DashboardPage() {
         </>
       )}
 
-      <div className="mt-4 flex shrink-0 justify-center border-t border-stone-200/80 pt-3 dark:border-stone-800/80 lg:mt-2 lg:pt-2">
-        <button type="button" className="btn-ghost text-xs" onClick={handleNewAnalysis}>
+      <div className="flex shrink-0 justify-center border-t border-stone-200/80 pt-1 dark:border-stone-800/80">
+        <button type="button" className="btn-ghost !px-2 !py-0.5 text-[11px]" onClick={handleNewAnalysis}>
           Start new analysis
         </button>
       </div>

@@ -35,7 +35,7 @@ export const DEMO_TOUR_STEPS: TourStepDef[] = [
   {
     id: "summary",
     title: "Summary & actions",
-    body: "KPIs first, then the Owner Action Center below — prioritized problems and a clear next step, without a separate nav item.",
+    body: "Sticky plant KPIs stay in view — Owner Action Center below lists prioritized problems and a clear next step.",
     route: "dashboard",
     selector: "[data-tour='summary-kpis']",
     resultsSection: "summary",

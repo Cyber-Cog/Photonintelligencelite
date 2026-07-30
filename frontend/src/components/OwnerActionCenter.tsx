@@ -74,29 +74,29 @@ function ActionCard({
 }) {
   return (
     <article
-      className={`flex flex-col gap-3 rounded-xl border bg-white/90 p-3.5 dark:bg-stone-950/50 ${TONE_BORDER[card.tone]}`}
+      className={`flex flex-col gap-2 rounded-lg border bg-stone-50/50 p-2.5 dark:bg-stone-950/40 ${TONE_BORDER[card.tone]}`}
       data-tour={card.cta.kind === "investigate" ? "owner-investigate" : undefined}
     >
-      <div className="flex items-start gap-2.5">
+      <div className="flex items-start gap-2">
         <span className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${TONE_ACCENT[card.tone]}`} aria-hidden />
-        <div className="min-w-0 flex-1 space-y-2">
+        <div className="min-w-0 flex-1 space-y-1.5">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-stone-400">Problem</p>
-            <p className="mt-0.5 text-sm font-medium leading-snug text-stone-900 dark:text-stone-50">{card.problem}</p>
+            <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-stone-400">Problem</p>
+            <p className="mt-0.5 text-[13px] font-medium leading-snug text-stone-900 dark:text-stone-50">{card.problem}</p>
           </div>
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid gap-1.5 sm:grid-cols-2">
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-stone-400">Impact</p>
+              <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-stone-400">Impact</p>
               <p className="mt-0.5 text-xs font-semibold tabular-nums text-rose-700 dark:text-rose-300">{card.impact}</p>
             </div>
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-stone-400">What to do next</p>
-              <p className="mt-0.5 text-xs leading-relaxed text-stone-600 dark:text-stone-300">{card.nextStep}</p>
+              <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-stone-400">What to do next</p>
+              <p className="mt-0.5 text-xs leading-snug text-stone-600 dark:text-stone-300">{card.nextStep}</p>
             </div>
           </div>
         </div>
       </div>
-      <div className="flex flex-wrap items-center gap-2 pl-4">
+      <div className="flex flex-wrap items-center gap-1.5 pl-3.5">
         <CtaButton
           cta={card.cta}
           onInvestigate={onInvestigate}
@@ -104,7 +104,7 @@ function ActionCard({
           onSection={onSection}
         />
         {card.algorithmId && card.cta.kind !== "module" && (
-          <button type="button" className="btn-ghost !px-2 !py-1 text-[11px]" onClick={() => onModule(card.algorithmId!)}>
+          <button type="button" className="btn-ghost !px-2 !py-0.5 text-[11px]" onClick={() => onModule(card.algorithmId!)}>
             Go to module
           </button>
         )}
@@ -195,11 +195,11 @@ export function OwnerActionCenter({
       aria-label="Owner action center"
       data-tour="owner-actions"
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="tool-eyebrow">Owner action center</p>
+          <p className="tool-eyebrow !text-[10px]">Owner action center</p>
           <h3
-            className={`mt-1 font-display text-lg font-semibold tracking-tight sm:text-xl ${
+            className={`mt-0.5 font-display text-base font-semibold tracking-tight sm:text-lg ${
               model.healthy
                 ? "text-accent-800 dark:text-accent-300"
                 : "text-stone-900 dark:text-stone-50"
@@ -207,11 +207,11 @@ export function OwnerActionCenter({
           >
             {model.headline}
           </h3>
-          <p className="mt-1 max-w-2xl text-xs leading-relaxed text-stone-500 dark:text-stone-400">{model.subline}</p>
+          <p className="mt-0.5 max-w-2xl text-[11px] leading-snug text-stone-500 dark:text-stone-400">{model.subline}</p>
         </div>
         {!model.healthy && model.cards.length > 0 && (
           <span
-            className="shrink-0 rounded-lg border border-amber-200/80 bg-amber-50/80 px-2 py-1 text-[11px] font-semibold text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100"
+            className="shrink-0 rounded-md border border-amber-200/80 bg-amber-50/80 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100"
             data-tour="owner-actions-summary"
           >
             {summaryChipLabel(model)}
@@ -220,9 +220,9 @@ export function OwnerActionCenter({
       </div>
 
       {model.cards.length > 0 && (
-        <div className="mt-3 space-y-2.5">
+        <div className="mt-2 space-y-2">
           {expanded.length > 0 && (
-            <div className="grid gap-2.5 lg:grid-cols-2">
+            <div className="grid gap-2 lg:grid-cols-2">
               {expanded.map((card) => (
                 <ActionCard
                   key={card.id}
@@ -236,10 +236,10 @@ export function OwnerActionCenter({
           )}
 
           {showAccordion && (
-            <div className="rounded-xl border border-stone-200/90 dark:border-stone-700">
+            <div className="rounded-lg border border-stone-200/80 dark:border-stone-700">
               <button
                 type="button"
-                className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs font-semibold text-stone-700 hover:bg-stone-50/80 dark:text-stone-200 dark:hover:bg-stone-900/50"
+                className="flex w-full items-center justify-between gap-2 px-2.5 py-1.5 text-left text-xs font-semibold text-stone-700 hover:bg-stone-50/80 dark:text-stone-200 dark:hover:bg-stone-900/50"
                 aria-expanded={moreOpen}
                 onClick={() => setMoreOpen((o) => !o)}
                 data-tour="owner-actions-more"

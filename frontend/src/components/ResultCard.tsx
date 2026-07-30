@@ -218,19 +218,19 @@ function ResultCardInner({
     <div
       className={`overflow-hidden border border-stone-200/90 bg-white/95 dark:border-stone-700 dark:bg-stone-900 ${
         standalone
-          ? "rounded-2xl shadow-sm shadow-stone-900/[0.03] dark:shadow-none"
-          : "rounded-xl shadow-sm shadow-stone-900/[0.02] dark:border-stone-800 dark:bg-stone-900/50 dark:shadow-none"
+          ? "rounded-xl shadow-sm shadow-stone-900/[0.03] dark:shadow-none"
+          : "rounded-lg shadow-sm shadow-stone-900/[0.02] dark:border-stone-800 dark:bg-stone-900/50 dark:shadow-none"
       }`}
       data-tour={standalone ? "diagnostics-module" : undefined}
     >
       {standalone ? (
-        <div className="flex w-full items-start justify-between gap-3 px-4 py-4 text-left sm:px-5">
+        <div className="flex w-full items-start justify-between gap-2 px-3 py-2.5 text-left sm:px-3.5">
           {headerInner}
         </div>
       ) : (
         <button
           type="button"
-          className="flex w-full items-start justify-between gap-3 px-3.5 py-3 text-left transition hover:bg-brand-50/30 dark:hover:bg-stone-800/40"
+          className="flex w-full items-start justify-between gap-2 px-3 py-2 text-left transition hover:bg-brand-50/30 dark:hover:bg-stone-800/40"
           onClick={() => setExpanded((e) => !e)}
           aria-expanded={expanded}
         >
@@ -241,7 +241,7 @@ function ResultCardInner({
       {showBody && (
         <div
           className={`border-t border-stone-100 dark:border-stone-800 ${
-            standalone ? "space-y-4 px-4 py-4 sm:px-5 sm:py-5" : "space-y-3 px-3.5 py-3"
+            standalone ? "space-y-2.5 px-3 py-2.5 sm:px-3.5" : "space-y-2 px-3 py-2"
           }`}
         >
           {hasMetrics && (

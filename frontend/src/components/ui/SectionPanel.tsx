@@ -51,27 +51,27 @@ export function SectionPanel({
       className={`${
         embedded
           ? "bg-transparent"
-          : "overflow-hidden rounded-2xl border border-stone-200/90 bg-white/95 dark:border-stone-700 dark:bg-stone-900"
+          : "overflow-hidden rounded-xl border border-stone-200/90 bg-white/95 dark:border-stone-700 dark:bg-stone-900"
       } ${scrollMargin ? "scroll-mt-44" : ""} ${className}`}
     >
       <div className={`h-0.5 w-full bg-gradient-to-r ${ACCENT_BAR[accent]}`} aria-hidden />
-      <div className="flex flex-wrap items-start justify-between gap-3 px-4 pb-0 pt-4 sm:px-5 sm:pt-5">
+      <div className="flex flex-wrap items-start justify-between gap-2 px-3 pb-0 pt-2.5 sm:px-3.5 sm:pt-3">
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${ACCENT_DOT[accent]}`} aria-hidden />
             <h3 className="font-display text-sm font-semibold tracking-tight text-stone-900 dark:text-stone-50">
               {title}
             </h3>
           </div>
           {description ? (
-            <div className="mt-1 pl-3.5 text-xs leading-relaxed text-stone-500 dark:text-stone-400">
+            <div className="mt-0.5 pl-3 text-[11px] leading-snug text-stone-500 dark:text-stone-400">
               {description}
             </div>
           ) : null}
         </div>
         {actions ? <div className="flex shrink-0 flex-wrap items-center gap-1.5">{actions}</div> : null}
       </div>
-      <div className={bodyClassName || "p-4 sm:p-5"}>{children}</div>
+      <div className={bodyClassName || "p-3 sm:p-3.5"}>{children}</div>
     </section>
   );
 }

@@ -77,6 +77,7 @@ const TONE_MARK: Record<KpiTone, string> = {
   bad: "text-rose-500/25 dark:text-rose-400/20",
 };
 
+/** Standalone tile — prefer KpiStrip on Results for density. */
 export function KpiCard({
   label,
   value,
@@ -104,17 +105,14 @@ export function KpiCard({
   const wash = unavailable
     ? "from-stone-300/20 via-transparent to-stone-200/10 dark:from-stone-600/15 dark:via-transparent dark:to-stone-700/10"
     : TONE_WASH[tone];
-  const rule = unavailable
-    ? "bg-stone-300 dark:bg-stone-600"
-    : TONE_RULE[tone];
+  const rule = unavailable ? "bg-stone-300 dark:bg-stone-600" : TONE_RULE[tone];
   const mark = unavailable ? "text-stone-300/40 dark:text-stone-600/35" : TONE_MARK[tone];
 
   return (
     <div
-      className="kpi-card group relative overflow-hidden rounded-2xl border border-stone-200/70 bg-white/80 shadow-sm shadow-stone-900/[0.03] backdrop-blur-[2px] transition duration-300 hover:-translate-y-0.5 hover:border-brand-300/60 hover:shadow-md hover:shadow-brand-900/[0.06] dark:border-stone-700/80 dark:bg-stone-900/85 dark:shadow-none dark:hover:border-brand-600/45 dark:hover:shadow-none"
+      className="kpi-card group relative overflow-hidden rounded-xl border border-stone-200/70 bg-white/80 shadow-sm shadow-stone-900/[0.03] backdrop-blur-[2px] transition duration-300 hover:-translate-y-0.5 hover:border-brand-300/60 hover:shadow-md hover:shadow-brand-900/[0.06] dark:border-stone-700/80 dark:bg-stone-900/85 dark:shadow-none dark:hover:border-brand-600/45 dark:hover:shadow-none"
       style={{ animationDelay: `${delay}ms` }}
     >
-      {/* Ambient craft wash — corner bloom, not left stripe */}
       <div
         className={`pointer-events-none absolute -right-6 -top-10 h-28 w-28 rounded-full bg-gradient-to-br ${wash} blur-2xl transition duration-500 group-hover:scale-110`}
         aria-hidden
@@ -124,19 +122,8 @@ export function KpiCard({
         aria-hidden
       />
 
-      {/* Faint technical corner ticks */}
-      <span
-        className="pointer-events-none absolute left-2.5 top-2.5 h-2 w-2 border-l border-t border-stone-300/80 dark:border-stone-600/80"
-        aria-hidden
-      />
-      <span
-        className="pointer-events-none absolute bottom-2.5 right-2.5 h-2 w-2 border-b border-r border-stone-300/80 dark:border-stone-600/80"
-        aria-hidden
-      />
-
-      {/* Oversized watermark glyph — not an icon chip */}
       <svg
-        className={`pointer-events-none absolute -bottom-1 -right-1 h-16 w-16 ${mark} transition duration-300 group-hover:opacity-80`}
+        className={`pointer-events-none absolute -bottom-1 -right-1 h-14 w-14 ${mark} transition duration-300 group-hover:opacity-80`}
         fill="none"
         viewBox="0 0 24 24"
         strokeWidth={1.15}
@@ -146,13 +133,13 @@ export function KpiCard({
         {ICON_PATHS[icon]}
       </svg>
 
-      <div className="relative flex flex-col gap-1.5 px-3.5 pb-3 pt-3.5">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-stone-500 dark:text-stone-400">
+      <div className="relative flex flex-col gap-1 px-3 pb-2.5 pt-2.5">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-stone-500 dark:text-stone-400">
           {label}
         </p>
 
         <p
-          className={`font-display text-[1.75rem] font-bold leading-none tracking-tight tabular-nums ${valueClass}`}
+          className={`font-display text-[1.5rem] font-bold leading-none tracking-tight tabular-nums ${valueClass}`}
         >
           {display}
           {!unavailable && unit ? (
@@ -162,17 +149,17 @@ export function KpiCard({
           ) : null}
         </p>
 
-        <div className={`mt-1 h-[2px] w-10 rounded-full ${rule} opacity-80 transition group-hover:w-14`} aria-hidden />
+        <div className={`mt-0.5 h-[2px] w-8 rounded-full ${rule} opacity-80 transition group-hover:w-12`} aria-hidden />
 
         {unavailable && missingHint && missingHref ? (
           <a
             href={missingHref}
-            className="mt-1 block text-[11px] leading-snug text-amber-800 underline-offset-2 hover:underline dark:text-amber-200"
+            className="mt-0.5 block text-[11px] leading-snug text-amber-800 underline-offset-2 hover:underline dark:text-amber-200"
           >
             {missingHint}
           </a>
         ) : unavailable && missingHint ? (
-          <p className="mt-1 text-[11px] leading-snug text-amber-800/90 dark:text-amber-200/90">{missingHint}</p>
+          <p className="mt-0.5 text-[11px] leading-snug text-amber-800/90 dark:text-amber-200/90">{missingHint}</p>
         ) : null}
       </div>
     </div>

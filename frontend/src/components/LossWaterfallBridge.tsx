@@ -92,7 +92,7 @@ export function LossWaterfallBridge({
 
   const chartHeight = useMemo(() => {
     const n = model?.segments.length ?? 0;
-    return Math.min(480, Math.max(320, n > 10 ? 400 : 340));
+    return Math.min(420, Math.max(280, n > 10 ? 360 : 300));
   }, [model?.segments.length]);
 
   const scaled = useMemo(() => {
@@ -195,15 +195,15 @@ export function LossWaterfallBridge({
             { label: "PR", value: prPct != null ? `${prPct.toFixed(1)}%` : "—", className: "text-stone-800 dark:text-stone-100" },
             { label: "Unknown", value: `${fmtMwh(model.unknownMwh)} MWh`, className: "text-stone-500" },
           ].map((cell) => (
-            <div key={cell.label} className="bg-white px-3 py-2 dark:bg-stone-900/80">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-stone-400">{cell.label}</p>
+            <div key={cell.label} className="bg-white px-2.5 py-1.5 dark:bg-stone-900/80">
+              <p className="text-[9px] font-semibold uppercase tracking-wide text-stone-400">{cell.label}</p>
               <p className={`text-sm font-semibold tabular-nums ${cell.className}`}>{cell.value}</p>
             </div>
           ))}
         </div>
       )}
 
-      <div className="space-y-2.5 p-3">
+      <div className="space-y-2 p-2.5">
         {model.gaps.length > 0 && <MissingReasonBanner reasons={model.gaps} jobId={jobId} />}
 
         {model.note && (

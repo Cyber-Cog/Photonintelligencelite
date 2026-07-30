@@ -13,7 +13,7 @@ export function JobNav() {
 
   return (
     <nav
-      className="mb-4 flex w-full gap-0 overflow-x-auto overflow-y-hidden border-b border-stone-200/80 dark:border-stone-800"
+      className="mb-0 flex w-full gap-0 overflow-x-auto overflow-y-hidden border-b border-stone-200/80 dark:border-stone-800"
       aria-label="Job views"
       data-tour="job-nav"
     >
