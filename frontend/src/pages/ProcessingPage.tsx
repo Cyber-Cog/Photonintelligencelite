@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ApiError, getJobStatus } from "@/api/client";
+import { AnalysisConsole } from "@/components/processing/AnalysisConsole";
+import { ChartPrepPanel } from "@/components/processing/ChartPrepPanel";
+import { useAnalysisLog } from "@/components/processing/useAnalysisLog";
 import { StepIndicator } from "@/components/StepIndicator";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { ProgressBar } from "@/components/ui/ProgressBar";
@@ -116,9 +119,8 @@ export function ProcessingPage() {
     };
   }, [jobId, navigate]);
 
-  if (!jobId) return null;
-
   const failed = status?.state === "failed";
+  const live = Boolean(status?.is_active) && !failed;
   const stateLabel = status ? STATE_LABELS[status.state] ?? status.state : "Starting analysis service…";
   const detail =
     status?.state === "queued"
@@ -131,56 +133,87 @@ export function ProcessingPage() {
           ? "Free-tier analysis is CPU-bound — this often takes a few minutes when warm."
           : "This can take a moment on a cold service start.");
 
+  const logLines = useAnalysisLog(
+    status?.state,
+    status?.progress_message,
+    status?.queue_position,
+    elapsedSec,
+  );
+
+  if (!jobId) return null;
+
   return (
-    <div className="tool-enter mx-auto flex max-w-xl flex-1 flex-col items-center justify-center">
-      <StepIndicator current={4} jobId={jobId} />
-      <div className="w-full text-center">
-        {!failed && (
-          <>
-            <div className="mb-4 flex justify-center">
-              <Spinner className="h-8 w-8" />
+    <div className="proc-screen tool-enter relative mx-auto flex w-full max-w-6xl flex-1 flex-col">
+      <div className="proc-screen-grid pointer-events-none absolute inset-0" aria-hidden />
+
+      <div className="relative z-[1] flex min-h-0 flex-1 flex-col gap-4 pb-2 pt-1">
+        <StepIndicator current={4} jobId={jobId} />
+
+        {failed ? (
+          <div className="mx-auto w-full max-w-xl">
+            <ErrorState
+              title="Analysis failed"
+              message={status?.error_summary ?? "The job could not be completed."}
+              hint="You can fix column mapping on the existing upload, or start over with a new file."
+            />
+            <div className="mt-6 flex flex-wrap justify-center gap-3">
+              <button type="button" className="btn-primary" onClick={() => navigate(`/jobs/${jobId}/setup`)}>
+                Fix column mapping
+              </button>
+              <button type="button" className="btn-secondary" onClick={() => navigate(`/jobs/${jobId}/validate`)}>
+                Back to validation
+              </button>
+              <button type="button" className="btn-ghost" onClick={() => navigate(`/upload?replace=${jobId}`)}>
+                Replace files / Back to upload
+              </button>
             </div>
-            <p className="tool-eyebrow mb-1.5">In progress · {formatElapsed(elapsedSec)}</p>
-            <h2 className="font-display text-xl font-semibold tracking-tight text-stone-900 dark:text-stone-50">
-              {stateLabel}
-            </h2>
-            <p className="mt-1.5 text-sm text-stone-500">{detail}</p>
-            {status && (
-              <div className="mx-auto mt-6 max-w-sm space-y-1">
-                <ProgressBar pct={progressPct(status.state)} />
-              </div>
-            )}
-            {status?.queue_position != null && status.queue_position > 0 && (
-              <p className="mt-3 text-xs text-stone-400">
-                In queue (workers busy) · Position {status.queue_position}
-                {status.estimated_wait_seconds != null && ` · Est. wait ${Math.round(status.estimated_wait_seconds)}s`}
-              </p>
-            )}
-          </>
-        )}
-
-        {failed && (
-          <ErrorState
-            title="Analysis failed"
-            message={status?.error_summary ?? "The job could not be completed."}
-            hint="You can fix column mapping on the existing upload, or start over with a new file."
-          />
-        )}
-
-        {error && !failed && <p className="mt-4 text-xs text-rose-500">{error}</p>}
-
-        {failed && jobId && (
-          <div className="mt-6 flex flex-wrap justify-center gap-3">
-            <button type="button" className="btn-primary" onClick={() => navigate(`/jobs/${jobId}/setup`)}>
-              Fix column mapping
-            </button>
-            <button type="button" className="btn-secondary" onClick={() => navigate(`/jobs/${jobId}/validate`)}>
-              Back to validation
-            </button>
-            <button type="button" className="btn-ghost" onClick={() => navigate(`/upload?replace=${jobId}`)}>
-              Replace files / Back to upload
-            </button>
           </div>
+        ) : (
+          <>
+            {/* Status strip */}
+            <header className="proc-status-strip flex flex-col gap-3 rounded-2xl border border-stone-200/90 bg-white/90 px-4 py-3 shadow-sm shadow-stone-900/[0.03] dark:border-stone-700 dark:bg-stone-900/90 dark:shadow-none sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 items-start gap-3">
+                <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-50 dark:bg-brand-950/40">
+                  <Spinner className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="tool-eyebrow mb-0.5">In progress · {formatElapsed(elapsedSec)}</p>
+                  <h2 className="font-display text-lg font-semibold tracking-tight text-stone-900 dark:text-stone-50 sm:text-xl">
+                    {stateLabel}
+                  </h2>
+                  <p className="mt-0.5 text-sm text-stone-500 dark:text-stone-400">{detail}</p>
+                  {status?.queue_position != null && status.queue_position > 0 && (
+                    <p className="mt-1 text-xs text-stone-400">
+                      In queue (workers busy) · Position {status.queue_position}
+                      {status.estimated_wait_seconds != null &&
+                        ` · Est. wait ${Math.round(status.estimated_wait_seconds)}s`}
+                    </p>
+                  )}
+                </div>
+              </div>
+              {status && (
+                <div className="w-full shrink-0 sm:w-48">
+                  <div className="mb-1 flex justify-between text-[10px] font-semibold uppercase tracking-wide text-stone-400">
+                    <span>Pipeline</span>
+                    <span className="tabular-nums text-brand-700 dark:text-brand-400">
+                      {progressPct(status.state)}%
+                    </span>
+                  </div>
+                  <div className="proc-progress-pulse">
+                    <ProgressBar pct={progressPct(status.state)} />
+                  </div>
+                </div>
+              )}
+            </header>
+
+            {error && <p className="text-xs text-rose-500">{error}</p>}
+
+            {/* Main workspace: console + chart prep */}
+            <div className="flex min-h-[min(62vh,36rem)] flex-1 flex-col gap-3 lg:min-h-[28rem] lg:flex-row">
+              <AnalysisConsole lines={logLines} live={live} />
+              <ChartPrepPanel state={status?.state} />
+            </div>
+          </>
         )}
       </div>
     </div>
