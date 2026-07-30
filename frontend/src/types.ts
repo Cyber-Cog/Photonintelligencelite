@@ -159,6 +159,8 @@ export interface JobStatusResponse {
   queue_position: number | null;
   estimated_wait_seconds: number | null;
   is_active: boolean;
+  is_demo?: boolean;
+  original_filename?: string | null;
 }
 
 export interface KpiResponse {

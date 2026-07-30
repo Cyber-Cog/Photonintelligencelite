@@ -16,7 +16,7 @@ const STATE_LABELS: Record<string, string> = {
   uploaded: "Upload received",
   parsing: "Parsing file",
   mapping: "Awaiting column mapping",
-  validating: "Preparing demo data",
+  validating: "Validating data",
   normalizing: "Finalizing validation",
   queued: "Queued for analysis",
   running: "Running fault & loss algorithms",
@@ -54,6 +54,14 @@ function formatElapsed(sec: number): string {
   const m = Math.floor(sec / 60);
   const s = sec % 60;
   return `${m}m ${s.toString().padStart(2, "0")}s`;
+}
+
+function stateLabelFor(status: JobStatusResponse | null): string {
+  if (!status) return "Starting analysis service…";
+  if (status.state === "validating" && (status.is_demo || /demo/i.test(status.progress_message ?? ""))) {
+    return "Preparing demo data";
+  }
+  return STATE_LABELS[status.state] ?? status.state;
 }
 
 export function ProcessingPage() {
@@ -121,7 +129,7 @@ export function ProcessingPage() {
 
   const failed = status?.state === "failed";
   const live = Boolean(status?.is_active) && !failed;
-  const stateLabel = status ? STATE_LABELS[status.state] ?? status.state : "Starting analysis service…";
+  const stateLabel = stateLabelFor(status);
   const detail =
     status?.state === "queued"
       ? status.progress_message &&
@@ -138,15 +146,19 @@ export function ProcessingPage() {
     status?.progress_message,
     status?.queue_position,
     elapsedSec,
+    {
+      isDemo: status?.is_demo,
+      filename: status?.original_filename,
+    },
   );
 
   if (!jobId) return null;
 
   return (
-    <div className="proc-screen tool-enter relative mx-auto flex w-full max-w-6xl flex-1 flex-col">
+    <div className="proc-screen tool-enter relative flex w-full min-h-0 flex-1 flex-col">
       <div className="proc-screen-grid pointer-events-none absolute inset-0" aria-hidden />
 
-      <div className="relative z-[1] flex min-h-0 flex-1 flex-col gap-4 pb-2 pt-1">
+      <div className="relative z-[1] flex min-h-0 flex-1 flex-col gap-3 pb-1 pt-0.5">
         <StepIndicator current={4} jobId={jobId} />
 
         {failed ? (
@@ -170,18 +182,18 @@ export function ProcessingPage() {
           </div>
         ) : (
           <>
-            {/* Status strip */}
-            <header className="proc-status-strip flex flex-col gap-3 rounded-2xl border border-stone-200/90 bg-white/90 px-4 py-3 shadow-sm shadow-stone-900/[0.03] dark:border-stone-700 dark:bg-stone-900/90 dark:shadow-none sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex min-w-0 items-start gap-3">
-                <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-50 dark:bg-brand-950/40">
-                  <Spinner className="h-5 w-5" />
+            {/* Status strip — compact so console/chart dominate */}
+            <header className="proc-status-strip flex flex-col gap-2 rounded-xl border border-stone-200/90 bg-white/90 px-3 py-2.5 shadow-sm shadow-stone-900/[0.03] dark:border-stone-700 dark:bg-stone-900/90 dark:shadow-none sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 items-start gap-2.5">
+                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-50 dark:bg-brand-950/40">
+                  <Spinner className="h-4 w-4" />
                 </div>
                 <div className="min-w-0">
                   <p className="tool-eyebrow mb-0.5">In progress · {formatElapsed(elapsedSec)}</p>
-                  <h2 className="font-display text-lg font-semibold tracking-tight text-stone-900 dark:text-stone-50 sm:text-xl">
+                  <h2 className="font-display text-base font-semibold tracking-tight text-stone-900 dark:text-stone-50 sm:text-lg">
                     {stateLabel}
                   </h2>
-                  <p className="mt-0.5 text-sm text-stone-500 dark:text-stone-400">{detail}</p>
+                  <p className="mt-0.5 line-clamp-2 text-sm text-stone-500 dark:text-stone-400">{detail}</p>
                   {status?.queue_position != null && status.queue_position > 0 && (
                     <p className="mt-1 text-xs text-stone-400">
                       In queue (workers busy) · Position {status.queue_position}
@@ -192,7 +204,7 @@ export function ProcessingPage() {
                 </div>
               </div>
               {status && (
-                <div className="w-full shrink-0 sm:w-48">
+                <div className="w-full shrink-0 sm:w-44">
                   <div className="mb-1 flex justify-between text-[10px] font-semibold uppercase tracking-wide text-stone-400">
                     <span>Pipeline</span>
                     <span className="tabular-nums text-brand-700 dark:text-brand-400">
@@ -208,8 +220,8 @@ export function ProcessingPage() {
 
             {error && <p className="text-xs text-rose-500">{error}</p>}
 
-            {/* Main workspace: console + chart prep */}
-            <div className="flex min-h-[min(62vh,36rem)] flex-1 flex-col gap-3 lg:min-h-[28rem] lg:flex-row">
+            {/* Main workspace: console + chart prep — dominate remaining viewport */}
+            <div className="flex min-h-[min(72vh,42rem)] flex-1 flex-col gap-2.5 lg:min-h-[32rem] lg:flex-row">
               <AnalysisConsole lines={logLines} live={live} />
               <ChartPrepPanel state={status?.state} />
             </div>

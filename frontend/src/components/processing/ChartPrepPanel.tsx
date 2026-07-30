@@ -4,7 +4,7 @@ import { CHART_PREP_LABELS } from "./useAnalysisLog";
 type PrepPhase = "idle" | "loading" | "drawing" | "ready";
 
 function phaseFromState(state: string | null | undefined): PrepPhase {
-  if (!state || state === "queued") return "idle";
+  if (!state || state === "queued" || state === "validating" || state === "normalizing") return "idle";
   if (state === "running") return "loading";
   if (state === "generating_charts") return "drawing";
   if (state === "generating_report" || state === "completed") return "ready";
@@ -37,7 +37,7 @@ function SkeletonPlot({
   index: number;
 }) {
   const w = 280;
-  const h = 88;
+  const h = 72;
   const path = seriesPath(index * 2.3 + 1, w, h);
   const drawing = phase === "drawing" || phase === "ready";
   const ready = phase === "ready";
@@ -45,12 +45,12 @@ function SkeletonPlot({
   return (
     <div
       className={clsx(
-        "proc-chart-card rounded-lg border border-stone-200/80 bg-white/70 p-2.5 dark:border-stone-700/70 dark:bg-stone-950/40",
+        "proc-chart-card flex min-h-0 flex-1 flex-col rounded-md border border-stone-200/80 bg-white/70 p-2 dark:border-stone-700/70 dark:bg-stone-950/40",
         phase === "loading" && "proc-chart-shimmer",
       )}
-      style={{ animationDelay: `${index * 120}ms` }}
+      style={{ animationDelay: `${index * 100}ms` }}
     >
-      <div className="mb-1.5 flex items-center justify-between gap-2">
+      <div className="mb-1 flex shrink-0 items-center justify-between gap-2">
         <p className="truncate text-[10px] font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-400">
           {label}
         </p>
@@ -72,10 +72,10 @@ function SkeletonPlot({
 
       <svg
         viewBox={`0 0 ${w} ${h}`}
-        className="h-[4.5rem] w-full text-brand-600 dark:text-brand-400"
+        className="min-h-[3.25rem] w-full flex-1 text-brand-600 dark:text-brand-400"
+        preserveAspectRatio="none"
         aria-hidden
       >
-        {/* Faint grid */}
         {[0.25, 0.5, 0.75].map((t) => (
           <line
             key={`h-${t}`}
@@ -99,7 +99,6 @@ function SkeletonPlot({
           />
         ))}
 
-        {/* Accent underlay when ready */}
         {ready && (
           <path
             d={`${path} L${w},${h} L0,${h} Z`}
@@ -119,14 +118,9 @@ function SkeletonPlot({
             ready && "opacity-90",
             phase === "loading" && "opacity-30",
           )}
-          style={
-            drawing
-              ? { animationDelay: `${index * 180}ms` }
-              : undefined
-          }
+          style={drawing ? { animationDelay: `${index * 180}ms` } : undefined}
         />
 
-        {/* Second muted series for depth */}
         <path
           d={seriesPath(index * 1.7 + 4, w, h)}
           fill="none"
@@ -149,7 +143,7 @@ export function ChartPrepPanel({ state }: { state: string | null | undefined }) 
 
   const statusCopy =
     phase === "idle"
-      ? "Chart canvases idle until the worker starts"
+      ? "Canvases idle until the worker starts"
       : phase === "loading"
         ? "Reserving figure layouts while modules run"
         : phase === "drawing"
@@ -157,15 +151,18 @@ export function ChartPrepPanel({ state }: { state: string | null | undefined }) 
           : "Figures prepared — packaging reports";
 
   return (
-    <section className="proc-panel flex min-h-0 flex-col overflow-hidden lg:w-[min(100%,22rem)] lg:shrink-0" aria-label="Chart preparation">
-      <header className="flex shrink-0 items-center justify-between gap-2 border-b border-stone-200/80 px-3 py-2 dark:border-stone-700/80">
+    <section
+      className="proc-panel flex min-h-0 flex-col overflow-hidden lg:w-[min(100%,24rem)] lg:shrink-0"
+      aria-label="Chart preparation"
+    >
+      <header className="flex shrink-0 items-center justify-between gap-2 border-b border-stone-200/80 px-3 py-1.5 dark:border-stone-700/80">
         <span className="font-display text-[11px] font-semibold uppercase tracking-[0.14em] text-stone-600 dark:text-stone-300">
           Chart prep
         </span>
         <span className="truncate text-[10px] text-stone-400 dark:text-stone-500">{statusCopy}</span>
       </header>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-2.5 overflow-y-auto p-3 sm:grid-cols-2 lg:grid-cols-1">
+      <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto p-2">
         {CHART_PREP_LABELS.map((label, i) => (
           <SkeletonPlot key={label} label={label} phase={phase} index={i} />
         ))}

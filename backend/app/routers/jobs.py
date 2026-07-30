@@ -45,4 +45,6 @@ def get_status(
         queue_position=runner.queue_position(job.id),
         estimated_wait_seconds=runner.estimated_wait_seconds(job.id),
         is_active=state.is_active,
+        is_demo=bool(job.is_demo),
+        original_filename=job.original_filename,
     )

@@ -104,6 +104,8 @@ export function Layout({ children }: { children: ReactNode }) {
   const { user, loading, connecting, connectAttempt, apiUnreachable, refresh } = useAuth();
   const location = useLocation();
   const isLanding = location.pathname === "/";
+  const isProcessing = /\/jobs\/[^/]+\/processing\/?$/.test(location.pathname);
+  const shellMax = isProcessing ? "max-w-[90rem]" : "max-w-6xl";
 
   return (
     <div className="relative flex min-h-screen flex-col bg-stone-50 text-stone-900 dark:bg-stone-950 dark:text-stone-100">
@@ -129,7 +131,7 @@ export function Layout({ children }: { children: ReactNode }) {
         </div>
       ) : null}
       <header className={`app-header ${isLanding ? "app-header-landing" : ""}`}>
-        <div className="mx-auto flex h-14 max-w-6xl items-center gap-3 px-4 sm:gap-4 sm:px-6">
+        <div className={`mx-auto flex h-14 ${shellMax} items-center gap-3 px-4 sm:gap-4 sm:px-6`}>
           <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-5">
             <BrandWordmark variant="header" linkHome />
             <nav className="hidden items-center gap-0.5 sm:flex" aria-label="Primary">
@@ -172,13 +174,15 @@ export function Layout({ children }: { children: ReactNode }) {
         className={
           isLanding
             ? "relative flex w-full flex-1 flex-col"
-            : "relative mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-5 sm:px-6"
+            : isProcessing
+              ? `relative mx-auto flex w-full ${shellMax} min-h-0 flex-1 flex-col px-3 py-3 sm:px-5`
+              : `relative mx-auto flex w-full ${shellMax} flex-1 flex-col px-4 py-5 sm:px-6`
         }
       >
         {children}
       </main>
       <footer className={`app-footer ${isLanding ? "app-footer-landing" : ""}`}>
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-x-1.5 gap-y-1 px-4 sm:px-6">
+        <div className={`mx-auto flex ${shellMax} flex-wrap items-center justify-center gap-x-1.5 gap-y-1 px-4 sm:px-6`}>
           <BrandWordmark variant="footer" />
           <span className="leading-none text-stone-300 dark:text-stone-600" aria-hidden>
             ·

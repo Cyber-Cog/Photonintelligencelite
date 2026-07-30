@@ -218,6 +218,8 @@ class JobStatusResponse(BaseModel):
     queue_position: Optional[int] = None
     estimated_wait_seconds: Optional[float] = None
     is_active: bool
+    is_demo: bool = False
+    original_filename: Optional[str] = None
 
 class KpiResponse(BaseModel):
     plant_availability_pct: Optional[float]
