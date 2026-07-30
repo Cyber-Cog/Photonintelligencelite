@@ -62,14 +62,14 @@ const OWNER_COPY: Record<
       count > 1
         ? `${count} string groups look disconnected or offline (e.g. ${equipment}).`
         : `A string group looks disconnected or offline${equipment !== "—" ? ` (${equipment})` : ""}.`,
-    next: "Check the listed SCB/strings on site, then Investigate evidence to confirm the fault window.",
+    next: "Inspect the listed SCB/strings on site and confirm the fault window in evidence.",
   },
   module_damage: {
     problem: ({ equipment, count }) =>
       count > 1
         ? `${count} SCBs show voltage drop consistent with bypass diodes or module damage (e.g. ${equipment}).`
         : `Voltage drop suggests bypass diode or module damage${equipment !== "—" ? ` on ${equipment}` : ""}.`,
-    next: "Inspect the affected modules for damage or diode activation; Investigate evidence for the voltage reference.",
+    next: "Inspect affected modules; use evidence for the voltage reference.",
   },
   clipping_power: {
     problem: ({ equipment, count }) =>
@@ -208,7 +208,7 @@ export function buildOwnerActions(
       cta: {
         kind: "investigate",
         algorithmId,
-        label: faultRows.some((r) => r.algorithmId === algorithmId) ? "Investigate" : "Go to module",
+        label: faultRows.some((r) => r.algorithmId === algorithmId) ? "View evidence" : "Go to module",
       },
       algorithmId,
       severity: sev,
@@ -307,10 +307,10 @@ export function buildOwnerActions(
         : "No confirmed faults or blocked checks in this run. Use Loss bridge and Diagnostics for detail.";
   } else if (issueCount === 1) {
     headline = "1 issue needs attention";
-    subline = "Start with the action below — then use the loss bridge and diagnostics for detail.";
+    subline = "Select an issue for detail and next steps.";
   } else {
     headline = `${issueCount} issues need attention`;
-    subline = "Prioritized for an asset owner. Open Loss bridge or Diagnostics for analyst depth.";
+    subline = "Select an issue — use Bridge or Diagnostics for depth.";
   }
 
   return { headline, subline, healthy, cards, issueCount, totalLossKwh };

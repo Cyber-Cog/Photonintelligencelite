@@ -195,8 +195,8 @@ function ActionDetail({
       </div>
 
       <div>
-        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-stone-400">What to do next</p>
-        <p className="mt-1.5 text-sm leading-relaxed text-stone-600 dark:text-stone-300 break-normal">
+        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-stone-400">Next step</p>
+        <p className="mt-1 text-sm leading-snug text-stone-600 dark:text-stone-300 break-normal">
           {card.nextStep}
         </p>
       </div>
@@ -279,26 +279,24 @@ export function OwnerActionCenter({
 
   return (
     <section
-      className="overflow-hidden rounded-pic-lg border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] shadow-pic"
+      className="flex min-h-[min(58vh,36rem)] flex-1 flex-col overflow-hidden rounded-pic-lg border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] shadow-pic"
       role="region"
       aria-label="Owner action center"
       data-tour="owner-actions"
     >
-      <div className="panel-rule" aria-hidden />
+      <div className="panel-rule shrink-0" aria-hidden />
 
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[color:var(--pic-border-subtle)] px-4 py-4 sm:px-5">
+      <div className="flex shrink-0 flex-wrap items-start justify-between gap-3 border-b border-[color:var(--pic-border-subtle)] px-4 py-3.5 sm:px-5">
         <div className="min-w-0">
-          <p className="tool-eyebrow">Owner action centre</p>
+          <p className="tool-eyebrow">Action centre</p>
           <h3
-            className={`mt-1.5 font-display text-lg font-semibold tracking-tight sm:text-xl ${
+            className={`mt-1 font-display text-lg font-semibold tracking-tight sm:text-xl ${
               model.healthy ? "text-accent-800 dark:text-accent-300" : "text-[color:var(--pic-text)]"
             }`}
           >
             {model.headline}
           </h3>
-          <p className="mt-1.5 max-w-2xl text-xs leading-relaxed text-[color:var(--pic-text-muted)]">
-            {model.subline}
-          </p>
+          <p className="mt-1 max-w-2xl text-xs text-[color:var(--pic-text-muted)]">{model.subline}</p>
         </div>
         {summaryChip ? (
           <span
@@ -311,12 +309,12 @@ export function OwnerActionCenter({
       </div>
 
       {model.cards.length === 0 ? (
-        <p className="px-4 py-8 text-center text-sm text-[color:var(--pic-text-muted)] sm:px-5">
+        <p className="flex flex-1 items-center justify-center px-4 py-10 text-center text-sm text-[color:var(--pic-text-muted)] sm:px-5">
           No owner actions for this run. Use Loss bridge and Diagnostics for detail.
         </p>
       ) : (
         <>
-          <div className="flex flex-wrap gap-2 border-b border-[color:var(--pic-border-subtle)] px-4 py-2.5 sm:px-5">
+          <div className="flex shrink-0 flex-wrap gap-2 border-b border-[color:var(--pic-border-subtle)] px-4 py-2.5 sm:px-5">
             <FilterChip active={filter === "all"} label="All" count={counts.all} onClick={() => setFilter("all")} />
             <FilterChip active={filter === "high"} label="High" count={counts.high} onClick={() => setFilter("high")} />
             <FilterChip
@@ -328,8 +326,8 @@ export function OwnerActionCenter({
             <FilterChip active={filter === "low"} label="Low" count={counts.low} onClick={() => setFilter("low")} />
           </div>
 
-          <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
-            <div className="max-h-[22rem] space-y-0.5 overflow-y-auto overscroll-contain border-b border-[color:var(--pic-border-subtle)] p-2 lg:max-h-[26rem] lg:border-b-0 lg:border-r">
+          <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
+            <div className="min-h-[16rem] space-y-0.5 overflow-y-auto overscroll-contain border-b border-[color:var(--pic-border-subtle)] p-2 lg:min-h-0 lg:border-b-0 lg:border-r">
               {filtered.length === 0 ? (
                 <p className="px-2.5 py-6 text-center text-xs text-[color:var(--pic-text-muted)]">No issues in this severity band.</p>
               ) : (
@@ -344,7 +342,7 @@ export function OwnerActionCenter({
               )}
             </div>
 
-            <div className="min-h-[14rem] bg-[color:var(--pic-surface-inset)]">
+            <div className="min-h-[16rem] overflow-y-auto overscroll-contain bg-[color:var(--pic-surface-inset)] lg:min-h-0">
               {selected ? (
                 <ActionDetail
                   card={selected}

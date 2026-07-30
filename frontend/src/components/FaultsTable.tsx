@@ -37,7 +37,7 @@ export function FaultsTable({ results }: { results: ResultObject[] }) {
   return (
     <SectionPanel
       title="Fault findings"
-      description={`${rows.length} finding(s). Select a row or Investigate for evidence charts.`}
+      description={`${rows.length} confirmed finding${rows.length === 1 ? "" : "s"}. Click a row for evidence.`}
       scrollMargin={false}
       bodyClassName="p-0"
     >
@@ -51,7 +51,6 @@ export function FaultsTable({ results }: { results: ResultObject[] }) {
               <th className="text-right">Loss (kWh)</th>
               <th>Time window</th>
               <th>Status</th>
-              <th className="text-right">Action</th>
             </tr>
           </thead>
           <tbody>
@@ -62,6 +61,7 @@ export function FaultsTable({ results }: { results: ResultObject[] }) {
                   selected?.id === row.id ? "bg-brand-50/60 dark:bg-brand-950/25" : ""
                 }`}
                 onClick={() => setSelected(row)}
+                title="Open evidence charts"
               >
                 <td className="font-medium text-stone-800 dark:text-stone-100">{row.faultType}</td>
                 <td>{row.equipment}</td>
@@ -78,18 +78,6 @@ export function FaultsTable({ results }: { results: ResultObject[] }) {
                 <td className="text-xs text-stone-500">{row.timeWindow}</td>
                 <td>
                   <Badge tone="success">{row.status}</Badge>
-                </td>
-                <td className="text-right">
-                  <button
-                    type="button"
-                    className="btn-secondary text-xs"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelected(row);
-                    }}
-                  >
-                    Investigate
-                  </button>
                 </td>
               </tr>
             ))}

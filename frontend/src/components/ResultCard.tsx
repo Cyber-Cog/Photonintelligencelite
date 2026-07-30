@@ -182,6 +182,9 @@ function ResultCardInner({
   const hasTables = result.tables.length > 0;
   const hasMetrics = Object.keys(result.metrics).length > 0;
   const canInvestigate = chartCount > 0 || faultRows.length > 0;
+  /** One CTA path: table rows open evidence; header button only when there is no findings table. */
+  const showHeaderInvestigate = standalone && canInvestigate && !hasTables;
+  const showTableActionColumn = !standalone;
 
   const showBody = standalone || expanded;
 
@@ -201,15 +204,16 @@ function ResultCardInner({
             {result.title}
           </h3>
           {result.severity && <Badge tone={SEVERITY_TONE[result.severity] ?? "neutral"}>{result.severity}</Badge>}
-          {standalone && <Badge tone="info">Ready</Badge>}
         </div>
-        <p
-          className={`mt-0.5 text-stone-500 dark:text-stone-400 ${
-            standalone ? "text-sm leading-relaxed" : "line-clamp-2 text-xs"
-          }`}
-        >
-          {result.summary}
-        </p>
+        {!(standalone && hasTables) && (
+          <p
+            className={`mt-0.5 text-stone-500 dark:text-stone-400 ${
+              standalone ? "line-clamp-2 text-sm" : "line-clamp-2 text-xs"
+            }`}
+          >
+            {result.summary}
+          </p>
+        )}
       </div>
       <div className="flex shrink-0 items-center gap-2 sm:gap-3">
         {result.loss_energy_kwh != null && (
@@ -222,14 +226,14 @@ function ResultCardInner({
             <span className="text-xs font-normal">kWh</span>
           </p>
         )}
-        {standalone && canInvestigate && (
+        {showHeaderInvestigate && (
           <button
             type="button"
             className="btn-secondary text-xs"
             onClick={() => openInvestigate()}
             data-tour="diagnostics-investigate"
           >
-            Investigate
+            View evidence
           </button>
         )}
         {!standalone && (
@@ -272,41 +276,25 @@ function ResultCardInner({
           }`}
         >
           {hasMetrics && (
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-stone-600 dark:text-stone-300">
               {Object.entries(result.metrics).map(([key, val]) => (
-                <div
-                  key={key}
-                  className="rounded-lg border border-stone-100 bg-stone-50/70 px-2.5 py-1.5 dark:border-stone-800 dark:bg-stone-800/40"
-                >
-                  <p className="text-[10px] uppercase tracking-wide text-stone-400">{key.replace(/_/g, " ")}</p>
-                  <p className="text-sm font-semibold tabular-nums text-stone-800 dark:text-stone-100">
-                    {typeof val === "number" ? val.toLocaleString(undefined, { maximumFractionDigits: 2 }) : val}
-                  </p>
-                </div>
+                <span key={key} className="tabular-nums">
+                  <span className="font-medium text-stone-400">{key.replace(/_/g, " ")}:</span>{" "}
+                  {typeof val === "number" ? val.toLocaleString(undefined, { maximumFractionDigits: 2 }) : val}
+                </span>
               ))}
             </div>
           )}
 
-          {/* Charts stay in Investigate modal — never dump evidence_charts on the card. */}
-          {chartCount > 0 && !hasTables && (
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed border-brand-200/80 bg-brand-50/40 px-3 py-2.5 dark:border-brand-800/50 dark:bg-brand-950/20">
+          {chartCount > 0 && !hasTables && !standalone && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed border-brand-200/80 bg-brand-50/40 px-3 py-2 dark:border-brand-800/50 dark:bg-brand-950/20">
               <p className="text-xs text-stone-600 dark:text-stone-300">
-                {chartCount} evidence chart{chartCount === 1 ? "" : "s"} available
-                {standalone ? " — use Investigate above." : "."}
+                {chartCount} evidence chart{chartCount === 1 ? "" : "s"}
               </p>
-              {/* Standalone already has Investigate in the header — avoid a second CTA. */}
-              {!standalone && (
-                <button type="button" className="btn-secondary text-xs" onClick={() => openInvestigate()}>
-                  Investigate
-                </button>
-              )}
+              <button type="button" className="btn-secondary text-xs" onClick={() => openInvestigate()}>
+                View evidence
+              </button>
             </div>
-          )}
-
-          {chartCount > 0 && hasTables && (
-            <p className="text-[11px] text-stone-500 dark:text-stone-400">
-              Evidence charts open from Investigate on a finding row — not listed inline to keep this view scalable.
-            </p>
           )}
 
           {hasTables &&
@@ -323,7 +311,9 @@ function ResultCardInner({
                           {c}
                         </th>
                       ))}
-                      <th className="px-3 py-1.5 text-right font-medium">Action</th>
+                      {showTableActionColumn && (
+                        <th className="px-3 py-1.5 text-right font-medium">Action</th>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
@@ -340,26 +330,29 @@ function ResultCardInner({
                               : ""
                           }`}
                           onClick={() => faultRow && openInvestigate(faultRow)}
+                          title={faultRow && standalone ? "Open evidence charts" : undefined}
                         >
                           {row.map((cell, c) => (
                             <td key={c} className="px-3 py-1.5 text-stone-700 dark:text-stone-300">
                               {String(cell)}
                             </td>
                           ))}
-                          <td className="px-3 py-1.5 text-right">
-                            {faultRow && (
-                              <button
-                                type="button"
-                                className="btn-secondary text-xs"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openInvestigate(faultRow);
-                                }}
-                              >
-                                Investigate
-                              </button>
-                            )}
-                          </td>
+                          {showTableActionColumn && (
+                            <td className="px-3 py-1.5 text-right">
+                              {faultRow && (
+                                <button
+                                  type="button"
+                                  className="btn-secondary text-xs"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openInvestigate(faultRow);
+                                  }}
+                                >
+                                  View
+                                </button>
+                              )}
+                            </td>
+                          )}
                         </tr>
                       );
                     })}
@@ -372,15 +365,12 @@ function ResultCardInner({
             <EvidenceInvestigateModal row={investigateRow} onClose={() => setInvestigateRow(null)} />
           )}
 
-          {result.recommendations.length > 0 && (
-            <div className="rounded-md border border-amber-200/70 bg-amber-50/50 p-2.5 text-sm text-amber-950 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-100">
-              <p className="mb-1 text-[10px] font-bold uppercase tracking-wide">What to do next</p>
-              <ul className="list-inside list-disc space-y-0.5 text-xs">
-                {result.recommendations.map((r, i) => (
-                  <li key={i}>{r}</li>
-                ))}
-              </ul>
-            </div>
+          {result.recommendations.length > 0 && !standalone && (
+            <ul className="list-inside list-disc space-y-0.5 text-xs text-stone-600 dark:text-stone-400">
+              {result.recommendations.map((r, i) => (
+                <li key={i}>{r}</li>
+              ))}
+            </ul>
           )}
 
           <details className="text-xs text-stone-500">
