@@ -18,6 +18,16 @@ export interface ExcelParseReport {
   warnings: string[];
   sheets_probed: string[];
   error?: string | null;
+  multi_row_header?: boolean;
+  header_preview?: string[][];
+  channel_columns?: Array<{
+    index: number;
+    display_name: string;
+    primary_candidate: string;
+    channel_index?: number | null;
+    field_type?: string | null;
+  }>;
+  needs_header_confirm?: boolean;
 }
 
 export interface UploadResponse {

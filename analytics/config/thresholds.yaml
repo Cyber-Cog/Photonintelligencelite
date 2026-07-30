@@ -6,6 +6,10 @@
 disconnected_strings:
   irradiance_min_w_m2: 150.0
   irradiance_max_w_m2: 1200.0
+  # Per-string channel path: flag string≈0 when POA/irradiance exceeds this floor.
+  string_irradiance_min_w_m2: 50.0
+  string_zero_current_max_a: 0.05
+  string_persistence_minutes: 60
   leakage_irradiance_max_w_m2: 200.0
   leakage_current_min_a: 20.0
   isc_stc_a: 10.0

@@ -10,6 +10,7 @@ class LayoutKind(str, Enum):
     TIDY_LONG = "tidy_long"
     WIDE_SINGLE_HEADER = "wide_single_header"
     WIDE_MULTI_HEADER = "wide_multi_header"
+    WIDE_CHANNEL_MELT = "wide_channel_melt"
     TRANSPOSED = "transposed"
     UNKNOWN = "unknown"
 
@@ -40,6 +41,14 @@ class ParseReport:
     warnings: list[str] = field(default_factory=list)
     sheets_probed: list[str] = field(default_factory=list)
     error: str | None = None
+    multi_row_header: bool = False
+    """True when 2+ header rows were stitched (merged group + leaf)."""
+    header_preview: list[list[str]] = field(default_factory=list)
+    """Small preview of raw header (+ first data) rows for Setup confirm UI."""
+    channel_columns: list[dict[str, Any]] = field(default_factory=list)
+    """Detected repeating channel columns (string_current_channel, …)."""
+    needs_header_confirm: bool = False
+    """Ambiguous multi-row stitch — UI should ask the user to confirm."""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

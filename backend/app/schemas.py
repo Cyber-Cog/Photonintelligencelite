@@ -23,6 +23,10 @@ class ExcelParseReportOut(BaseModel):
     warnings: list[str] = Field(default_factory=list)
     sheets_probed: list[str] = Field(default_factory=list)
     error: Optional[str] = None
+    multi_row_header: bool = False
+    header_preview: list[list[str]] = Field(default_factory=list)
+    channel_columns: list[dict[str, Any]] = Field(default_factory=list)
+    needs_header_confirm: bool = False
 
 
 class UploadResponse(BaseModel):
@@ -42,6 +46,10 @@ class ColumnMappingSuggestion(BaseModel):
     canonical_field: Optional[str]
     confidence: float
     band: str  # "auto" | "confirm" | "manual"
+    field_type: Optional[str] = None
+    """e.g. string_current_channel when detected from multi-row stitch."""
+    channel_index: Optional[int] = None
+    group_label: Optional[str] = None
 
 
 class MappingSubmission(BaseModel):

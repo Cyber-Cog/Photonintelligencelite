@@ -14,10 +14,13 @@ import pandas as pd
 _INVERTER_STRICT = re.compile(r"^INV-\d{1,3}[A-Z]?$", re.IGNORECASE)
 _SCB_STRICT = re.compile(r"^INV-\d{1,3}[A-Z]?-(?:SCB|SMB)-\d{1,3}$", re.IGNORECASE)
 _STRING_STRICT = re.compile(r"^INV-\d{1,3}[A-Z]?-(?:SCB|SMB)-\d{1,3}-STR-\d{1,3}$", re.IGNORECASE)
+# Melted channel ids: SMB-01-STR-03 / SCB-02-STR-12 (no INV prefix)
+_STRING_STANDALONE = re.compile(r"^(?:SMB|SCB)[-_]?\d{1,3}-STR-\d{1,3}$", re.IGNORECASE)
+_STRING_LOOSE = re.compile(r".+-STR-\d{1,3}$", re.IGNORECASE)
 
 # Looser fallback patterns seen across OEM exports (e.g. "Inverter01", "INV_01_SCB_02", "SMB-01").
 _SCB_LOOSE = re.compile(r"(INV[-_]?\w+)[-_](SCB|SMB|MPPT)[-_]?(\d+)", re.IGNORECASE)
-_SMB_STANDALONE = re.compile(r"^(?:SMB|SCB|COMBINER|CB)[-_\s]?\d+", re.IGNORECASE)
+_SMB_STANDALONE = re.compile(r"^(?:SMB|SCB|COMBINER|CB)[-_\s]?\d+$", re.IGNORECASE)
 _INVERTER_LOOSE = re.compile(r"(INV(?:ERTER)?)[-_]?(\d+[A-Z]?)", re.IGNORECASE)
 
 
@@ -43,7 +46,7 @@ def derive_level(equipment_id) -> str | None:
     eid = _as_clean_id(equipment_id)
     if eid is None:
         return None
-    if _STRING_STRICT.match(eid):
+    if _STRING_STRICT.match(eid) or _STRING_STANDALONE.match(eid) or _STRING_LOOSE.match(eid):
         return "string"
     if _SCB_STRICT.match(eid) or _SCB_LOOSE.search(eid) or _SMB_STANDALONE.match(eid):
         return "scb"

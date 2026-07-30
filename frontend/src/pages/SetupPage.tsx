@@ -531,6 +531,39 @@ export function SetupPage() {
         </InfoBanner>
       )}
 
+      {(uploadInfo?.parse_report?.needs_header_confirm ||
+        uploadInfo?.parse_report?.multi_row_header) && (
+        <InfoBanner
+          className="mb-3"
+          tone={uploadInfo?.parse_report?.needs_header_confirm ? "warning" : "info"}
+          title={
+            uploadInfo?.parse_report?.needs_header_confirm
+              ? "Multi-row header detected, please confirm"
+              : "Multi-row Excel header stitched"
+          }
+        >
+          {uploadInfo.parse_report.needs_header_confirm
+            ? "Merged group labels were combined with sub-headers. Confirm the mapping below — better than dozens of broken Column_N dropdowns."
+            : `Detected ${uploadInfo.parse_report.header_rows?.length ?? 2} header row(s)${
+                (uploadInfo.parse_report.channel_columns?.length ?? 0) > 0
+                  ? ` and melted ${uploadInfo.parse_report.channel_columns!.length} string-current channels (I1…In) into Equipment ID + DC Current`
+                  : ""
+              }. Review mappings if anything looks off.`}
+          {uploadInfo.parse_report.header_preview &&
+          uploadInfo.parse_report.header_preview.length > 0 ? (
+            <div className="mt-2 overflow-x-auto rounded-lg border border-stone-200/80 bg-white/70 p-2 text-[11px] leading-relaxed text-stone-600 dark:border-stone-700 dark:bg-stone-950/40 dark:text-stone-300">
+              <p className="mb-1 font-semibold text-stone-700 dark:text-stone-200">Header preview</p>
+              {uploadInfo.parse_report.header_preview.slice(0, 3).map((row, i) => (
+                <p key={i} className="truncate font-mono">
+                  R{i + 1}: {row.filter(Boolean).slice(0, 12).join(" · ")}
+                  {row.filter(Boolean).length > 12 ? " …" : ""}
+                </p>
+              ))}
+            </div>
+          ) : null}
+        </InfoBanner>
+      )}
+
       <div className="setup-workspace mb-3">
         <div className="setup-workspace-tabs">
           <SubnavTabs

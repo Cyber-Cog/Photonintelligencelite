@@ -8,8 +8,10 @@ from pathlib import Path
 from backend.app.services.excel_parser.headers import pad_matrix, sanitize_headers
 from backend.app.services.excel_parser.probe import load_sheet_matrix, probe_workbook
 from backend.app.services.excel_parser.strategies import (
+    try_stitch_only,
     try_tidy_long,
     try_transposed,
+    try_wide_channel_melt,
     try_wide_multi_header,
     try_wide_single_header,
 )
@@ -17,9 +19,12 @@ from backend.app.services.excel_parser.types import MIN_USABLE_CONFIDENCE, Parse
 from backend.app.services.storage import UploadTooLargeError
 
 # Prefer structured SCADA layouts before generic tidy promotion.
+# Channel-melt (SMB I1..In) before inverter multi-header so string currents are not discarded.
 _STRATEGIES = (
+    try_wide_channel_melt,
     try_wide_multi_header,
     try_wide_single_header,
+    try_stitch_only,
     try_transposed,
     try_tidy_long,
 )
@@ -162,8 +167,10 @@ def _run_strategies(matrix: list[list[str]], *, sheet_name: str) -> StrategyResu
         # On very wide sheets that are NOT inverter-block layouts (e.g. hundreds of
         # SMB/string current columns), early-accepting wide would silently drop most
         # headers. Demote confidence so tidy_long (full header preserve) can win.
+        # Channel-melt is the intended path for I1..In bands — do not demote it.
         if (
             result.report.strategy.startswith("wide")
+            and result.report.strategy != "wide_channel_melt"
             and input_width >= 40
             and _looks_like_per_device_metric_sheet(padded)
         ):
@@ -176,8 +183,12 @@ def _run_strategies(matrix: list[list[str]], *, sheet_name: str) -> StrategyResu
                 ]
         if best is None or result.report.confidence > best.report.confidence:
             best = result
-        # Early accept high-confidence structured layouts (true inverter reports)
-        if result.report.confidence >= 0.85 and result.report.strategy.startswith("wide"):
+        # Early accept high-confidence structured layouts (true inverter reports / channel melts)
+        if result.report.confidence >= 0.85 and result.report.strategy in {
+            "wide_multi_header",
+            "wide_single_header",
+            "wide_channel_melt",
+        }:
             return result
     return best
 
@@ -202,6 +213,8 @@ def _looks_like_per_device_metric_sheet(rows: list[list[str]]) -> bool:
 
 
 def _rank_sheets(probes) -> list[str]:
+    import re
+
     from analytics.common.complete_analysis_pack import prefer_scada_sheet_bonus
 
     scored: list[tuple[float, str]] = []
@@ -217,7 +230,11 @@ def _rank_sheets(probes) -> list[str]:
             score += 2.0
         if "equipment id" in text or "timestamp" in text:
             score += 4.0
+        if "strings current" in text or re.search(r"\bi\s*1\b.*\bi\s*2\b|\bi1\b.*\bi2\b", text):
+            score += 3.5
         score += min(p.n_cols, 50) * 0.02
+        if p.merged_cell_count > 0:
+            score += 0.5
         scored.append((score, p.sheet_name))
     scored.sort(key=lambda x: (-x[0], x[1]))
     return [n for _, n in scored]

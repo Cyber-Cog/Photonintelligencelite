@@ -84,10 +84,47 @@ def run(context: AnalysisContext) -> ResultObject:
     min_dt_sec = t.get("min_energy_dt_sec", 30)
     max_dt_sec = t.get("max_energy_dt_sec", 900)
     rolling_median_window = int(t.get("rolling_median_window", 5))
+    string_irr_min = float(t.get("string_irradiance_min_w_m2", 50.0))
+    string_zero_max = float(t.get("string_zero_current_max_a", 0.05))
+    string_persist_min = float(t.get("string_persistence_minutes", 60))
+
+    # Prefer per-string channel currents when present (melted I1..In / STR columns)
+    # and SCB-level aggregate current is absent. When both exist (Complete Analysis Pack
+    # with string + SCB rows), keep the SCB virtual-reference path for PIC parity.
+    scb_probe = context.canonical.frame(columns=["device_type", "scb_id", "dc_current_a"])
+    has_scb_current = not scb_probe[
+        (scb_probe["device_type"] == "scb") & scb_probe["scb_id"].notna() & scb_probe["dc_current_a"].notna()
+    ].empty
+    if not has_scb_current:
+        string_result = _run_string_channel_path(
+            context,
+            irr_min=string_irr_min,
+            irr_max=irr_max,
+            zero_max_a=string_zero_max,
+            persistence_minutes=string_persist_min,
+            energy_v_min=energy_v_min,
+            min_dt_sec=min_dt_sec,
+            max_dt_sec=max_dt_sec,
+        )
+        if string_result is not None:
+            return string_result
 
     df = context.canonical.frame(columns=["timestamp_utc", "device_type", "inverter_id", "scb_id", "dc_current_a", "dc_voltage_v"])
     df = df[df["device_type"] == "scb"].dropna(subset=["scb_id", "dc_current_a"]).copy()
     if df.empty:
+        # Fall through to string path if SCB rows were expected but empty after filters.
+        string_result = _run_string_channel_path(
+            context,
+            irr_min=string_irr_min,
+            irr_max=irr_max,
+            zero_max_a=string_zero_max,
+            persistence_minutes=string_persist_min,
+            energy_v_min=energy_v_min,
+            min_dt_sec=min_dt_sec,
+            max_dt_sec=max_dt_sec,
+        )
+        if string_result is not None:
+            return string_result
         return ResultObject.unavailable(ALGORITHM_ID, VERSION, "No SCB-level DC current telemetry was found.")
 
     # Backfill parent inverter from architecture for standalone SMB/SCB equipment ids.
@@ -363,4 +400,221 @@ def run(context: AnalysisContext) -> ResultObject:
             notes=f"Top evidence: {top_scb} — compare virtual reference curve to measured SCB current in diagnostic chart.",
         ),
         evidence_charts=evidence_charts,
+    )
+
+
+def _run_string_channel_path(
+    context: AnalysisContext,
+    *,
+    irr_min: float,
+    irr_max: float,
+    zero_max_a: float,
+    persistence_minutes: float,
+    energy_v_min: float,
+    min_dt_sec: float,
+    max_dt_sec: float,
+) -> ResultObject | None:
+    """Detect disconnected strings from per-string currents (I1..In melted to long).
+
+    Rule: when irradiance > ``irr_min`` (default 50 W/m²) and string current ≈ 0
+    (≤ ``zero_max_a``) for a sustained window, flag the string as disconnected.
+    Returns ``None`` when no string-level telemetry is present (caller uses SCB path).
+    """
+    df = context.canonical.frame(
+        columns=["timestamp_utc", "device_type", "string_id", "scb_id", "inverter_id", "dc_current_a", "dc_voltage_v"]
+    )
+    df = df[(df["device_type"] == "string") & df["string_id"].notna()].copy()
+    if df.empty:
+        return None
+
+    df["dc_current_a"] = pd.to_numeric(df["dc_current_a"], errors="coerce")
+    df["dc_voltage_v"] = pd.to_numeric(df.get("dc_voltage_v"), errors="coerce")
+    df = df.dropna(subset=["dc_current_a", "string_id"])
+    if df.empty:
+        return None
+
+    # Backfill hierarchy
+    if df["scb_id"].isna().any():
+        from analytics.common.equipment_ids import extract_parent_scb
+
+        missing = df["scb_id"].isna()
+        df.loc[missing, "scb_id"] = df.loc[missing, "string_id"].map(extract_parent_scb)
+
+    if df["inverter_id"].isna().any() and context.plant.architecture:
+        from analytics.common.equipment_ids import (
+            extract_parent_inverter,
+            resolve_inverter_from_architecture,
+        )
+
+        missing = df["inverter_id"].isna()
+        df.loc[missing, "inverter_id"] = df.loc[missing, "scb_id"].map(
+            lambda sid: resolve_inverter_from_architecture(sid, context.plant.architecture)
+            or extract_parent_inverter(sid)
+        )
+
+    total_rows = len(df)
+    irr_frame = extract_irradiance_frame(context)
+    if irr_frame.empty:
+        return ResultObject.unavailable(
+            ALGORITHM_ID,
+            VERSION,
+            "Per-string currents were found, but irradiance/POA is missing. "
+            "Upload an irradiance file (or Complete Analysis Pack columns) so "
+            f"disconnected-string can gate on irradiance > {irr_min:.0f} W/m².",
+        )
+
+    irr_map = irr_frame.set_index("timestamp_utc")["irr_val"].to_dict()
+    df["_irr"] = df["timestamp_utc"].map(irr_map)
+    df = df[df["_irr"].notna() & (df["_irr"] >= irr_min) & (df["_irr"] <= irr_max)].copy()
+    if df.empty:
+        return ResultObject.unavailable(
+            ALGORITHM_ID,
+            VERSION,
+            f"No string samples remained with irradiance in [{irr_min:.0f}, {irr_max:.0f}] W/m².",
+        )
+
+    df["candidate"] = df["dc_current_a"] <= zero_max_a
+    df = df.sort_values(["string_id", "timestamp_utc"]).reset_index(drop=True)
+
+    n = len(df)
+    ts_epoch = df["timestamp_utc"].astype("int64").to_numpy() // 10**9
+    sid_arr = df["string_id"].to_numpy()
+    candidate_arr = df["candidate"].to_numpy()
+    voltage_arr = pd.to_numeric(df["dc_voltage_v"], errors="coerce").to_numpy(dtype=float)
+    # Missing current ≈ peer median (or isc estimate) when near-zero
+    peer_median = (
+        df.groupby("timestamp_utc")["dc_current_a"]
+        .transform(lambda s: float(np.nanmedian(s.to_numpy(dtype=float))) if len(s) else np.nan)
+        .to_numpy(dtype=float)
+    )
+    missing_current = np.maximum(0.0, peer_median - df["dc_current_a"].to_numpy(dtype=float))
+
+    persistence_seconds = persistence_minutes * 60
+    consecutive_tol_sec = max(90, int(context.sample_interval_minutes * 60 * 1.5))
+    fault_flag = np.zeros(n, dtype=bool)
+    energy_loss = np.zeros(n, dtype=float)
+
+    sid_change = np.concatenate([[True], sid_arr[1:] != sid_arr[:-1]])
+    starts = np.where(sid_change)[0]
+    ends = np.concatenate([starts[1:], [n]])
+
+    for si, ei in zip(starts, ends):
+        i = si
+        while i < ei:
+            if not candidate_arr[i]:
+                i += 1
+                continue
+            run_start = i
+            run_end = i + 1
+            while run_end < ei and candidate_arr[run_end]:
+                gap = int(ts_epoch[run_end]) - int(ts_epoch[run_end - 1])
+                if not (0 < gap <= consecutive_tol_sec):
+                    break
+                run_end += 1
+            elapsed = int(ts_epoch[run_end - 1]) - int(ts_epoch[run_start])
+            if elapsed >= persistence_seconds:
+                for j in range(run_start, run_end):
+                    fault_flag[j] = True
+                    v = voltage_arr[j] if np.isfinite(voltage_arr[j]) and voltage_arr[j] >= energy_v_min else 600.0
+                    if missing_current[j] > 0 and np.isfinite(v):
+                        if j + 1 < ei and sid_arr[j + 1] == sid_arr[j]:
+                            dt_sec = int(ts_epoch[j + 1]) - int(ts_epoch[j])
+                        elif j > run_start:
+                            dt_sec = int(ts_epoch[j]) - int(ts_epoch[j - 1])
+                        else:
+                            dt_sec = context.sample_interval_minutes * 60
+                        dt_sec = max(min_dt_sec, min(dt_sec, max_dt_sec))
+                        energy_loss[j] = (v * missing_current[j] / 1000.0) * (dt_sec / 3600.0)
+            i = run_end
+
+    df["fault_flag"] = fault_flag
+    df["energy_loss_kwh"] = energy_loss
+    confirmed = df[df["fault_flag"]]
+    if confirmed.empty:
+        return ResultObject.unavailable(
+            ALGORITHM_ID,
+            VERSION,
+            f"No string stayed near-zero (≤{zero_max_a} A) under irradiance ≥{irr_min:.0f} W/m² "
+            f"for ≥{persistence_minutes:.0f} min.",
+        )
+
+    per_str = (
+        confirmed.groupby("string_id")
+        .agg(
+            loss_kwh=("energy_loss_kwh", "sum"),
+            fault_points=("fault_flag", "sum"),
+            scb_id=("scb_id", "first"),
+            inverter_id=("inverter_id", "first"),
+        )
+        .reset_index()
+        .sort_values("loss_kwh", ascending=False)
+    )
+    total_loss = float(per_str["loss_kwh"].sum())
+
+    events = [
+        {
+            "equipment_id": r.string_id,
+            "start": str(g["timestamp_utc"].min()),
+            "end": str(g["timestamp_utc"].max()),
+            "kind": "disconnected_string",
+        }
+        for r, (_, g) in zip(per_str.itertuples(), confirmed.groupby("string_id"))
+    ]
+
+    charts = [
+        bar_chart(
+            "ds_loss_by_string",
+            "Disconnected String Loss by String",
+            per_str["string_id"].tolist(),
+            per_str["loss_kwh"].round(3).tolist(),
+            color="#dc2626",
+        ),
+        timeline_chart("ds_fault_timeline_strings", "Disconnected String Fault Timeline", events),
+    ]
+    table = ResultTable(
+        title="Confirmed disconnected strings (per-string current)",
+        columns=["String", "SCB", "Inverter", "Loss (kWh)", "Fault samples"],
+        rows=[
+            [r.string_id, r.scb_id, r.inverter_id, round(r.loss_kwh, 3), int(r.fault_points)]
+            for r in per_str.itertuples()
+        ],
+    )
+
+    return ResultObject(
+        algorithm_id=ALGORITHM_ID,
+        algorithm_version=VERSION,
+        status=ResultStatus.OK,
+        title="Disconnected Strings",
+        summary=(
+            f"{len(per_str)} string(s) show near-zero current while irradiance ≥{irr_min:.0f} W/m², "
+            f"totaling {total_loss:.2f} kWh of loss."
+        ),
+        severity="high" if len(per_str) >= 2 else "medium",
+        confidence=0.88,
+        affected_equipment=per_str["string_id"].tolist(),
+        loss_energy_kwh=round(total_loss, 3),
+        metrics={"affected_string_count": float(len(per_str))},
+        tables=[table],
+        charts=charts,
+        recommendations=[
+            f"Inspect {', '.join(per_str['string_id'].head(5).astype(str))} for open fuses, "
+            "disconnected MC4 connectors, or blown string protection.",
+        ],
+        thresholds_used={
+            "string_irradiance_min_w_m2": irr_min,
+            "string_zero_current_max_a": zero_max_a,
+            "string_persistence_minutes": persistence_minutes,
+        },
+        evidence=EvidenceRef(
+            equipment_ids=per_str["string_id"].tolist(),
+            time_range_start=str(confirmed["timestamp_utc"].min()),
+            time_range_end=str(confirmed["timestamp_utc"].max()),
+            source_fields=["dc_current_a", "dc_voltage_v", "poa_w_m2", "ghi_w_m2"],
+            affected_sample_count=int(len(confirmed)),
+            total_sample_count=int(total_rows),
+            notes=(
+                f"Per-string path: current ≤{zero_max_a} A while irradiance ≥{irr_min:.0f} W/m² "
+                f"for ≥{persistence_minutes:.0f} min."
+            ),
+        ),
     )

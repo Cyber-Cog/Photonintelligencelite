@@ -110,6 +110,27 @@ pytest tests/test_column_detection_rca.py tests/test_standardize.py tests/test_c
 
 ---
 
-## 7. Deploy note
+## 8. Multi-row / merged-cell headers (2026-07-30)
 
-Mapping/alias and Excel-parser fixes must be deployed for piclite.vigorithm.com to pick them up (push to `main` / production pipeline). Client-only refresh will not fix server-side alias or parse behavior.
+### Root cause
+OEM SMB/SCB exports (e.g. sheet `SMB_1`) use **two header rows with merged group labels**:
+- Row 1: `Date & Time` | `SMB Parameter` (merged) | `Strings Current (A)` (merged over I1…I24)
+- Row 2: `Voltage (V)` | `Current (A)` | … | `I1`…`I24`
+
+The pipeline previously took a **single header row**. Under merges, blank cells became `Column_N` / BROKEN HEADER, and only one DC current (SMB aggregate `Current (A)`) was mapped — string channels were invisible to disconnected-string analysis.
+
+`openpyxl` `read_only=True` also omitted `merged_cells`, so group labels never propagated.
+
+### Fix shipped
+| Piece | Location |
+|-------|----------|
+| Channel regex library (`I\\d+`, `Str\\d+`, `CH\\d+`, `MPPT\\d+`, …) | `excel_parser/channels.py` |
+| Merge propagate + 1–3 row header detect/stitch (`field_type=string_current_channel`) | `excel_parser/multi_header.py` |
+| Load xlsx with merges; melt I1…In → long Timestamp+Equipment+DC Current | `probe.py`, `strategies/wide_channel_melt.py`, `orchestrator.py` |
+| Synonym mapper after stitch; channel leaf patterns → `dc_current_a` | `aliasing.py` |
+| DS per-string path: current ≈ 0 when irradiance ≥ 50 W/m² | `disconnected_strings.py` + `thresholds.yaml` |
+| Upload guidance + Setup “confirm multi-row header” preview | `UploadPage.tsx`, `SetupPage.tsx` |
+
+Tests: `tests/test_multi_row_header_detection.py` (synthetic 2-row merged, 1-row regression, 3-row stretch, 24 channels, optional real sample file).
+
+**Architecture choice:** melt channels to long string equipment rows (`SMB-01-STR-nn`) at parse time so standardize + DS/string-outlier see first-class string currents (avoids N columns coalescing into one `dc_current_a`).

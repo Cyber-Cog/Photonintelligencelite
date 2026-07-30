@@ -93,6 +93,15 @@ def map_metric(category: str, leaf: str) -> str | None:
         if "power" in leaf_n:
             return "DC Power (kW)"
 
+    # SMB/SCB "Parameter" group over Voltage/Current/Power leaves (multi-row exports)
+    if "smb" in cat or "scb" in cat or "parameter" in cat or "combiner" in cat:
+        if "voltage" in leaf_n:
+            return "DC Voltage (V)"
+        if "current" in leaf_n and "string" not in leaf_n:
+            return "DC Current (A)"
+        if "power" in leaf_n and ("kw" in leaf_n or leaf_n == "power"):
+            return "DC Power (kW)"
+
     if "ac" in cat and "output" in cat and "voltage" not in cat:
         if "power" in leaf_n:
             return "AC Power (kW)"

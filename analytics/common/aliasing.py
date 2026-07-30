@@ -31,6 +31,11 @@ _PATTERN_DC_VOLTAGE = re.compile(
 _PATTERN_SCB_ID = re.compile(
     r"^(?:smb|scb|combiner(?:\s*box)?)\s*(?:id|no|number|#)?\s*\d*$"
 )
+# Stitched or leaf channel labels: I12, Str 3, CH07, Strings Current (A) I12
+_PATTERN_CHANNEL_CURRENT = re.compile(
+    r"^(?:(?:strings?\s*currents?\s*(?:\(a\))?\s*)?(?:i|str(?:ing)?|ch(?:annel)?)\s*\d{1,3}"
+    r"|(?:i|str(?:ing)?|ch(?:annel)?)\s*\d{1,3}\s*(?:current|idc|a)?)$"
+)
 
 
 def _normalize(name: str) -> str:
@@ -74,6 +79,8 @@ def _is_ambiguous_column(column_name: str) -> bool:
 
 def _pattern_canonical(normalized: str) -> tuple[str, str] | None:
     """Return (canonical_field, matched_pattern_label) for OEM numbered SMB/SCB headers."""
+    if _PATTERN_CHANNEL_CURRENT.match(normalized):
+        return "dc_current_a", "pattern:string_current_channel"
     if _PATTERN_DC_CURRENT.match(normalized):
         return "dc_current_a", "pattern:smb/scb/string current"
     if _PATTERN_DC_VOLTAGE.match(normalized):

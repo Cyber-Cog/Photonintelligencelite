@@ -4,6 +4,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from backend.app.services.excel_parser.headers import cell_to_str, pad_matrix
+from backend.app.services.excel_parser.multi_header import (
+    merged_ranges_from_worksheet,
+    propagate_merged_values,
+)
 from backend.app.services.excel_parser.types import SheetProbe
 
 
@@ -19,28 +23,26 @@ def probe_workbook(excel_path: Path, *, sample_rows: int = 30, max_sheets: int =
 def _probe_openpyxl(excel_path: Path, *, sample_rows: int, max_sheets: int) -> list[SheetProbe]:
     from openpyxl import load_workbook
 
-    wb = load_workbook(excel_path, read_only=True, data_only=True)
+    # Non-read_only so merged_cells is available for header-group propagation.
+    wb = load_workbook(excel_path, read_only=False, data_only=True)
     try:
         probes: list[SheetProbe] = []
         for name in wb.sheetnames[:max_sheets]:
             ws = wb[name]
+            merges = merged_ranges_from_worksheet(ws)
+            declared = _declared_max_column(ws)
             rows: list[list[str]] = []
             n_cols = 0
-            # Sample rows only for ranking/dtypes — never truncate column width.
-            # openpyxl read_only may omit trailing empty cells per row; track max width
-            # across the sample and prefer declared dimensions when available.
             for i, row in enumerate(ws.iter_rows(values_only=True)):
                 vals = [cell_to_str(c) for c in row]
                 n_cols = max(n_cols, len(vals))
                 rows.append(vals)
                 if i + 1 >= sample_rows:
                     break
-            rows = pad_matrix(rows)
-            declared = _declared_max_column(ws)
             n_cols = max(n_cols, declared, max((len(r) for r in rows), default=0))
             if n_cols and rows:
                 rows = [list(r) + [""] * (n_cols - len(r)) for r in rows]
-            # read_only max_row is often unset until a full pass; sample length is enough to rank.
+            rows = propagate_merged_values(rows, merges)
             n_rows = int(ws.max_row or len(rows) or sample_rows)
             probes.append(
                 SheetProbe(
@@ -48,7 +50,7 @@ def _probe_openpyxl(excel_path: Path, *, sample_rows: int, max_sheets: int) -> l
                     n_rows=n_rows,
                     n_cols=n_cols,
                     sample_rows=rows,
-                    merged_cell_count=0,  # read_only mode has no merged_cells
+                    merged_cell_count=len(merges),
                     dtype_guesses=_guess_dtypes(rows),
                 )
             )
@@ -67,7 +69,6 @@ def _declared_max_column(ws) -> int:
         pass
     dim = getattr(ws, "dimensions", None)
     if isinstance(dim, str) and ":" in dim:
-        # e.g. "A1:YZ500" → parse end column letters
         try:
             end = dim.split(":")[1]
             letters = "".join(ch for ch in end if ch.isalpha())
@@ -114,7 +115,6 @@ def _guess_dtypes(rows: list[list[str]]) -> list[str]:
         return []
     width = max(len(r) for r in rows)
     guesses: list[str] = []
-    # Dtype guesses sample the first columns only — headers themselves are never truncated.
     for j in range(min(width, 20)):
         vals = [r[j].strip() for r in rows[1:] if j < len(r) and r[j].strip()]
         if not vals:
@@ -137,24 +137,23 @@ def _guess_dtypes(rows: list[list[str]]) -> list[str]:
 def load_sheet_matrix(excel_path: Path, sheet_name: str | None = None) -> tuple[str, list[list[str]]]:
     """Load full sheet as string matrix. Returns (sheet_name, rows).
 
-    Header completeness guarantee: every column that appears in any row is preserved.
-    Row sampling is never applied here — only probe uses sample_rows for ranking.
+    For xlsx/xlsm: openpyxl (not read_only) so ``merged_cells`` can propagate
+    group labels across columns before header detection.
     """
     suffix = excel_path.suffix.lower()
     if suffix in {".xlsx", ".xlsm"}:
         from openpyxl import load_workbook
 
-        wb = load_workbook(excel_path, read_only=True, data_only=True)
+        wb = load_workbook(excel_path, read_only=False, data_only=True)
         try:
             name = sheet_name or (wb.sheetnames[0] if wb.sheetnames else None)
             if not name:
                 raise ValueError("Workbook has no sheets.")
             ws = wb[name]
+            merges = merged_ranges_from_worksheet(ws)
             declared = _declared_max_column(ws)
             rows: list[list[str]] = []
             max_seen = 0
-            # Prefer explicit max_col so trailing header cells are not dropped when
-            # early data rows are shorter than the header row.
             iter_kwargs = {}
             if declared > 0:
                 iter_kwargs = {"min_col": 1, "max_col": declared}
@@ -167,6 +166,7 @@ def load_sheet_matrix(excel_path: Path, sheet_name: str | None = None) -> tuple[
                 rows = [list(r) + [""] * (width - len(r)) for r in rows]
             else:
                 rows = pad_matrix(rows)
+            rows = propagate_merged_values(rows, merges)
             return name, rows
         finally:
             wb.close()
