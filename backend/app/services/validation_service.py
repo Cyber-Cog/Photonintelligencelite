@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from analytics.core.context import ResolvedMapping
 from analytics.core.job_states import JobState
+from analytics.common.plant_config_consistency import check_plant_config_consistency
 from analytics.common.prerequisites import evaluate_prerequisites
 from analytics.preprocessing.validation import PROCEED_WITH_DROPS_MIN_OK_RATIO
 from backend.app.config import Settings
@@ -112,6 +113,11 @@ def run_validation_stage(
         inputs,
         drop_unparseable_timestamps=drop_unparseable_timestamps,
     )
+
+    # Architecture / plant-detail consistency (OI-style capacity + rating checks).
+    plant_dict = plant_cfg.get("plant") or {}
+    for issue in check_plant_config_consistency(plant_dict):
+        report.add(issue)
 
     # Readiness from actual canonical fields (after standardize) so UI matches analysis.
     canonical_fields = _fields_present_in_canonical(paths) if not report.has_blockers else None

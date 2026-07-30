@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Optional
 
 from analytics.common.architecture_excel import try_parse_architecture_from_pack
+from analytics.common.plant_config_consistency import snapshot_imported_nameplate
 
 # Sensible Setup defaults when pack provides hierarchy but not module/timezone metadata.
 _PACK_PLANT_DEFAULTS: dict = {
@@ -29,6 +30,7 @@ def plant_config_from_architecture_file(path: Path) -> Optional[dict]:
     draft = {**_PACK_PLANT_DEFAULTS, **parsed.to_plant_config_draft()}
     if not draft.get("plant_name"):
         draft["plant_name"] = "Imported from Complete Analysis Pack"
+    draft.update(snapshot_imported_nameplate(draft))
     return draft
 
 
@@ -61,6 +63,8 @@ def merge_architecture_into_job_plant(
             plant["strings_per_scb"] = imported["strings_per_scb"]
         if imported.get("inverter_capacity_kw"):
             plant["inverter_capacity_kw"] = imported["inverter_capacity_kw"]
+        # Freeze pack nameplates for later Setup vs Excel consistency checks.
+        plant.update(snapshot_imported_nameplate(imported))
 
     for key in (
         "plant_name",

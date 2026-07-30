@@ -21,6 +21,8 @@ interface Props {
   architectureError?: string | null;
   highlightDefaultRating?: boolean;
   onJumpToInverterRating?: () => void;
+  /** Called when architecture Excel parse returns plant capacities / ratings. */
+  onArchitectureParsed?: (res: import("@/types").ArchitectureUploadResponse) => void;
   /** Flatten outer card when nested in Setup’s shared step shell. */
   embedded?: boolean;
 }
@@ -38,6 +40,7 @@ export function EquipmentStructurePanel({
   architectureError = null,
   highlightDefaultRating = false,
   onJumpToInverterRating,
+  onArchitectureParsed,
   embedded = false,
 }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -96,6 +99,7 @@ export function EquipmentStructurePanel({
       const res = await uploadArchitectureExcel(file);
       const next = fromDetected(res.inverters, res.inverter_ratings);
       onChange(next);
+      onArchitectureParsed?.(res);
       setShowDetails(false);
       setDetailLimit(DETAIL_PAGE_SIZE);
     } catch (err) {

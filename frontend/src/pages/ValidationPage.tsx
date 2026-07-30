@@ -19,6 +19,39 @@ import type { ValidationIssue, ValidationResponse } from "@/types";
 
 function issueFixHref(jobId: string, issue: ValidationIssue): string {
   const col = issue.affected_columns[0];
+  const plantCapacityCodes = new Set([
+    "inverter_rating_mismatch",
+    "imported_inverter_rating_mismatch",
+    "imported_equipment_rating_mismatch",
+    "imported_equipment_rating_mismatch_bulk",
+    "imported_ac_capacity_mismatch",
+    "imported_dc_capacity_mismatch",
+    "ac_capacity_mismatch",
+    "dc_capacity_mismatch",
+    "inverter_rating_missing",
+    "inverter_rating_uses_plant_default",
+  ]);
+  const architectureCodes = new Set([
+    "architecture_missing",
+    "architecture_scb_missing_inverter",
+    "imported_equipment_rating_mismatch",
+    "imported_equipment_rating_mismatch_bulk",
+  ]);
+
+  if (architectureCodes.has(issue.code) || col === "architecture") {
+    return fixHref(jobId, { kind: "setup", hash: "architecture", field: "architecture" });
+  }
+  if (plantCapacityCodes.has(issue.code) || col === "inverter_capacity_kw" || col === "ac_capacity_mw" || col === "dc_capacity_mwp") {
+    const field =
+      col === "ac_capacity_mw" || col === "dc_capacity_mwp" || col === "inverter_capacity_kw"
+        ? col
+        : issue.code.includes("ac_capacity")
+          ? "ac_capacity_mw"
+          : issue.code.includes("dc_capacity")
+            ? "dc_capacity_mwp"
+            : "inverter_capacity_kw";
+    return fixHref(jobId, { kind: "setup", hash: "plant", field });
+  }
   if (col) {
     return `/jobs/${jobId}/setup#mapping&field=${encodeURIComponent(col)}`;
   }

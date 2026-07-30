@@ -5,6 +5,7 @@ export interface EditableScb {
   scb_id: string;
   strings_per_scb: number | null;
   strings_detected: boolean;
+  dc_capacity_kwp?: number | null;
 }
 
 export interface EditableInverter {
@@ -60,6 +61,7 @@ export function fromPlantArchitecture(
       scb_id: scbId,
       strings_per_scb: entry.strings_per_scb ?? null,
       strings_detected: false,
+      dc_capacity_kwp: entry.dc_capacity_kwp ?? null,
     });
   }
   return invOrder.map((id) => invMap.get(id)!);
@@ -168,6 +170,9 @@ export function buildRatingsAndArchitecture(
       }
       if (modulesPerString != null && modulesPerString > 0) {
         entry.modules_per_string = modulesPerString;
+      }
+      if (scb.dc_capacity_kwp != null && scb.dc_capacity_kwp > 0) {
+        entry.dc_capacity_kwp = scb.dc_capacity_kwp;
       }
       architecture[scbId] = entry;
     }

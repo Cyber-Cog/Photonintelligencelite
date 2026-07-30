@@ -11,6 +11,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { SubnavTabs } from "@/components/ui/SubnavTabs";
 import { useJob } from "@/context/JobContext";
 import { CANONICAL_FIELD_OPTIONS, MODULE_TECHNOLOGY_OPTIONS, PLANT_TYPE_OPTIONS } from "@/lib/canonicalFields";
+import { checkSetupCapacityConsistency } from "@/lib/capacityConsistency";
 import {
   buildRatingsAndArchitecture,
   fromDetected,
@@ -24,10 +25,30 @@ import {
   setupFieldDomId,
 } from "@/lib/setupFocus";
 import { readUploadPath } from "@/lib/uploadPath";
-import type { ColumnMappingSuggestion, PlantConfigInput } from "@/types";
+import type { ArchitectureUploadResponse, ColumnMappingSuggestion, PlantConfigInput } from "@/types";
 
-type PlantForm = Omit<PlantConfigInput, "job_id" | "equipment_ratings" | "architecture"> & {
+type PlantForm = Omit<
+  PlantConfigInput,
+  | "job_id"
+  | "equipment_ratings"
+  | "architecture"
+  | "imported_equipment_ratings"
+  | "imported_inverter_capacity_kw"
+  | "imported_ac_capacity_mw"
+  | "imported_dc_capacity_mwp"
+  | "architecture_imported"
+  | "architecture_format"
+> & {
   modules_per_string?: number | null;
+};
+
+type ImportedNameplate = {
+  equipment_ratings?: Record<string, number>;
+  inverter_capacity_kw?: number | null;
+  ac_capacity_mw?: number | null;
+  dc_capacity_mwp?: number | null;
+  architecture_imported?: boolean;
+  architecture_format?: string | null;
 };
 
 type FieldErrors = Partial<Record<string, string>>;
@@ -141,6 +162,7 @@ export function SetupPage() {
     () => uploadInfo?.pack_match_ratio ?? 0,
   );
   const [packArchImported, setPackArchImported] = useState(false);
+  const [importedNameplate, setImportedNameplate] = useState<ImportedNameplate | null>(null);
   const autoDetectDone = useRef(false);
   const focusApplied = useRef(false);
   const pendingFocusKey = useRef<string | null>(null);
@@ -230,6 +252,30 @@ export function SetupPage() {
         >;
         const ratings = (ctx.plant_config.equipment_ratings || {}) as Record<string, number>;
         const imported = Boolean(ctx.plant_config.architecture_imported) || Object.keys(arch).length > 0;
+        const snapRatings = (ctx.plant_config.imported_equipment_ratings || {}) as Record<string, number>;
+        if (
+          Object.keys(snapRatings).length > 0 ||
+          ctx.plant_config.imported_inverter_capacity_kw != null ||
+          ctx.plant_config.architecture_imported
+        ) {
+          setImportedNameplate({
+            equipment_ratings: snapRatings,
+            inverter_capacity_kw:
+              ctx.plant_config.imported_inverter_capacity_kw != null
+                ? Number(ctx.plant_config.imported_inverter_capacity_kw)
+                : null,
+            ac_capacity_mw:
+              ctx.plant_config.imported_ac_capacity_mw != null
+                ? Number(ctx.plant_config.imported_ac_capacity_mw)
+                : null,
+            dc_capacity_mwp:
+              ctx.plant_config.imported_dc_capacity_mwp != null
+                ? Number(ctx.plant_config.imported_dc_capacity_mwp)
+                : null,
+            architecture_imported: Boolean(ctx.plant_config.architecture_imported),
+            architecture_format: (ctx.plant_config.architecture_format as string) || null,
+          });
+        }
         if (Object.keys(arch).length > 0) {
           setEquipment(fromPlantArchitecture(arch, ratings));
           setDetected(true);
@@ -375,6 +421,20 @@ export function SetupPage() {
     void runDetect();
   }, [jobId, loadingContext, suggestions.length, mapping, runDetect, packArchImported]);
 
+  const capacityWarnings = useMemo(
+    () =>
+      checkSetupCapacityConsistency({
+        inverterCapacityKw: plant.inverter_capacity_kw,
+        acCapacityMw: plant.ac_capacity_mw,
+        dcCapacityMwp: plant.dc_capacity_mwp,
+        equipment,
+        importedInverterCapacityKw: importedNameplate?.inverter_capacity_kw,
+        importedAcCapacityMw: importedNameplate?.ac_capacity_mw,
+        importedDcCapacityMwp: importedNameplate?.dc_capacity_mwp,
+      }),
+    [plant, equipment, importedNameplate],
+  );
+
   const isInvalid = (key: string) => Boolean(fieldErrors[key]) || flashField === key;
 
   const validateAndCollectErrors = (): FieldErrors => {
@@ -479,6 +539,26 @@ export function SetupPage() {
         strings_per_scb: plant.strings_per_scb ?? strings_per_scb_fallback,
         equipment_ratings,
         architecture,
+        ...(importedNameplate?.equipment_ratings
+          ? { imported_equipment_ratings: importedNameplate.equipment_ratings }
+          : {}),
+        ...(importedNameplate?.inverter_capacity_kw
+          ? { imported_inverter_capacity_kw: importedNameplate.inverter_capacity_kw }
+          : {}),
+        ...(importedNameplate?.ac_capacity_mw
+          ? { imported_ac_capacity_mw: importedNameplate.ac_capacity_mw }
+          : {}),
+        ...(importedNameplate?.dc_capacity_mwp
+          ? { imported_dc_capacity_mwp: importedNameplate.dc_capacity_mwp }
+          : {}),
+        ...(importedNameplate?.architecture_imported != null
+          ? { architecture_imported: importedNameplate.architecture_imported }
+          : packArchImported
+            ? { architecture_imported: true }
+            : {}),
+        ...(importedNameplate?.architecture_format
+          ? { architecture_format: importedNameplate.architecture_format }
+          : {}),
       });
       navigate(`/jobs/${jobId}/validate`);
     } catch (err) {
@@ -536,6 +616,24 @@ export function SetupPage() {
         <InfoBanner className="mb-3" tone="success" title="Architecture imported from workbook">
           Plant → Inverter → SCB hierarchy and nameplate capacities were loaded from the uploaded Excel. Review
           Plant and Architecture steps — you can still override.
+        </InfoBanner>
+      )}
+
+      {capacityWarnings.length > 0 && (activeStep === "plant" || activeStep === "architecture") && (
+        <InfoBanner className="mb-3" tone="warning" title="Capacity consistency">
+          <ul className="mt-1 list-disc space-y-1 pl-4 text-sm">
+            {capacityWarnings.map((w) => (
+              <li key={w.code}>
+                <button
+                  type="button"
+                  className="text-left underline decoration-amber-700/50 hover:decoration-amber-800"
+                  onClick={() => jumpToField(w.field ?? "inverter_capacity_kw")}
+                >
+                  {w.message}
+                </button>
+              </li>
+            ))}
+          </ul>
         </InfoBanner>
       )}
 
@@ -951,6 +1049,35 @@ export function SetupPage() {
             void runDetect();
           }}
           onJumpToInverterRating={() => jumpToField("inverter_capacity_kw")}
+          onArchitectureParsed={(res: ArchitectureUploadResponse) => {
+            const ratings = res.equipment_ratings || {};
+            const cleanedRatings: Record<string, number> = {};
+            for (const [k, v] of Object.entries(ratings)) {
+              if (v != null && Number(v) > 0) cleanedRatings[k] = Number(v);
+            }
+            for (const [k, v] of Object.entries(res.inverter_ratings || {})) {
+              if (v != null && Number(v) > 0 && !(k in cleanedRatings)) cleanedRatings[k] = Number(v);
+            }
+            setImportedNameplate({
+              equipment_ratings: cleanedRatings,
+              inverter_capacity_kw: res.inverter_capacity_kw ?? null,
+              ac_capacity_mw: res.ac_capacity_mw ?? null,
+              dc_capacity_mwp: res.dc_capacity_mwp ?? null,
+              architecture_imported: true,
+            });
+            setPackArchImported(true);
+            setPlant((p) => ({
+              ...p,
+              ...(res.plant_name && !p.plant_name.trim() ? { plant_name: res.plant_name } : {}),
+              ...(res.ac_capacity_mw && !(p.ac_capacity_mw > 0) ? { ac_capacity_mw: res.ac_capacity_mw } : {}),
+              ...(res.dc_capacity_mwp && !(p.dc_capacity_mwp > 0) ? { dc_capacity_mwp: res.dc_capacity_mwp } : {}),
+              ...(res.inverter_capacity_kw && !(p.inverter_capacity_kw > 0)
+                ? { inverter_capacity_kw: res.inverter_capacity_kw }
+                : {}),
+            }));
+            setDetectNotes(res.notes?.length ? res.notes : ["Architecture loaded from Excel."]);
+            setDetected(true);
+          }}
         />
       )}
         </div>

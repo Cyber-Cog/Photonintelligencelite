@@ -93,6 +93,13 @@ class PlantConfigSubmission(BaseModel):
     architecture: dict[str, ArchitectureEntry] = Field(default_factory=dict)
     """Per-SCB architecture keyed by scb_id."""
     threshold_overrides: dict[str, dict[str, float]] = Field(default_factory=dict)
+    # Frozen nameplates from pack / architecture Excel — used for Setup vs import consistency.
+    imported_equipment_ratings: Optional[dict[str, float]] = None
+    imported_inverter_capacity_kw: Optional[float] = Field(default=None, gt=0)
+    imported_ac_capacity_mw: Optional[float] = Field(default=None, gt=0)
+    imported_dc_capacity_mwp: Optional[float] = Field(default=None, gt=0)
+    architecture_imported: Optional[bool] = None
+    architecture_format: Optional[str] = None
 
 
 class DetectEquipmentRequest(BaseModel):

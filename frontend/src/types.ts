@@ -65,6 +65,12 @@ export interface PlantConfigInput {
   plant_type: string;
   equipment_ratings?: Record<string, number>;
   architecture?: Record<string, ArchitectureEntry>;
+  imported_equipment_ratings?: Record<string, number>;
+  imported_inverter_capacity_kw?: number;
+  imported_ac_capacity_mw?: number;
+  imported_dc_capacity_mwp?: number;
+  architecture_imported?: boolean;
+  architecture_format?: string;
 }
 
 export interface ScbStructure {
@@ -93,6 +99,10 @@ export interface ArchitectureUploadResponse {
   notes: string[];
   row_count: number;
   inverter_ratings: Record<string, number | null>;
+  plant_name?: string | null;
+  ac_capacity_mw?: number | null;
+  dc_capacity_mwp?: number | null;
+  inverter_capacity_kw?: number | null;
 }
 
 export interface ModuleReadiness {

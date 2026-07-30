@@ -17,6 +17,7 @@ from analytics.common.architecture_excel import (
     build_template_bytes,
     parse_architecture_excel,
 )
+from analytics.common.plant_config_consistency import IMPORTED_NAMEPLATE_KEYS, snapshot_imported_nameplate
 from analytics.common.plant_structure import infer_from_csv, normalize_plant_type
 from analytics.core.job_states import JobState
 from backend.app.auth.deps import enforce_csrf, get_optional_user, require_verified_user
@@ -123,9 +124,20 @@ def _reopen_for_revision(job: Job, settings: Settings, *, reason: str) -> bool:
     return had_results
 
 
-def _plant_fields_for_storage(payload: PlantConfigSubmission) -> dict:
+def _plant_fields_for_storage(payload: PlantConfigSubmission, existing_plant: dict | None = None) -> dict:
     """Serialize submission into the PlantConfig kwargs shape analytics expects."""
-    plant_fields = payload.model_dump(exclude={"job_id", "threshold_overrides"})
+    plant_fields = payload.model_dump(
+        exclude={
+            "job_id",
+            "threshold_overrides",
+            "imported_equipment_ratings",
+            "imported_inverter_capacity_kw",
+            "imported_ac_capacity_mw",
+            "imported_dc_capacity_mwp",
+            "architecture_imported",
+            "architecture_format",
+        }
+    )
     plant_fields["plant_type"] = normalize_plant_type(plant_fields.get("plant_type", "fixed_tilt"))
     # Drop ratings that are not positive; algorithms fall back to inverter_capacity_kw.
     plant_fields["equipment_ratings"] = {
@@ -147,6 +159,34 @@ def _plant_fields_for_storage(payload: PlantConfigSubmission) -> dict:
             cleaned["ac_capacity_kw"] = float(entry["ac_capacity_kw"])
         arch_out[scb_id] = cleaned
     plant_fields["architecture"] = arch_out
+
+    # Prefer freshly submitted import snapshot (Excel upload on Setup); else keep prior pack snapshot.
+    prior = existing_plant or {}
+    if payload.imported_equipment_ratings:
+        plant_fields.update(
+            snapshot_imported_nameplate(
+                {
+                    "equipment_ratings": payload.imported_equipment_ratings,
+                    "inverter_capacity_kw": payload.imported_inverter_capacity_kw,
+                    "ac_capacity_mw": payload.imported_ac_capacity_mw,
+                    "dc_capacity_mwp": payload.imported_dc_capacity_mwp,
+                }
+            )
+        )
+    else:
+        for key in IMPORTED_NAMEPLATE_KEYS:
+            if key in prior and prior[key] not in (None, "", {}, 0, 0.0):
+                plant_fields[key] = prior[key]
+
+    if payload.architecture_imported is not None:
+        plant_fields["architecture_imported"] = payload.architecture_imported
+    elif "architecture_imported" in prior:
+        plant_fields["architecture_imported"] = prior["architecture_imported"]
+    if payload.architecture_format:
+        plant_fields["architecture_format"] = payload.architecture_format
+    elif prior.get("architecture_format"):
+        plant_fields["architecture_format"] = prior["architecture_format"]
+
     return plant_fields
 
 
@@ -225,7 +265,10 @@ def submit_plant_config(
         reason="Plant / architecture updated — previous results cleared. Re-validate and re-run analysis.",
     )
 
-    plant_fields = _plant_fields_for_storage(payload)
+    plant_fields = _plant_fields_for_storage(
+        payload,
+        existing_plant=(job.plant_config_json or {}).get("plant") if job.plant_config_json else None,
+    )
     job.plant_config_json = {"plant": plant_fields, "threshold_overrides": payload.threshold_overrides}
     job.plant_name = payload.plant_name
     if not revised:
