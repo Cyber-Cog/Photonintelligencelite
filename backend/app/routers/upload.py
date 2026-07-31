@@ -74,7 +74,6 @@ _BLOCKED_WHILE_RUNNING = {
     JobState.RUNNING.value,
     JobState.GENERATING_CHARTS.value,
     JobState.GENERATING_REPORT.value,
-    JobState.CLEANED_UP.value,
 }
 
 _REPLACEABLE_STATES = {
@@ -85,7 +84,14 @@ _REPLACEABLE_STATES = {
     JobState.NORMALIZING.value,
     JobState.FAILED.value,
     JobState.COMPLETED.value,
+    JobState.CLEANED_UP.value,
 }
+
+
+def _replace_upload_blocked_message(state: str) -> str:
+    if state in _BLOCKED_WHILE_RUNNING:
+        return "Analysis is running. Wait for it to finish, then replace files."
+    return f"Job is in state '{state}' and cannot accept a file replace right now."
 
 
 def _load_parse_report(raw_dir: Path, idx: int) -> dict | None:
@@ -700,12 +706,9 @@ async def replace_upload(
     """Replace SCADA files on an existing job. Keeps plant config; remaps prior columns by name."""
     job = load_job_authorized(db, job_id, user)
     if job.state in _BLOCKED_WHILE_RUNNING:
-        raise HTTPException(
-            409,
-            f"Analysis is still running (state '{job.state}'). Wait for it to finish, then replace files.",
-        )
+        raise HTTPException(409, _replace_upload_blocked_message(job.state))
     if job.state not in _REPLACEABLE_STATES:
-        raise HTTPException(409, f"Job is in state '{job.state}' and cannot accept a file replace right now.")
+        raise HTTPException(409, _replace_upload_blocked_message(job.state))
 
     all_files = [file] + list(additional_files or [])
     primary = sanitize_filename(file.filename or "upload.csv")

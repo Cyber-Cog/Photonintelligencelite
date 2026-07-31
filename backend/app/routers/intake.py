@@ -71,10 +71,9 @@ _BLOCKED_WHILE_RUNNING = {
     JobState.RUNNING.value,
     JobState.GENERATING_CHARTS.value,
     JobState.GENERATING_REPORT.value,
-    JobState.CLEANED_UP.value,
 }
 
-# Setup revisions allowed (including after a finished analysis).
+# Setup revisions allowed (including after a finished or expired analysis).
 _REVISABLE_STATES = {
     JobState.UPLOADED.value,
     JobState.PARSING.value,
@@ -83,7 +82,14 @@ _REVISABLE_STATES = {
     JobState.NORMALIZING.value,
     JobState.FAILED.value,
     JobState.COMPLETED.value,
+    JobState.CLEANED_UP.value,
 }
+
+
+def _setup_edit_blocked_message(state: str) -> str:
+    if state in _BLOCKED_WHILE_RUNNING:
+        return "Analysis is running. Wait for it to finish, then edit mapping or plant details."
+    return f"Job is in state '{state}' and cannot accept setup changes right now."
 
 
 def _get_job_or_404(db: Session, job_id: str, user: User | None = None) -> Job:
@@ -92,15 +98,9 @@ def _get_job_or_404(db: Session, job_id: str, user: User | None = None) -> Job:
 
 def _assert_setup_editable(job: Job) -> None:
     if job.state in _BLOCKED_WHILE_RUNNING:
-        raise HTTPException(
-            409,
-            f"Analysis is still running (state '{job.state}'). Wait for it to finish, then edit mapping or plant details.",
-        )
+        raise HTTPException(409, _setup_edit_blocked_message(job.state))
     if job.state not in _REVISABLE_STATES:
-        raise HTTPException(
-            409,
-            f"Job is in state '{job.state}' and cannot accept setup changes right now.",
-        )
+        raise HTTPException(409, _setup_edit_blocked_message(job.state))
 
 
 def _clear_analysis_outputs(settings: Settings, job: Job) -> None:

@@ -310,7 +310,8 @@ export function UploadPage() {
 
       {replaceJobId ? (
         <InfoBanner tone="info" title="Replacing files on this job">
-          Plant ratings and architecture are kept. New columns appear in Setup for mapping.
+          Plant ratings and architecture are kept. New columns appear in Setup for mapping. If this job&apos;s
+          old files were removed after retention, uploading here starts fresh SCADA on the same job.
         </InfoBanner>
       ) : null}
 
