@@ -18,6 +18,7 @@ import { SectionPanel } from "@/components/ui/SectionPanel";
 import { Spinner } from "@/components/ui/Spinner";
 import { SubnavTabs } from "@/components/ui/SubnavTabs";
 import { useJob } from "@/context/JobContext";
+import { useWorkflowTransition } from "@/context/WorkflowTransitionContext";
 import { CANONICAL_FIELD_OPTIONS, MODULE_TECHNOLOGY_OPTIONS, PLANT_TYPE_OPTIONS } from "@/lib/canonicalFields";
 import { checkSetupCapacityConsistency } from "@/lib/capacityConsistency";
 import {
@@ -139,6 +140,7 @@ export function SetupPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { uploadInfo, setJob } = useJob();
+  const { runWithTransition } = useWorkflowTransition();
 
   const [suggestions, setSuggestions] = useState<ColumnMappingSuggestion[]>(
     () => uploadInfo?.mapping_suggestions ?? [],
@@ -560,36 +562,38 @@ export function SetupPage() {
     setError(null);
     setFieldErrors({});
     try {
-      await submitMapping(jobId, mapping);
-      const { modules_per_string: _mps, ...plantPayload } = plant;
-      await submitPlantConfig({
-        job_id: jobId,
-        ...plantPayload,
-        strings_per_scb: plant.strings_per_scb ?? strings_per_scb_fallback,
-        equipment_ratings,
-        architecture,
-        ...(importedNameplate?.equipment_ratings
-          ? { imported_equipment_ratings: importedNameplate.equipment_ratings }
-          : {}),
-        ...(importedNameplate?.inverter_capacity_kw
-          ? { imported_inverter_capacity_kw: importedNameplate.inverter_capacity_kw }
-          : {}),
-        ...(importedNameplate?.ac_capacity_mw
-          ? { imported_ac_capacity_mw: importedNameplate.ac_capacity_mw }
-          : {}),
-        ...(importedNameplate?.dc_capacity_mwp
-          ? { imported_dc_capacity_mwp: importedNameplate.dc_capacity_mwp }
-          : {}),
-        ...(importedNameplate?.architecture_imported != null
-          ? { architecture_imported: importedNameplate.architecture_imported }
-          : packArchImported
-            ? { architecture_imported: true }
+      await runWithTransition("to-validate", async () => {
+        await submitMapping(jobId, mapping);
+        const { modules_per_string: _mps, ...plantPayload } = plant;
+        await submitPlantConfig({
+          job_id: jobId,
+          ...plantPayload,
+          strings_per_scb: plant.strings_per_scb ?? strings_per_scb_fallback,
+          equipment_ratings,
+          architecture,
+          ...(importedNameplate?.equipment_ratings
+            ? { imported_equipment_ratings: importedNameplate.equipment_ratings }
             : {}),
-        ...(importedNameplate?.architecture_format
-          ? { architecture_format: importedNameplate.architecture_format }
-          : {}),
+          ...(importedNameplate?.inverter_capacity_kw
+            ? { imported_inverter_capacity_kw: importedNameplate.inverter_capacity_kw }
+            : {}),
+          ...(importedNameplate?.ac_capacity_mw
+            ? { imported_ac_capacity_mw: importedNameplate.ac_capacity_mw }
+            : {}),
+          ...(importedNameplate?.dc_capacity_mwp
+            ? { imported_dc_capacity_mwp: importedNameplate.dc_capacity_mwp }
+            : {}),
+          ...(importedNameplate?.architecture_imported != null
+            ? { architecture_imported: importedNameplate.architecture_imported }
+            : packArchImported
+              ? { architecture_imported: true }
+              : {}),
+          ...(importedNameplate?.architecture_format
+            ? { architecture_format: importedNameplate.architecture_format }
+            : {}),
+        });
+        navigate(`/jobs/${jobId}/validate`);
       });
-      navigate(`/jobs/${jobId}/validate`);
     } catch (err) {
       const msg =
         err instanceof ApiError

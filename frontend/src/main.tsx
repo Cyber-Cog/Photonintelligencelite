@@ -6,6 +6,7 @@ import { AuthProvider } from "@/context/AuthContext";
 import { DemoTourProvider } from "@/context/DemoTourContext";
 import { JobProvider } from "@/context/JobContext";
 import { ThemeProvider } from "@/context/ThemeContext";
+import { WorkflowTransitionProvider } from "@/context/WorkflowTransitionContext";
 import "@/index.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
@@ -14,9 +15,11 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
       <BrowserRouter>
         <AuthProvider>
           <JobProvider>
-            <DemoTourProvider>
-              <App />
-            </DemoTourProvider>
+            <WorkflowTransitionProvider>
+              <DemoTourProvider>
+                <App />
+              </DemoTourProvider>
+            </WorkflowTransitionProvider>
           </JobProvider>
         </AuthProvider>
       </BrowserRouter>

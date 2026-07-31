@@ -1567,6 +1567,56 @@ html.dark .tour-btn-next:hover {
   }
 }
 
+/* Workflow Continue transition overlay (portal, not page layout) */
+.transition-overlay-enter {
+  animation: transitionOverlayIn 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.transition-overlay-exit {
+  animation: transitionOverlayOut 0.18s ease-in both;
+}
+.transition-overlay-card {
+  animation: transitionCardIn 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.transition-overlay-bar {
+  width: 40%;
+  animation: transitionBarSlide 1.35s ease-in-out infinite;
+}
+
+@keyframes transitionOverlayIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes transitionOverlayOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@keyframes transitionCardIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes transitionBarSlide {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .proc-log-line,
   .proc-caret,
@@ -1575,7 +1625,11 @@ html.dark .tour-btn-next:hover {
   .proc-chart-draw,
   .proc-chart-draw-delayed,
   .proc-chart-shimmer::after,
-  .parse-sheet-row-live {
+  .parse-sheet-row-live,
+  .transition-overlay-enter,
+  .transition-overlay-exit,
+  .transition-overlay-card,
+  .transition-overlay-bar {
     animation: none !important;
   }
   .proc-chart-draw,
@@ -1587,5 +1641,9 @@ html.dark .tour-btn-next:hover {
   }
   .parse-sheet-row-live {
     opacity: 0.85;
+  }
+  .transition-overlay-bar {
+    width: 55%;
+    transform: none;
   }
 }

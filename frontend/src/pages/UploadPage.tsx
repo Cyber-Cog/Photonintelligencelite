@@ -24,6 +24,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Spinner } from "@/components/ui/Spinner";
 import { useJob } from "@/context/JobContext";
+import { useWorkflowTransition } from "@/context/WorkflowTransitionContext";
 import { maybeCompress } from "@/lib/clientGzip";
 import { rememberUploadPath } from "@/lib/uploadPath";
 import type { UploadResponse } from "@/types";
@@ -42,6 +43,7 @@ export function UploadPage() {
   const [searchParams] = useSearchParams();
   const replaceJobId = searchParams.get("replace");
   const { setJob } = useJob();
+  const { runWithTransition, active: transitioning } = useWorkflowTransition();
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [path, setPath] = useState<UploadPath | null>(null);
@@ -177,18 +179,27 @@ export function UploadPage() {
     }
   };
 
-  const continueToSetup = () => {
+  const continueToSetup = async () => {
     if (!review?.job_id) return;
-    navigate(`/jobs/${review.job_id}/setup`);
+    const jobId = review.job_id;
+    try {
+      await runWithTransition("to-setup", () => {
+        navigate(`/jobs/${jobId}/setup`);
+      });
+    } catch {
+      /* navigation-only; overlay clears in finally */
+    }
   };
 
   const loadDemo = async () => {
     setDemoLoading(true);
     setError(null);
     try {
-      const res = await startDemo();
-      setJob(res.job_id, null);
-      navigate(`/jobs/${res.job_id}/processing`);
+      await runWithTransition("to-demo", async () => {
+        const res = await startDemo();
+        setJob(res.job_id, null);
+        navigate(`/jobs/${res.job_id}/processing`);
+      });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not start demo.");
     } finally {
@@ -435,7 +446,12 @@ export function UploadPage() {
       )}
 
       {review ? (
-        <UploadReviewBar review={review} onClear={clearReview} onContinue={continueToSetup} />
+        <UploadReviewBar
+          review={review}
+          onClear={clearReview}
+          onContinue={() => void continueToSetup()}
+          continuing={transitioning}
+        />
       ) : null}
     </div>
   );

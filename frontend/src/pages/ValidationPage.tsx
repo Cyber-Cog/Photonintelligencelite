@@ -15,6 +15,7 @@ import { InfoBanner } from "@/components/ui/InfoBanner";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { SectionPanel } from "@/components/ui/SectionPanel";
 import { Spinner } from "@/components/ui/Spinner";
+import { useWorkflowTransition } from "@/context/WorkflowTransitionContext";
 import { ALGORITHM_FIELD_HINTS } from "@/lib/canonicalHints";
 import { fixHref } from "@/lib/missingReasons";
 import type { ValidationIssue, ValidationResponse } from "@/types";
@@ -198,6 +199,7 @@ function validationSummaryReady(v: ValidationResponse | null): boolean {
 export function ValidationPage() {
   const { jobId } = useParams<{ jobId: string }>();
   const navigate = useNavigate();
+  const { runWithTransition } = useWorkflowTransition();
 
   const [validation, setValidation] = useState<ValidationResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -259,11 +261,14 @@ export function ValidationPage() {
   const canRunAnalysis = summaryReady && !hasBlockers && Boolean(validation?.can_proceed);
 
   const handleContinue = async (dropBad = false) => {
+    if (!jobId) return;
     setAcking(true);
     setError(null);
     try {
-      await acknowledgeWarnings(jobId, dropBad);
-      navigate(`/jobs/${jobId}/processing`);
+      await runWithTransition("to-analyze", async () => {
+        await acknowledgeWarnings(jobId, dropBad);
+        navigate(`/jobs/${jobId}/processing`);
+      });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not queue the job. Try again.");
       reload();
