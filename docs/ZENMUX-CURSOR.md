@@ -4,9 +4,11 @@ This setup is for **Cursor IDE**, not the PIC Lite web app. No backend or fronte
 
 ## 1. Get a chat API key
 
-In [ZenMux Console](https://zenmux.ai), create a **chat API key** (`sk-ai-v1-…`).
+In [ZenMux Console](https://zenmux.ai), create a **chat API key** (`sk-ai-v1-…` or `sk-ss-v1-…`).
 
 Do **not** use a management key (`sk-mg-v1-…`) — that is for billing/usage APIs, not chat.
+
+For the **PIC Lite web API** (local `.env` / Render), see [ZENMUX-API-SETUP.md](./ZENMUX-API-SETUP.md).
 
 If a key was pasted in chat, rotate it in the console.
 

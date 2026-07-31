@@ -66,3 +66,11 @@ services:
       #   value: Superadmin
       # - key: JOB_TIMEOUT_SEC
       #   sync: false
+      # ZenMux chat key for AI integrity (sk-ai-v1-… or sk-ss-v1-…; NOT sk-mg-v1-…).
+      # Paste in Render dashboard — see docs/ZENMUX-API-SETUP.md
+      # - key: ZENMUX_API_KEY
+      #   sync: false
+      # - key: ZENMUX_BASE_URL
+      #   value: https://zenmux.ai/api/v1
+      # - key: ZENMUX_MODEL
+      #   value: google/gemini-2.5-flash
