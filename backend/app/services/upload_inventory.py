@@ -8,6 +8,7 @@ from typing import Any, Iterable, Mapping, Optional
 import pandas as pd
 
 from analytics.common.aliasing import score_columns
+from analytics.common.complete_analysis_pack import looks_like_complete_pack
 from backend.app.services.mapping_service import suggest_mapping
 from backend.app.services.merge_uploads import _classify, _timestamp_col
 
@@ -42,15 +43,28 @@ def _present_fields(columns: Iterable[str], suggestions: Iterable[Any] | None = 
     return present
 
 
-def _detected_as_label(kind: str, present: set[str], unmapped: int) -> str:
+def _detected_as_label(
+    kind: str,
+    present: set[str],
+    unmapped: int,
+    *,
+    pack_like: bool = False,
+) -> str:
+    """Single primary badge for the file table — prefer the most specific accurate label."""
+    if pack_like:
+        return "Complete Analysis Pack"
     if unmapped >= 3 and kind == "other":
         return f"Registry — {unmapped} cols unmapped"
-    if "dc_current_a" in present and ("string_id" in present or "scb_id" in present):
-        return "String current"
-    if "dc_current_a" in present and unmapped <= 2:
-        return "String current"
-    if "ac_power_kw" in present and ("dc_power_kw" in present or "dc_current_a" in present):
+    has_inv_power = "ac_power_kw" in present or "dc_power_kw" in present
+    has_string = "dc_current_a" in present and (
+        "string_id" in present or "scb_id" in present or "device_id" in present
+    )
+    if has_inv_power and has_string:
+        return "Inverter + string SCADA"
+    if has_inv_power:
         return "Inverter AC/DC"
+    if has_string or ("dc_current_a" in present and unmapped <= 2):
+        return "String current"
     if any(f in present for f in ("poa_w_m2", "ghi_w_m2", "module_temp_c", "ambient_temp_c")):
         return "Irradiance / temp"
     if kind == "weather":
@@ -93,11 +107,12 @@ def inventory_item_from_csv(
     start, end = _date_range(df)
     if parse_report:
         sheet_name = sheet_name or parse_report.get("sheet_name")
+    pack_like = looks_like_complete_pack(columns)
     return {
         "filename": display_name,
         "sheet_name": sheet_name,
         "row_count": int(len(df)),
-        "detected_as": _detected_as_label(kind, present, unmapped),
+        "detected_as": _detected_as_label(kind, present, unmapped, pack_like=pack_like),
         "signals_present": sorted(present),
         "unmapped_column_count": unmapped,
         "date_range_start": start,
