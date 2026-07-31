@@ -662,20 +662,4 @@ export async function appendUpload(jobId: string, file: File) {
   });
 }
 
-export async function getAgentStatus() {
-  return apiFetch<import("@/types").AgentStatusResponse>("/api/agent/status");
-}
-
-export async function agentChat(body: {
-  message: string;
-  job_id?: string;
-  context?: string;
-  history?: Array<{ role: string; content: string }>;
-}) {
-  return apiFetch<import("@/types").AgentChatResponse>("/api/agent/chat", {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
-}
-
 export { BASE_URL };

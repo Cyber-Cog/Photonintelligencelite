@@ -71,11 +71,6 @@ class Settings(BaseSettings):
     smtp_from: str | None = Field(default=None, validation_alias="SMTP_FROM")
     smtp_use_tls: bool = Field(default=True, validation_alias="SMTP_USE_TLS")
 
-    # ZenMux — PIC Analyst custom agent (OpenAI-compatible)
-    zenmux_api_key: str | None = Field(default=None, validation_alias="ZENMUX_API_KEY")
-    zenmux_base_url: str = Field(default="https://zenmux.ai/api/v1", validation_alias="ZENMUX_BASE_URL")
-    zenmux_model: str = Field(default="google/gemini-2.5-flash", validation_alias="ZENMUX_MODEL")
-
     @property
     def job_root_path(self) -> Path:
         p = Path(self.job_root)

@@ -343,27 +343,3 @@ class ResultsResponse(BaseModel):
 class DemoJobResponse(BaseModel):
     job_id: str
     state: str
-
-
-class AgentStatusResponse(BaseModel):
-    enabled: bool
-    model: str
-    base_url: str
-
-
-class AgentChatTurn(BaseModel):
-    role: str
-    content: str
-
-
-class AgentChatRequest(BaseModel):
-    message: str = Field(min_length=1, max_length=4000)
-    job_id: str | None = None
-    context: str | None = None
-    """upload | validation | results | general"""
-    history: list[AgentChatTurn] = Field(default_factory=list)
-
-
-class AgentChatResponse(BaseModel):
-    content: str
-    model: str | None = None

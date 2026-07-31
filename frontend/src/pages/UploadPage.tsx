@@ -15,7 +15,6 @@ import { ParseActivityConsole } from "@/components/upload/ParseActivityConsole";
 import { UploadFilesTable } from "@/components/upload/UploadFilesTable";
 import { UploadReviewBar } from "@/components/upload/UploadReviewBar";
 import { UploadIntelligencePanel } from "@/components/upload/UploadIntelligencePanel";
-import { PicAgentPanel } from "@/components/agent/PicAgentPanel";
 import {
   useParseActivityLog,
   type UploadActivityPhase,
@@ -429,7 +428,6 @@ export function UploadPage() {
                 moduleImpact={review.module_impact_preview}
                 layout="review"
               />
-              <PicAgentPanel jobId={review.job_id} context="upload" />
             </div>
           )}
         </>

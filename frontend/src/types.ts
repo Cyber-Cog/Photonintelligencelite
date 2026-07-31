@@ -235,17 +235,6 @@ export interface SetupContextResponse {
   original_filename?: string | null;
 }
 
-export interface AgentStatusResponse {
-  enabled: boolean;
-  model: string;
-  base_url: string;
-}
-
-export interface AgentChatResponse {
-  content: string;
-  model?: string | null;
-}
-
 export interface JobStatusResponse {
   job_id: string;
   state: string;
