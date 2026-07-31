@@ -1,4 +1,4 @@
-"""Upload review intelligence: hierarchy signal matrix, architecture counts, module impact."""
+"""Upload review intelligence: multi-level hierarchy signal matrix, architecture, module impact."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -7,52 +7,78 @@ from typing import Any, Iterable, Mapping, Optional
 from analytics.common.plant_structure import DetectedStructure, infer_from_csv
 from analytics.common.prerequisites import evaluate_prerequisites
 
-# Signals grouped by SCADA hierarchy for the Upload review screen.
-# SCB and string are separate buckets — do not OR device_id into both (false greens).
-# ICR is optional: omitted from the matrix when absent (no blockers / required signals).
+# Professional SCADA model: identity fields stay level-specific; measurement fields
+# may appear at every level where real plants measure them (not a unique partition).
+# SCB/string IDs must not inherit device_id (false greens). ICR is optional.
 _OPTIONAL_LEVEL_IDS = frozenset({"icr"})
 
-_HIERARCHY_LEVELS: tuple[tuple[str, str, tuple[tuple[str, str, tuple[str, ...]], ...]], ...] = (
+# Evidence kinds for matrix chips
+_EVIDENCE_CONFIRMED = "confirmed"
+_EVIDENCE_MAPPED_TBD = "mapped_level_tbd"
+
+# Upload hierarchy level_id → canonical device_type partition keys
+_LEVEL_DEVICE_TYPES: dict[str, tuple[str, ...]] = {
+    "plant_wms": ("plant", "wms"),
+    "icr": ("icr",),
+    "inverter": ("inverter",),
+    "scb": ("scb",),
+    "string": ("string",),
+}
+
+# (field_id, label, alternate_canonicals, kind)
+# kind: "identity" = level-specific; "measurement" = valid at this level (may repeat elsewhere)
+_SignalDef = tuple[str, str, tuple[str, ...], str]
+
+_HIERARCHY_LEVELS: tuple[tuple[str, str, tuple[_SignalDef, ...]], ...] = (
     (
         "plant_wms",
         "Plant / WMS (site-wide)",
         (
-            ("timestamp", "Timestamp", ()),
-            ("irradiance", "Irradiance (POA or GHI)", ("poa_w_m2", "ghi_w_m2")),
-            ("module_temp_c", "Module temperature (°C)", ()),
-            ("ambient_temp_c", "Ambient temperature (°C)", ()),
+            ("timestamp", "Timestamp", (), "identity"),
+            ("irradiance", "Irradiance (POA or GHI)", ("poa_w_m2", "ghi_w_m2"), "measurement"),
+            ("module_temp_c", "Module temperature (°C)", (), "measurement"),
+            ("ambient_temp_c", "Ambient temperature (°C)", (), "measurement"),
+            ("ac_power_kw", "Plant AC power (kW)", (), "measurement"),
+            ("dc_power_kw", "Plant DC power (kW)", (), "measurement"),
         ),
     ),
     (
         "icr",
         "ICR (Inverter Control Room)",
         (
-            ("icr_id", "ICR ID", ()),
+            ("icr_id", "ICR ID", (), "identity"),
         ),
     ),
     (
         "inverter",
         "Inverter level",
         (
-            ("inverter_id", "Inverter / equipment ID", ("inverter_id", "device_id")),
-            ("ac_power_kw", "AC power (kW)", ()),
-            ("dc_power_kw", "DC power (kW)", ()),
+            ("inverter_id", "Inverter / equipment ID", ("inverter_id", "device_id"), "identity"),
+            ("ac_power_kw", "AC power (kW)", (), "measurement"),
+            ("dc_power_kw", "DC power (kW)", (), "measurement"),
+            ("dc_current_a", "DC current (A)", (), "measurement"),
+            ("dc_voltage_v", "DC voltage (V)", (), "measurement"),
+            ("energy_kwh", "Energy (kWh)", (), "measurement"),
         ),
     ),
     (
         "scb",
         "SCB / SMB level",
         (
-            ("scb_id", "SCB / SMB ID", ()),
-            ("dc_current_a", "DC current (A)", ()),
-            ("dc_voltage_v", "DC voltage (V)", ()),
+            ("scb_id", "SCB / SMB ID", (), "identity"),
+            ("dc_current_a", "DC current (A)", (), "measurement"),
+            ("dc_voltage_v", "DC voltage (V)", (), "measurement"),
+            ("dc_power_kw", "DC power (kW)", (), "measurement"),
         ),
     ),
     (
         "string",
         "String level",
         (
-            ("string_id", "String ID", ()),
+            ("string_id", "String ID", (), "identity"),
+            ("dc_current_a", "DC current (A)", (), "measurement"),
+            ("dc_voltage_v", "DC voltage (V)", (), "measurement"),
+            ("dc_power_kw", "DC power (kW)", (), "measurement"),
         ),
     ),
 )
@@ -67,28 +93,80 @@ def _field_present(field_id: str, alts: tuple[str, ...], present: set[str]) -> t
     return False, None
 
 
+def _confirmed_at_level(
+    field_id: str,
+    alts: tuple[str, ...],
+    level_id: str,
+    by_device_type: Mapping[str, set[str]] | None,
+) -> str | None:
+    """Return the matching canonical field if populated under this level's device_type(s)."""
+    if not by_device_type:
+        return None
+    candidates = (field_id, *alts) if alts else (field_id,)
+    # Irradiance pseudo-id resolves to poa/ghi
+    if field_id == "irradiance":
+        candidates = ("poa_w_m2", "ghi_w_m2", "irradiance")
+    for dtype in _LEVEL_DEVICE_TYPES.get(level_id, ()):
+        populated = by_device_type.get(dtype) or set()
+        for c in candidates:
+            if c in populated:
+                return c
+    return None
+
+
+def _normalize_by_device_type(
+    by_device_type: Mapping[str, Iterable[str]] | None,
+) -> dict[str, set[str]] | None:
+    if not by_device_type:
+        return None
+    return {str(k): {str(f) for f in fields if f} for k, fields in by_device_type.items()}
+
+
 def build_hierarchy_levels(
     present: Iterable[str],
     *,
     show_empty_optional: bool = False,
+    by_device_type: Mapping[str, Iterable[str]] | None = None,
 ) -> list[dict[str, Any]]:
-    """Per-hierarchy signal matrix from a set of detected canonical fields.
+    """Per-hierarchy signal matrix from detected canonical fields.
 
-    Optional levels (ICR) are omitted when none of their signals are present,
-    so plants without ICR are not forced to show an empty required row.
+    Measurements that are valid at multiple levels are listed under each such level
+    when present in the job mapping (not uniquely bucketed). When ``by_device_type``
+    is provided, chips distinguish confirmed device_type evidence from
+    column-only ``mapped_level_tbd``.
+
+    Optional levels (ICR) are omitted when none of their signals are present.
     """
     fields = {str(f) for f in present if f}
+    typed = _normalize_by_device_type(by_device_type)
     levels: list[dict[str, Any]] = []
     for level_id, title, signals in _HIERARCHY_LEVELS:
         items: list[dict[str, Any]] = []
-        for field_id, label, alts in signals:
+        for field_id, label, alts, kind in signals:
             ok, via = _field_present(field_id, alts, fields)
+            confirmed_via = _confirmed_at_level(field_id, alts, level_id, typed)
+            if confirmed_via:
+                evidence = _EVIDENCE_CONFIRMED
+                present_flag = True
+                via = confirmed_via
+            elif ok:
+                # Column/job mapping present — credit every level where the metric is valid.
+                # Identities are level-specific; column match is enough. Measurements stay
+                # mapped_level_tbd until device_type evidence confirms them.
+                evidence = _EVIDENCE_CONFIRMED if kind == "identity" else _EVIDENCE_MAPPED_TBD
+                present_flag = True
+            else:
+                evidence = None
+                present_flag = False
+                via = None
             items.append(
                 {
                     "id": field_id,
                     "label": label,
-                    "present": ok,
+                    "present": present_flag,
                     "detected_via": via,
+                    "evidence": evidence,
+                    "kind": kind,
                 }
             )
         detected = sum(1 for i in items if i["present"])
@@ -235,7 +313,8 @@ def build_module_impact_preview(
     return {
         "preview_note": (
             "Preliminary — based on detected column names only. "
-            "Validate confirms hierarchy levels (e.g. SCB vs inverter voltage) before Results."
+            "Validate confirms hierarchy levels (e.g. SCB vs inverter voltage) before Results. "
+            "Measurements may appear at multiple levels; algorithms still require the correct device_type."
         ),
         "ready_count": len(ready),
         "may_run_count": len(may_run),
@@ -263,11 +342,15 @@ def build_module_impact_preview(
     }
 
 
-def enrich_file_inventory_item(item: dict[str, Any]) -> dict[str, Any]:
+def enrich_file_inventory_item(
+    item: dict[str, Any],
+    *,
+    by_device_type: Mapping[str, Iterable[str]] | None = None,
+) -> dict[str, Any]:
     """Ensure per-file hierarchy matrix exists (rebuild from signals_present when missing)."""
     if not item.get("hierarchy_levels"):
         present = item.get("signals_present") or []
-        item["hierarchy_levels"] = build_hierarchy_levels(present)
+        item["hierarchy_levels"] = build_hierarchy_levels(present, by_device_type=by_device_type)
     return item
 
 
@@ -277,6 +360,7 @@ def build_upload_intelligence(
     plant_config: Mapping[str, Any] | None,
     csv_path: Path | None,
     file_inventory: list[dict[str, Any]] | None = None,
+    by_device_type: Mapping[str, Iterable[str]] | None = None,
 ) -> dict[str, Any]:
     """Job-level upload intelligence bundle for API responses."""
     present = _present_from_suggestions(suggestions)
@@ -290,9 +374,11 @@ def build_upload_intelligence(
         plant_config=plant_config,
         architecture_summary=arch,
     )
-    inventory = [enrich_file_inventory_item(dict(f)) for f in (file_inventory or [])]
+    inventory = [
+        enrich_file_inventory_item(dict(f), by_device_type=by_device_type) for f in (file_inventory or [])
+    ]
     return {
-        "hierarchy_overview": build_hierarchy_levels(present),
+        "hierarchy_overview": build_hierarchy_levels(present, by_device_type=by_device_type),
         "architecture_summary": arch,
         "module_impact_preview": impact,
         "file_inventory": inventory,
@@ -300,11 +386,19 @@ def build_upload_intelligence(
 
 
 def hierarchy_missing_labels(levels: list[dict[str, Any]]) -> list[str]:
-    """Flat list of missing signal labels across all hierarchy levels."""
+    """Flat list of missing signal labels across hierarchy levels (deduped by signal id)."""
     missing: list[str] = []
+    seen_ids: set[str] = set()
     for level in levels:
         prefix = level.get("title", "")
         for sig in level.get("signals") or []:
-            if not sig.get("present"):
-                missing.append(f"{prefix}: {sig.get('label', sig.get('id', ''))}")
+            if sig.get("present"):
+                continue
+            sid = str(sig.get("id") or "")
+            # Measurements listed at multiple levels — report once
+            if sid and sid in seen_ids and sig.get("kind") == "measurement":
+                continue
+            if sid:
+                seen_ids.add(sid)
+            missing.append(f"{prefix}: {sig.get('label', sid)}")
     return missing

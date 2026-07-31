@@ -102,6 +102,18 @@ def test_reshape_fixture_maps_signals(tmp_path: Path):
     intel = build_upload_intelligence(suggestions=sug, plant_config=None, csv_path=dst)
     level_ids = {h["level_id"] for h in intel["hierarchy_overview"]}
     assert "icr" in level_ids
+    inv = next(h for h in intel["hierarchy_overview"] if h["level_id"] == "inverter")
+    scb = next(h for h in intel["hierarchy_overview"] if h["level_id"] == "scb")
+    inv_by_id = {s["id"]: s for s in inv["signals"]}
+    scb_by_id = {s["id"]: s for s in scb["signals"]}
+    # Wide inverter melt: DC power / current / voltage credited at inverter (and valid at SCB)
+    assert inv_by_id["dc_power_kw"]["present"] is True
+    if "dc_current_a" in fields:
+        assert inv_by_id["dc_current_a"]["present"] is True
+        assert scb_by_id["dc_current_a"]["present"] is True
+    if "dc_voltage_v" in fields:
+        assert inv_by_id["dc_voltage_v"]["present"] is True
+    assert scb_by_id["dc_power_kw"]["present"] is True  # multi-level, not inverter-only
     assert intel["architecture_summary"]["inverter_count"] == 12
     check = run_upload_integrity_check(
         get_settings(),

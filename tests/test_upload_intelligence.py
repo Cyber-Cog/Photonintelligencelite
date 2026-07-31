@@ -1,4 +1,4 @@
-"""Tests for upload intelligence: hierarchy matrix, architecture, module impact."""
+"""Tests for upload intelligence: multi-level hierarchy matrix, architecture, module impact."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -16,6 +16,10 @@ from backend.app.services.upload_intelligence import (
 from backend.app.services.upload_inventory import inventory_item_from_csv
 
 
+def _signal(level: dict, field_id: str) -> dict:
+    return next(s for s in level["signals"] if s["id"] == field_id)
+
+
 def test_hierarchy_levels_group_by_plant_inverter_scb():
     present = {"timestamp", "poa_w_m2", "ac_power_kw", "device_id", "dc_current_a"}
     levels = build_hierarchy_levels(present)
@@ -24,18 +28,60 @@ def test_hierarchy_levels_group_by_plant_inverter_scb():
     inv = next(l for l in levels if l["level_id"] == "inverter")
     scb = next(l for l in levels if l["level_id"] == "scb")
     string = next(l for l in levels if l["level_id"] == "string")
-    assert plant["detected_count"] >= 2  # timestamp + irradiance
+    assert plant["detected_count"] >= 2  # timestamp + irradiance (+ plant AC if credited)
     assert inv["detected_count"] >= 2  # id (via device_id) + ac power
     assert scb["detected_count"] >= 1  # dc current
     # device_id must NOT falsely mark both scb_id and string_id present
-    scb_id = next(s for s in scb["signals"] if s["id"] == "scb_id")
-    str_id = next(s for s in string["signals"] if s["id"] == "string_id")
-    assert scb_id["present"] is False
-    assert str_id["present"] is False
-    dc = next(s for s in scb["signals"] if s["id"] == "dc_current_a")
-    assert dc["present"] is True
-    volt = next(s for s in scb["signals"] if s["id"] == "dc_voltage_v")
-    assert volt["present"] is False
+    assert _signal(scb, "scb_id")["present"] is False
+    assert _signal(string, "string_id")["present"] is False
+    # Multi-level: DC current is valid at inverter, SCB, and string — not uniquely partitioned
+    assert _signal(inv, "dc_current_a")["present"] is True
+    assert _signal(scb, "dc_current_a")["present"] is True
+    assert _signal(string, "dc_current_a")["present"] is True
+    assert _signal(scb, "dc_voltage_v")["present"] is False
+
+
+def test_hierarchy_inverter_dc_ivp_and_scb_dc_power_not_mutually_exclusive():
+    """Inverter may carry DC I/V/P; SCB may carry DC power — no unique division."""
+    present = {
+        "timestamp",
+        "device_id",
+        "ac_power_kw",
+        "dc_power_kw",
+        "dc_current_a",
+        "dc_voltage_v",
+        "scb_id",
+    }
+    levels = build_hierarchy_levels(present)
+    inv = next(l for l in levels if l["level_id"] == "inverter")
+    scb = next(l for l in levels if l["level_id"] == "scb")
+
+    for field in ("dc_power_kw", "dc_current_a", "dc_voltage_v"):
+        assert _signal(inv, field)["present"] is True, field
+        assert _signal(scb, field)["present"] is True, field
+
+    assert _signal(inv, "dc_current_a")["evidence"] == "mapped_level_tbd"
+    assert _signal(scb, "dc_power_kw")["evidence"] == "mapped_level_tbd"
+    assert _signal(scb, "scb_id")["present"] is True
+    assert _signal(scb, "scb_id")["evidence"] == "confirmed"
+
+
+def test_hierarchy_by_device_type_distinguishes_confirmed_vs_mapped_tbd():
+    present = {"timestamp", "device_id", "dc_current_a", "dc_voltage_v", "dc_power_kw"}
+    by_type = {
+        "inverter": {"device_id", "dc_power_kw", "dc_current_a", "dc_voltage_v"},
+        "scb": set(),
+    }
+    levels = build_hierarchy_levels(present, by_device_type=by_type)
+    inv = next(l for l in levels if l["level_id"] == "inverter")
+    scb = next(l for l in levels if l["level_id"] == "scb")
+
+    assert _signal(inv, "dc_current_a")["evidence"] == "confirmed"
+    assert _signal(inv, "dc_power_kw")["evidence"] == "confirmed"
+    # Still present under SCB as job-available (valid metric) but not confirmed at scb device_type
+    assert _signal(scb, "dc_current_a")["present"] is True
+    assert _signal(scb, "dc_current_a")["evidence"] == "mapped_level_tbd"
+    assert _signal(scb, "dc_power_kw")["evidence"] == "mapped_level_tbd"
 
 
 def test_architecture_inferred_from_device_ids(tmp_path: Path):
@@ -84,7 +130,9 @@ def test_inventory_item_includes_hierarchy(tmp_path: Path):
 def test_enrich_rebuilds_hierarchy_from_signals_present():
     item = enrich_file_inventory_item({"signals_present": ["timestamp", "dc_current_a"]})
     scb = next(l for l in item["hierarchy_levels"] if l["level_id"] == "scb")
+    inv = next(l for l in item["hierarchy_levels"] if l["level_id"] == "inverter")
     assert scb["detected_count"] >= 1
+    assert _signal(inv, "dc_current_a")["present"] is True
 
 
 def test_module_impact_marks_module_damage_preliminary_not_ready():
@@ -123,3 +171,8 @@ def test_build_upload_intelligence_bundle():
     assert bundle["architecture_summary"]["source"] == "not_detected"
     assert "module_impact_preview" in bundle
     assert bundle["file_inventory"][0].get("hierarchy_levels")
+    # AC power credited at plant + inverter (multi-level), not uniquely locked
+    plant = next(l for l in bundle["hierarchy_overview"] if l["level_id"] == "plant_wms")
+    inv = next(l for l in bundle["hierarchy_overview"] if l["level_id"] == "inverter")
+    assert _signal(plant, "ac_power_kw")["present"] is True
+    assert _signal(inv, "ac_power_kw")["present"] is True

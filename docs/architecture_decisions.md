@@ -19,10 +19,10 @@ fixed canonical schema. Algorithms never see vendor column names.
 | `inverter_id` | string \| null | Resolved parent inverter, when derivable |
 | `scb_id` | string \| null | Resolved parent SCB/MPPT, when derivable |
 | `string_id` | string \| null | Resolved string identifier, when present |
-| `ac_power_kw` | float \| null | |
-| `dc_power_kw` | float \| null | |
-| `dc_current_a` | float \| null | |
-| `dc_voltage_v` | float \| null | |
+| `ac_power_kw` | float \| null | Measured at inverter and/or plant when present |
+| `dc_power_kw` | float \| null | Valid at inverter, SCB/SMB, string, and plant — not uniquely partitioned |
+| `dc_current_a` | float \| null | Valid at inverter, SCB/SMB, and string |
+| `dc_voltage_v` | float \| null | Valid at inverter, SCB/SMB, and string |
 | `poa_w_m2` | float \| null | Plane-of-array irradiance |
 | `ghi_w_m2` | float \| null | Global horizontal irradiance |
 | `module_temp_c` | float \| null | |
@@ -32,6 +32,14 @@ fixed canonical schema. Algorithms never see vendor column names.
 Canonical rows are written as partitioned Parquet under
 `{job_dir}/canonical/device_type={type}/date={YYYY-MM-DD}/part.parquet` so algorithms and
 the orchestrator can lazily read only what they need (Polars `scan_parquet`).
+
+**Multi-level measurements:** Identity fields (`device_id` / `inverter_id`, `scb_id`,
+`string_id`, `icr_id`, timestamp) are level-specific. Electrical measurements
+(AC/DC power, DC current/voltage, energy) are **not** locked to a single hierarchy
+bucket — the same column may be present on inverter, SCB, or string rows. Upload
+intelligence lists a metric under every level where it is valid; algorithm
+prerequisites still require the correct `device_type` evidence (e.g. Module Damage
+needs SCB-level `dc_voltage_v`).
 
 ## 2. `AnalysisContext`
 

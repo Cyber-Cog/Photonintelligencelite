@@ -54,6 +54,10 @@ SCB-level modules unavailable — that is expected, not a bug.
 One row = one equipment reading at one timestamp. Blank cells are fine where a
 signal does not apply at that level (e.g. AC power only on inverter rows).
 
+The same measurement name may appear on multiple equipment levels when the plant
+records it there (e.g. inverter DC current/power **and** SCB DC current/power).
+Do not treat metrics as uniquely owned by one hierarchy bucket.
+
 ### Required / recommended columns
 
 | Column header (official) | Canonical field | Required? |

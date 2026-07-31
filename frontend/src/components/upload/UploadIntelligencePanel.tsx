@@ -7,6 +7,31 @@ import type {
   UploadModuleImpactPreview,
 } from "@/types";
 
+function signalTooltip(sig: UploadHierarchyLevel["signals"][number]): string {
+  if (!sig.present) return "Not detected";
+  const via =
+    sig.detected_via && sig.detected_via !== sig.id
+      ? ` via ${sig.detected_via.replace(/_/g, " ")}`
+      : "";
+  if (sig.evidence === "mapped_level_tbd") {
+    return `Mapped in job (level TBD)${via} — valid at this level; Validate confirms device type`;
+  }
+  if (sig.evidence === "confirmed") {
+    return `Confirmed at this level${via}`;
+  }
+  return via ? `Detected${via}` : "Detected";
+}
+
+function signalChipClass(sig: UploadHierarchyLevel["signals"][number]): string {
+  if (!sig.present) {
+    return "border-[color:var(--pic-border-subtle)] bg-[color:var(--pic-surface-muted)] text-[color:var(--pic-text-muted)]";
+  }
+  if (sig.evidence === "mapped_level_tbd") {
+    return "border-sky-200/90 bg-sky-50/80 text-sky-950 dark:border-sky-800/50 dark:bg-sky-950/30 dark:text-sky-100";
+  }
+  return "border-emerald-200/90 bg-emerald-50/80 text-emerald-900 dark:border-emerald-800/50 dark:bg-emerald-950/30 dark:text-emerald-200";
+}
+
 function SignalChips({ levels, dense }: { levels: UploadHierarchyLevel[]; dense?: boolean }) {
   if (levels.length === 0) return null;
 
@@ -24,21 +49,11 @@ function SignalChips({ levels, dense }: { levels: UploadHierarchyLevel[]; dense?
             {level.signals.map((sig) => (
               <span
                 key={sig.id}
-                title={
-                  sig.present
-                    ? sig.detected_via && sig.detected_via !== sig.id
-                      ? `Detected via ${sig.detected_via.replace(/_/g, " ")}`
-                      : "Detected"
-                    : "Not detected"
-                }
-                className={`inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] leading-snug ${
-                  sig.present
-                    ? "border-emerald-200/90 bg-emerald-50/80 text-emerald-900 dark:border-emerald-800/50 dark:bg-emerald-950/30 dark:text-emerald-200"
-                    : "border-[color:var(--pic-border-subtle)] bg-[color:var(--pic-surface-muted)] text-[color:var(--pic-text-muted)]"
-                }`}
+                title={signalTooltip(sig)}
+                className={`inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] leading-snug ${signalChipClass(sig)}`}
               >
                 <span aria-hidden className="shrink-0 text-[9px] font-bold">
-                  {sig.present ? "✓" : "○"}
+                  {sig.present ? (sig.evidence === "mapped_level_tbd" ? "≈" : "✓") : "○"}
                 </span>
                 <span className="truncate">{sig.label}</span>
               </span>
@@ -189,7 +204,7 @@ export function UploadIntelligencePanel({
       <div className="rounded-xl border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] p-4">
         <p className="font-display text-sm font-semibold text-[color:var(--pic-text)]">After upload you will see</p>
         <ul className="mt-3 space-y-2 text-sm text-[color:var(--pic-text-muted)]">
-          <li>Signals at plant, ICR (if present), inverter, and SCB/string levels</li>
+          <li>Signals at plant, ICR (if present), inverter, SCB, and string — measurements can appear at multiple levels</li>
           <li>Inverter, SCB, and string counts</li>
           <li>Parse integrity checklist (rules always; AI when configured)</li>
           <li>Which analyses may not run until Setup is complete</li>
@@ -213,7 +228,10 @@ export function UploadIntelligencePanel({
           {architecture ? <ArchitectureCard arch={architecture} compact /> : null}
           <div className="rounded-xl border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] p-3.5 lg:col-span-2 lg:p-4">
             <p className="font-display text-sm font-semibold text-[color:var(--pic-text)]">Signals by hierarchy (job total)</p>
-            <p className="mt-1 text-xs text-[color:var(--pic-text-muted)]">Expand a file row above for per-file detail.</p>
+            <p className="mt-1 text-xs text-[color:var(--pic-text-muted)]">
+              Measurements (DC I/V/P, etc.) can appear at inverter, SCB, and string — not uniquely locked to one level.
+              Green = confirmed; blue ≈ mapped in job (level TBD). Expand a file row for per-file detail.
+            </p>
             <div className="mt-3">
               <SignalChips levels={hierarchy} />
             </div>
@@ -237,6 +255,9 @@ export function UploadIntelligencePanel({
       {architecture ? <ArchitectureCard arch={architecture} /> : null}
       <div className="rounded-xl border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] p-4">
         <p className="font-display text-sm font-semibold text-[color:var(--pic-text)]">Signals by hierarchy</p>
+        <p className="mt-1 text-xs text-[color:var(--pic-text-muted)]">
+          Multi-level measurements: same metric may be valid at inverter, SCB, and string.
+        </p>
         <div className="mt-3">
           <SignalChips levels={hierarchy} />
         </div>
