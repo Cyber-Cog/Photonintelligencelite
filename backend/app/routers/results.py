@@ -33,8 +33,6 @@ def _integrity_from_job(job) -> AiIntegrityCheck | None:
     raw = job.ai_integrity_json
     if not isinstance(raw, dict):
         return None
-    if raw.get("status") == "skipped" and not raw.get("findings"):
-        return AiIntegrityCheck(**raw)
     try:
         return AiIntegrityCheck(**raw)
     except Exception:  # noqa: BLE001
@@ -84,9 +82,11 @@ def get_ai_integrity(
     if not ai_check_configured(get_settings()):
         return AiIntegrityCheck(**skipped_result())
     return AiIntegrityCheck(
-        status="skipped",
+        status="pass",
         configured=True,
         source="none",
+        ai_layer="skipped",
+        rules_finding_count=0,
         summary="Integrity check has not been run yet.",
         findings=[],
     )

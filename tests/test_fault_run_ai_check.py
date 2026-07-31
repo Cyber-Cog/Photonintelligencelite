@@ -10,6 +10,7 @@ from backend.app.config import Settings
 from backend.app.services.fault_run_ai_check import (
     build_integrity_evidence,
     call_zenmux_integrity,
+    format_integrity_progress,
     run_deterministic_checks,
     run_fault_run_integrity_check,
 )
@@ -81,8 +82,12 @@ def test_skipped_when_no_api_key_and_clean(monkeypatch):
         ],
         kpis={"fault_count": 0},
     )
-    assert out["status"] == "skipped"
+    # Still visible to UI — rules pass + honest AI-not-configured (do not hide panel).
+    assert out["status"] == "pass"
     assert out["configured"] is False
+    assert out["ai_layer"] == "not_configured"
+    assert out["source"] == "rules"
+    assert "not configured" in out["summary"].lower()
 
 
 def test_rules_surface_without_api_key(monkeypatch):
@@ -102,6 +107,41 @@ def test_rules_surface_without_api_key(monkeypatch):
     assert out["status"] == "fail"
     assert out["source"] == "rules"
     assert out["configured"] is False
+    assert out["ai_layer"] == "not_configured"
+    assert out["rules_finding_count"] >= 1
+
+
+def test_format_integrity_progress_not_configured():
+    from backend.app.services.fault_run_ai_check import format_integrity_progress
+
+    line = format_integrity_progress(
+        {
+            "rules_finding_count": 0,
+            "ai_layer": "not_configured",
+            "findings": [],
+        }
+    )
+    assert line.startswith("AI integrity · rules: 0 finding(s)")
+    assert "ZenMux: skipped (AI not configured)" in line
+
+
+def test_format_integrity_progress_mg_key_failure():
+    from backend.app.services.fault_run_ai_check import format_integrity_progress
+
+    line = format_integrity_progress(
+        {
+            "rules_finding_count": 2,
+            "ai_layer": "failed",
+            "error": (
+                "AI provider returned HTTP 403. This looks like a management key (sk-mg-v1-…). "
+                "Chat completions usually need a chat key (sk-ai-v1-…)."
+            ),
+            "findings": [],
+        }
+    )
+    assert "rules: 2 finding(s)" in line
+    assert "ZenMux: failed" in line
+    assert "sk-ai-v1" in line
 
 
 def test_zenmux_call_parses_json(monkeypatch):
@@ -238,5 +278,71 @@ def test_full_check_merges_ai(monkeypatch):
     )
     assert out["configured"] is True
     assert out["source"] == "rules+ai"
+    assert out["ai_layer"] == "ok"
     assert out["status"] == "pass"
     assert out["error"] is None
+    assert "AI integrity ·" in format_integrity_progress(out)
+
+
+def test_full_check_ai_403_surfaces_failed_layer(monkeypatch):
+    settings = _settings(monkeypatch, ZENMUX_API_KEY="sk-mg-v1-fake")
+
+    class _Resp:
+        status_code = 403
+        text = '{"error":{"message":"access_denied"}}'
+
+        def json(self):
+            return {}
+
+    class _Client:
+        def __init__(self, *a, **k):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def post(self, *a, **k):
+            return _Resp()
+
+    monkeypatch.setattr(httpx, "Client", _Client)
+    out = run_fault_run_integrity_check(
+        settings,
+        results=[
+            {
+                "algorithm_id": "clipping",
+                "status": "ok",
+                "module_kind": "fault",
+                "tables": [],
+                "affected_equipment": [],
+                "severity": "info",
+            }
+        ],
+        kpis={"fault_count": 0},
+    )
+    assert out["ai_layer"] == "failed"
+    assert out["configured"] is True
+    assert out["status"] == "error"
+    assert out["error"]
+    line = format_integrity_progress(out)
+    assert "ZenMux: failed" in line
+    assert "sk-ai-v1" in line
+
+
+def test_console_progress_strings_match_frontend_filters():
+    """Analysis Console (useAnalysisLog) keys off these exact progress prefixes."""
+    import re
+
+    start = "AI integrity check starting…"
+    assert re.match(r"^AI integrity check starting", start, re.I)
+    done = format_integrity_progress(
+        {"rules_finding_count": 0, "ai_layer": "failed", "error": "HTTP 403 management key sk-mg"}
+    )
+    assert re.match(r"^AI integrity\b", done, re.I)
+    assert re.search(r"failed|rejected", done, re.I)
+    complete = f"Analysis complete · {done}"
+    assert re.match(r"^Analysis complete\s*·\s*AI integrity", complete, re.I)
+    # Exact legacy mute must not swallow the AI-bearing completion line.
+    assert complete != "Analysis complete."

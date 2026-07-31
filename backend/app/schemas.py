@@ -356,6 +356,8 @@ class AiIntegrityCheck(BaseModel):
     model: Optional[str] = None
     error: Optional[str] = None
     phase: Optional[str] = None  # upload | results
+    ai_layer: Optional[str] = None  # ok | failed | skipped | not_configured
+    rules_finding_count: Optional[int] = None
     mapping_hints: list[dict[str, Any]] = Field(default_factory=list)
 
 

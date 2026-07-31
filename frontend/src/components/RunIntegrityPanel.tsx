@@ -16,6 +16,30 @@ const PANEL_TONE: Record<string, string> = {
   skipped: "border-stone-200 bg-stone-50/80 dark:border-stone-700 dark:bg-stone-900",
 };
 
+/** Honest one-line AI layer status for Results / Upload (not a chatbot). */
+export function aiLayerStatusLabel(check: AiIntegrityCheck): string {
+  const layer = check.ai_layer;
+  const err = (check.error || "").toLowerCase();
+  if (layer === "ok") return "AI: ok";
+  if (layer === "not_configured" || (!check.configured && (layer == null || layer === "skipped"))) {
+    return "AI not configured";
+  }
+  if (layer === "failed" || check.status === "error" || check.error) {
+    if (err.includes("sk-mg") || err.includes("management") || err.includes("sk-ai")) {
+      return "AI key rejected — use sk-ai-v1";
+    }
+    if (err.includes("403") || err.includes("401")) {
+      return "AI key rejected";
+    }
+    return "AI check failed";
+  }
+  if (layer === "skipped") return "AI skipped (rules only)";
+  if (check.source === "rules+ai") return "AI: ok";
+  if (check.source === "rules" && !check.configured) return "AI not configured";
+  if (check.source === "rules") return "AI skipped (rules only)";
+  return "AI status unknown";
+}
+
 /** Compact non-chat integrity checklist for Results or Upload review. */
 export function RunIntegrityPanel({
   jobId,
@@ -35,11 +59,16 @@ export function RunIntegrityPanel({
   const [busy, setBusy] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
+  // Always show when a check object exists — including AI-not-configured / skipped.
   if (!check) return null;
-  if (check.status === "skipped" && !(check.findings?.length > 0)) return null;
 
   const tone = PANEL_TONE[check.status] ?? PANEL_TONE.skipped;
   const findings = (check.findings || []).filter((f) => f.severity !== "pass");
+  const aiLabel = aiLayerStatusLabel(check);
+  const rulesCount =
+    check.rules_finding_count != null
+      ? check.rules_finding_count
+      : findings.length;
 
   async function onRerun() {
     setBusy(true);
@@ -75,6 +104,8 @@ export function RunIntegrityPanel({
                 : check.source === "ai"
                   ? "AI"
                   : "System"}
+            {` · rules: ${rulesCount} finding(s)`}
+            {` · ${aiLabel}`}
             {check.model ? ` · ${check.model}` : ""}
             {check.checked_at
               ? ` · ${new Date(check.checked_at).toLocaleString(undefined, {
@@ -105,8 +136,21 @@ export function RunIntegrityPanel({
         </div>
       </div>
 
+      <p
+        className={`mt-2 text-[11px] font-medium ${
+          aiLabel.includes("rejected") || aiLabel.includes("failed")
+            ? "text-rose-800 dark:text-rose-200"
+            : aiLabel.includes("not configured") || aiLabel.includes("skipped")
+              ? "text-[color:var(--pic-text-muted)]"
+              : "text-accent-800 dark:text-accent-200"
+        }`}
+        data-testid="ai-layer-status"
+      >
+        {aiLabel}
+      </p>
+
       {check.error ? (
-        <p className="mt-2 text-xs text-rose-800 dark:text-rose-200" role="alert">
+        <p className="mt-1.5 text-xs text-rose-800 dark:text-rose-200" role="alert">
           {check.error}
         </p>
       ) : null}
@@ -139,7 +183,7 @@ export function RunIntegrityPanel({
             </li>
           ))}
         </ul>
-      ) : check.status === "pass" ? (
+      ) : check.status === "pass" || check.status === "skipped" ? (
         <p className="mt-2 text-[12px] text-[color:var(--pic-text-muted)]">
           {emptyPassMessage}
         </p>

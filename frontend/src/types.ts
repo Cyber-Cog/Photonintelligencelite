@@ -405,6 +405,9 @@ export interface AiIntegrityCheck {
   model?: string | null;
   error?: string | null;
   phase?: string | null;
+  /** ok | failed | skipped | not_configured */
+  ai_layer?: string | null;
+  rules_finding_count?: number | null;
   mapping_hints?: Array<{
     column_name: string;
     canonical_field: string;

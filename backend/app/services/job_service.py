@@ -301,29 +301,50 @@ def process_job(job_id: str, settings: Settings) -> None:
             job.completed_at = datetime.now(timezone.utc)
             job.report_expires_at = datetime.now(timezone.utc) + timedelta(minutes=settings.limits.report_ttl_minutes)
 
+            ai_line = "AI integrity · rules: 0 finding(s) · ZenMux: skipped"
             try:
-                from backend.app.services.fault_run_ai_check import run_fault_run_integrity_check
+                from backend.app.services.fault_run_ai_check import (
+                    format_integrity_progress,
+                    run_fault_run_integrity_check,
+                )
 
-                job.ai_integrity_json = run_fault_run_integrity_check(
+                # Surface on Analysis Console via the same progress_message poll channel.
+                job.progress_message = "AI integrity check starting…"
+                db.add(job)
+                db.commit()
+
+                check = run_fault_run_integrity_check(
                     settings,
                     results=results_payload["results"],
                     kpis=results_payload["kpis"],
                     results_summary=job.results_summary_json,
                 )
+                job.ai_integrity_json = check
+                ai_line = format_integrity_progress(check)
+                job.progress_message = ai_line
+                db.add(job)
+                db.commit()
             except Exception:  # noqa: BLE001 — never fail the job on integrity check
                 logger.exception("ai integrity check failed for job=%s", job_id)
                 job.ai_integrity_json = {
                     "status": "error",
                     "configured": bool((settings.zenmux_api_key or "").strip()),
                     "source": "none",
+                    "ai_layer": "failed",
+                    "rules_finding_count": 0,
                     "summary": "Integrity check crashed; analysis results are still valid.",
                     "findings": [],
                     "checked_at": datetime.now(timezone.utc).isoformat(),
                     "model": None,
                     "error": "Integrity check internal error",
+                    "phase": "results",
                 }
+                ai_line = "AI integrity · rules: 0 finding(s) · ZenMux: failed (internal error)"
+                job.progress_message = ai_line
+                db.add(job)
+                db.commit()
 
-            _set_state(db, job, JobState.COMPLETED, "Analysis complete.")
+            _set_state(db, job, JobState.COMPLETED, f"Analysis complete · {ai_line}")
             try:
                 from backend.app.auth.audit import record_audit
 

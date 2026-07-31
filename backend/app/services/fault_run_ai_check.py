@@ -374,15 +374,81 @@ def merge_findings(*groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def skipped_result(*, reason: str = "AI check not configured") -> dict[str, Any]:
+    """Visible skipped payload — UI must still show rules + AI status, not hide the panel."""
     return {
-        "status": "skipped",
+        "status": "pass",
         "configured": False,
-        "source": "none",
-        "summary": reason,
+        "source": "rules",
+        "ai_layer": "not_configured",
+        "rules_finding_count": 0,
+        "summary": f"Rules passed. {reason}.",
         "findings": [],
         "checked_at": datetime.now(timezone.utc).isoformat(),
         "model": None,
         "error": None,
+        "phase": "results",
+    }
+
+
+def _short_ai_failure_reason(error: str | None) -> str:
+    err = (error or "failed").strip()
+    low = err.lower()
+    if "sk-mg" in low or "management key" in low:
+        return "AI key rejected — use sk-ai-v1"
+    if "http 403" in low or "http 401" in low:
+        return "AI key rejected"
+    if "not configured" in low:
+        return "AI not configured"
+    # Keep short for console / progress_message (500 char column).
+    return err[:72].rstrip(" .") or "failed"
+
+
+def format_integrity_progress(check: dict[str, Any]) -> str:
+    """One-line LIVE console / progress_message for Analyze."""
+    rules_n = int(check.get("rules_finding_count") or 0)
+    if "rules_finding_count" not in check:
+        rules_n = sum(
+            1 for f in (check.get("findings") or []) if (f.get("severity") or "") != "pass"
+        )
+    ai_layer = str(check.get("ai_layer") or "unknown")
+    if ai_layer == "ok":
+        zen = "ZenMux: ok"
+    elif ai_layer == "not_configured":
+        zen = "ZenMux: skipped (AI not configured)"
+    elif ai_layer == "skipped":
+        zen = "ZenMux: skipped"
+    elif ai_layer == "failed":
+        zen = f"ZenMux: failed ({_short_ai_failure_reason(check.get('error'))})"
+    else:
+        zen = f"ZenMux: {ai_layer}"
+    return f"AI integrity · rules: {rules_n} finding(s) · {zen}"
+
+
+def _pack_result(
+    *,
+    status: str,
+    configured: bool,
+    source: str,
+    ai_layer: str,
+    rules_finding_count: int,
+    summary: str,
+    findings: list[dict[str, Any]],
+    checked_at: str,
+    model: str | None = None,
+    error: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "status": status,
+        "configured": configured,
+        "source": source,
+        "ai_layer": ai_layer,
+        "rules_finding_count": rules_finding_count,
+        "summary": summary,
+        "findings": findings,
+        "checked_at": checked_at,
+        "model": model,
+        "error": error,
+        "phase": "results",
     }
 
 
@@ -401,57 +467,57 @@ def run_fault_run_integrity_check(
         results_summary=results_summary,
     )
     rule_findings = run_deterministic_checks(evidence)
+    rules_n = len(rule_findings)
     checked_at = datetime.now(timezone.utc).isoformat()
 
     configured = ai_check_configured(settings)
     if not use_ai or not configured:
-        if rule_findings:
-            overall = _overall_from_findings(rule_findings)
-            return {
-                "status": overall,
-                "configured": configured,
-                "source": "rules",
-                "summary": {
-                    "pass": "Run integrity rules passed.",
-                    "warn": "Run integrity rules found warnings.",
-                    "fail": "Run integrity rules found failures.",
-                }[overall],
-                "findings": rule_findings,
-                "checked_at": checked_at,
-                "model": None,
-                "error": None,
-            }
+        overall = _overall_from_findings(rule_findings) if rule_findings else "pass"
         if not configured:
-            return skipped_result(reason="AI check not configured")
-        return {
-            "status": "pass",
-            "configured": True,
-            "source": "rules",
-            "summary": "Run integrity OK (rules only).",
-            "findings": [],
-            "checked_at": checked_at,
-            "model": None,
-            "error": None,
-        }
+            ai_layer = "not_configured"
+            summary = {
+                "pass": "Rules passed. AI not configured.",
+                "warn": "Rules found warnings. AI not configured.",
+                "fail": "Rules found failures. AI not configured.",
+            }[overall]
+        else:
+            ai_layer = "skipped"
+            summary = {
+                "pass": "Run integrity OK (rules only).",
+                "warn": "Run integrity rules found warnings.",
+                "fail": "Run integrity rules found failures.",
+            }[overall]
+        return _pack_result(
+            status=overall,
+            configured=configured,
+            source="rules",
+            ai_layer=ai_layer,
+            rules_finding_count=rules_n,
+            summary=summary,
+            findings=rule_findings,
+            checked_at=checked_at,
+        )
 
     ai_findings, ai_overall, model, error = call_zenmux_integrity(settings, evidence, rule_findings)
     if error:
         # Keep rule findings even when AI fails.
         overall = _overall_from_findings(rule_findings) if rule_findings else "error"
-        return {
-            "status": overall if rule_findings else "error",
-            "configured": True,
-            "source": "rules" if rule_findings else "none",
-            "summary": (
+        return _pack_result(
+            status=overall if rule_findings else "error",
+            configured=True,
+            source="rules" if rule_findings else "none",
+            ai_layer="failed",
+            rules_finding_count=rules_n,
+            summary=(
                 "AI check failed; showing rule-based findings."
                 if rule_findings
-                else "AI check failed."
+                else f"AI check failed — {_short_ai_failure_reason(error)}."
             ),
-            "findings": rule_findings,
-            "checked_at": checked_at,
-            "model": model,
-            "error": error,
-        }
+            findings=rule_findings,
+            checked_at=checked_at,
+            model=model,
+            error=error,
+        )
 
     merged = merge_findings(rule_findings, [f for f in ai_findings if f.get("severity") != "pass"])
     overall = _overall_from_findings(merged)
@@ -459,17 +525,18 @@ def run_fault_run_integrity_check(
     if ai_overall == "fail" or (ai_overall == "warn" and overall == "pass"):
         overall = ai_overall
 
-    return {
-        "status": overall,
-        "configured": True,
-        "source": "rules+ai",
-        "summary": {
-            "pass": "Run integrity check passed.",
+    return _pack_result(
+        status=overall,
+        configured=True,
+        source="rules+ai",
+        ai_layer="ok",
+        rules_finding_count=rules_n,
+        summary={
+            "pass": "Run integrity check passed (rules + AI).",
             "warn": "Run integrity check found warnings.",
             "fail": "Run integrity check found failures.",
         }[overall],
-        "findings": merged,
-        "checked_at": checked_at,
-        "model": model,
-        "error": None,
-    }
+        findings=merged,
+        checked_at=checked_at,
+        model=model,
+    )

@@ -326,15 +326,31 @@ def run_upload_integrity_check(
 
     if not use_ai or not configured:
         overall = _overall_from_findings(rule_findings) if rule_findings else "pass"
+        ai_layer = "not_configured" if not configured else "skipped"
+        summary = {
+            "pass": (
+                "Upload parse check OK (rules). AI not configured."
+                if not configured
+                else "Upload parse check OK (rules)."
+            ),
+            "warn": (
+                "Upload parse check found warnings. AI not configured."
+                if not configured
+                else "Upload parse check found warnings."
+            ),
+            "fail": (
+                "Upload parse check found failures. AI not configured."
+                if not configured
+                else "Upload parse check found failures."
+            ),
+        }[overall]
         return {
             **base,
             "status": overall,
             "source": "rules",
-            "summary": {
-                "pass": "Upload parse check OK (rules).",
-                "warn": "Upload parse check found warnings.",
-                "fail": "Upload parse check found failures.",
-            }[overall],
+            "ai_layer": ai_layer,
+            "rules_finding_count": len(rule_findings),
+            "summary": summary,
             "findings": rule_findings,
         }
 
@@ -347,6 +363,8 @@ def run_upload_integrity_check(
             **base,
             "status": overall if rule_findings else "error",
             "source": "rules" if rule_findings else "none",
+            "ai_layer": "failed",
+            "rules_finding_count": len(rule_findings),
             "summary": (
                 "AI upload check failed; showing rule findings."
                 if rule_findings
@@ -365,8 +383,10 @@ def run_upload_integrity_check(
         **base,
         "status": overall,
         "source": "rules+ai",
+        "ai_layer": "ok",
+        "rules_finding_count": len(rule_findings),
         "summary": {
-            "pass": "Upload parse check passed.",
+            "pass": "Upload parse check passed (rules + AI).",
             "warn": "Upload parse check found warnings.",
             "fail": "Upload parse check found failures.",
         }[overall],

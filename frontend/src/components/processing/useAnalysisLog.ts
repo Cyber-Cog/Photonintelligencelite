@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ALGORITHM_DOCS } from "@/content/algorithms";
+import { classifyIntegrityProgressMessage } from "./analysisLogProgress";
 
 export type LogLevel = "info" | "ok" | "run" | "wait" | "warn";
 
@@ -244,6 +245,15 @@ export function useAnalysisLog(
     }
     if (state === "completed") {
       push("ok", "Analysis complete — opening results…");
+      // If the final progress_message carried AI integrity (poll may have raced),
+      // ensure it is visible even when the intermediate commit was missed.
+      const pm = progressRef.current;
+      if (pm && /AI integrity/i.test(pm) && pm !== lastProgress.current) {
+        lastProgress.current = pm;
+        const aiClass = classifyIntegrityProgressMessage(pm);
+        if (aiClass.show) push(aiClass.level, pm);
+        else push("info", pm);
+      }
       return;
     }
     if (state === "failed") {
@@ -292,6 +302,13 @@ export function useAnalysisLog(
     if (progressMessage === lastProgress.current) return;
     if (progressMessage.startsWith("Another job is currently running")) return;
     lastProgress.current = progressMessage;
+
+    // AI integrity lines — always show on the LIVE console (not a chatbot).
+    const aiClass = classifyIntegrityProgressMessage(progressMessage);
+    if (aiClass.show) {
+      push(aiClass.level, progressMessage);
+      return;
+    }
 
     const mutedDupes = [
       "Running analysis algorithms…",
