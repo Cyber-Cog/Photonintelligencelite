@@ -259,7 +259,7 @@ export function UploadPage() {
   );
 
   return (
-    <div className={`tool-enter flow-shell ${review ? "pb-24" : "flow-stack"}`}>
+    <div className={`tool-enter flow-shell w-full ${review ? "pb-28" : "flow-stack"}`}>
       <StepIndicator current={1} jobId={replaceJobId ?? review?.job_id} />
 
       <PageHeader
@@ -346,7 +346,7 @@ export function UploadPage() {
       )}
 
       {showWorkspace && (
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px] lg:items-start">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(300px,380px)] xl:items-start">
           <div className="space-y-4">
             {path === "template" && !review ? (
               <div className="rounded-xl border border-brand-200/70 bg-brand-50/50 px-4 py-3 dark:border-brand-700/45 dark:bg-brand-950/20">

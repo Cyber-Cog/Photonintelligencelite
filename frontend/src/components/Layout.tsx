@@ -113,7 +113,10 @@ export function Layout({ children }: { children: ReactNode }) {
   const isLanding = location.pathname === "/";
   const isProcessing = /\/jobs\/[^/]+\/processing\/?$/.test(location.pathname);
   const isJobView = /\/jobs\/[^/]+\/(dashboard|data|architecture|explore)\/?$/.test(location.pathname);
-  const shellMax = isProcessing || isJobView ? "max-w-[90rem]" : "max-w-6xl";
+  const isWorkflow =
+    location.pathname === "/upload" ||
+    /^\/jobs\/[^/]+\/(setup|validate)\/?$/.test(location.pathname);
+  const shellMax = isProcessing || isJobView || isWorkflow ? "max-w-none" : "max-w-6xl";
 
   useEffect(() => {
     rememberAppPath(`${location.pathname}${location.search}${location.hash}`);
@@ -149,7 +152,7 @@ export function Layout({ children }: { children: ReactNode }) {
         </div>
       ) : null}
       <header className={`shrink-0 app-header ${isLanding ? "app-header-landing" : ""}`}>
-        <div className={`mx-auto flex h-14 ${shellMax} items-center gap-3 px-4 sm:gap-4 sm:px-6`}>
+        <div className={`flex h-14 w-full ${shellMax} items-center gap-3 px-4 sm:gap-4 sm:px-6 lg:px-8`}>
           <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-5">
             <BrandWordmark variant="header" linkHome />
             <nav className="hidden items-center gap-0.5 sm:flex" aria-label="Primary">
@@ -193,14 +196,14 @@ export function Layout({ children }: { children: ReactNode }) {
           isLanding
             ? "relative flex w-full flex-1 flex-col"
             : fillViewport
-              ? `relative mx-auto flex w-full ${shellMax} min-h-0 flex-1 flex-col overflow-hidden px-3 py-2 sm:px-4`
-              : `relative mx-auto flex w-full ${shellMax} flex-1 flex-col px-4 py-5 sm:px-6`
+              ? `relative flex w-full ${shellMax} min-h-0 flex-1 flex-col overflow-hidden px-3 py-2 sm:px-4 lg:px-6`
+              : `relative flex w-full ${shellMax} flex-1 flex-col px-4 py-5 sm:px-6 lg:px-8`
         }
       >
         {children}
       </main>
       <footer className={`shrink-0 app-footer ${isLanding ? "app-footer-landing" : ""} ${fillViewport ? "app-footer-compact" : ""}`}>
-        <div className={`mx-auto flex ${shellMax} flex-wrap items-center justify-center gap-x-1.5 gap-y-1 px-4 sm:px-6`}>
+        <div className={`flex w-full ${shellMax} flex-wrap items-center justify-center gap-x-1.5 gap-y-1 px-4 sm:px-6 lg:px-8`}>
           <BrandWordmark variant="footer" />
           <span className="leading-none text-stone-300 dark:text-stone-600" aria-hidden>
             ·

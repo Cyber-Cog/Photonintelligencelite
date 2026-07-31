@@ -39,7 +39,14 @@ export function UploadFilesTable({ files, totalRows, fileCountLabel }: Props) {
         </p>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[640px] text-left text-sm">
+        <table className="w-full table-fixed text-left text-sm">
+          <colgroup>
+            <col className="w-[28%]" />
+            <col className="w-[12%]" />
+            <col className="w-[10%]" />
+            <col className="w-[32%]" />
+            <col className="w-[18%]" />
+          </colgroup>
           <thead>
             <tr className="border-b border-[color:var(--pic-border-subtle)] text-[10px] font-semibold uppercase tracking-wider text-[color:var(--pic-text-muted)]">
               <th className="px-4 py-2.5 font-display">File</th>

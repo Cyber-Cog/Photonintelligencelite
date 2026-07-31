@@ -1131,9 +1131,8 @@ export function SetupPage() {
 
       {/* Sticky primary action + validation summary — same max width as workspace */}
       <div className="pointer-events-none fixed bottom-0 left-0 right-0 z-30">
-        <div className="pointer-events-auto border-t border-stone-200/90 bg-white/95 shadow-[0_-4px_16px_rgba(28,25,23,0.06)] backdrop-blur-md dark:border-stone-800 dark:bg-stone-950 dark:shadow-[0_-4px_16px_rgba(0,0,0,0.35)]">
-          <div className="mx-auto w-full max-w-6xl px-4 sm:px-6">
-            <div className="mx-auto flex w-full max-w-3xl flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="workflow-action-bar-inner pointer-events-auto">
+          <div className="workflow-action-bar-row gap-2 py-3">
               <div className="min-w-0 flex-1">
                 {errorChipKeys.length > 0 ? (
                   <div>
@@ -1187,7 +1186,6 @@ export function SetupPage() {
             </div>
           </div>
         </div>
-      </div>
     </div>
   );
 }

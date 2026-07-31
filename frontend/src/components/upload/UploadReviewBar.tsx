@@ -29,25 +29,27 @@ export function UploadReviewBar({ review, onClear, onContinue, continuing }: Pro
         : "Ready for Setup";
 
   return (
-    <div className="sticky bottom-0 z-20 -mx-4 border-t border-[color:var(--pic-border)] bg-[color:var(--pic-surface-chrome)] px-4 py-3 backdrop-blur-md sm:-mx-6 sm:px-6">
-      <div className="mx-auto flex max-w-6xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0 text-sm">
-          <p className="truncate text-[color:var(--pic-text-secondary)]">{summaryParts.join(" · ")}</p>
-          <p
-            className={`text-xs ${
-              missing.length > 0 ? "text-amber-700 dark:text-amber-400" : "text-[color:var(--pic-text-muted)]"
-            }`}
-          >
-            {status}
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <button type="button" className="btn-ghost text-sm" onClick={onClear} disabled={continuing}>
-            Clear all
-          </button>
-          <button type="button" className="btn-primary text-sm" onClick={onContinue} disabled={continuing}>
-            {continuing ? "Opening Setup…" : "Continue to Setup →"}
-          </button>
+    <div className="workflow-action-bar">
+      <div className="workflow-action-bar-inner">
+        <div className="workflow-action-bar-row">
+          <div className="min-w-0 text-sm">
+            <p className="text-[color:var(--pic-text-secondary)]">{summaryParts.join(" · ")}</p>
+            <p
+              className={`text-xs ${
+                missing.length > 0 ? "text-amber-700 dark:text-amber-400" : "text-[color:var(--pic-text-muted)]"
+              }`}
+            >
+              {status}
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <button type="button" className="btn-ghost text-sm" onClick={onClear} disabled={continuing}>
+              Clear all
+            </button>
+            <button type="button" className="btn-primary text-sm" onClick={onContinue} disabled={continuing}>
+              {continuing ? "Opening Setup…" : "Continue to Setup →"}
+            </button>
+          </div>
         </div>
       </div>
     </div>
