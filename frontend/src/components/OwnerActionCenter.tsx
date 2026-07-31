@@ -279,7 +279,7 @@ export function OwnerActionCenter({
 
   return (
     <section
-      className="flex min-h-[min(58vh,36rem)] flex-1 flex-col overflow-hidden rounded-pic-lg border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] shadow-pic"
+      className="flex min-h-[min(48vh,28rem)] flex-1 flex-col overflow-hidden rounded-pic-lg border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] shadow-pic"
       role="region"
       aria-label="Owner action center"
       data-tour="owner-actions"

@@ -79,6 +79,7 @@ export function LossWaterfallBridge({
   jobId,
   compact = false,
   fillHeight = false,
+  embedded = false,
 }: {
   kpis: KpiResponse;
   results: ResultObject[];
@@ -87,6 +88,8 @@ export function LossWaterfallBridge({
   compact?: boolean;
   /** Bridge tab: chart owns the stage — tall + full width. */
   fillHeight?: boolean;
+  /** Skip outer SectionPanel when already wrapped (Summary preview). */
+  embedded?: boolean;
 }) {
   const { theme } = useTheme();
   const [unit, setUnit] = useState<WaterfallUnit>("mwh");
@@ -128,21 +131,25 @@ export function LossWaterfallBridge({
   const plotBg = dark ? "rgba(28,25,23,0.45)" : "rgba(250,250,249,0.9)";
 
   if (!model) {
+    const emptyBody = (
+      <div className="space-y-3">
+        <MissingReasonBanner reasons={emptyGaps} jobId={jobId} />
+        {emptyGaps.length === 0 && (
+          <p className="border border-dashed border-stone-200 px-3 py-8 text-center text-sm text-stone-500 dark:border-stone-700">
+            No bridge available. Run analysis with AC energy and irradiance, or wait for fault modules that report
+            energy loss.
+          </p>
+        )}
+      </div>
+    );
+    if (embedded) return emptyBody;
     return (
       <SectionPanel
         title="Energy loss bridge"
         description="Expected to diagnostics to unknown to actual"
         scrollMargin={false}
       >
-        <div className="space-y-3">
-          <MissingReasonBanner reasons={emptyGaps} jobId={jobId} />
-          {emptyGaps.length === 0 && (
-            <p className="border border-dashed border-stone-200 px-3 py-8 text-center text-sm text-stone-500 dark:border-stone-700">
-              No bridge available. Run analysis with AC energy and irradiance, or wait for fault modules that report
-              energy loss.
-            </p>
-          )}
-        </div>
+        {emptyBody}
       </SectionPanel>
     );
   }
@@ -190,26 +197,8 @@ export function LossWaterfallBridge({
     },
   ];
 
-  return (
-    <SectionPanel
-      title={model.mode === "bridge" ? "Energy loss bridge" : "Diagnosed energy losses"}
-      description={
-        model.mode === "bridge"
-          ? "Expected → fault diagnostics → unknown → actual"
-          : "Category bars only. Expected and actual blocked until KPIs are complete."
-      }
-      actions={
-        <div className="flex flex-wrap items-center gap-2">
-          <ChartDownloadButton hostRef={chartHostRef} filename="energy_loss_bridge" />
-          {model.mode === "bridge" && (
-            <UnitToggle unit={unit} setUnit={setUnit} expectedOk={model.expectedMwh > 0} />
-          )}
-        </div>
-      }
-      scrollMargin={false}
-      className={fillHeight ? "flex h-full min-h-0 flex-1 flex-col" : ""}
-      bodyClassName={fillHeight ? "flex min-h-0 flex-1 flex-col space-y-0 p-0" : "space-y-3 p-0"}
-    >
+  const body = (
+    <>
       {model.mode === "bridge" && (
         <div className="grid shrink-0 grid-cols-2 gap-px border-b border-stone-200 bg-stone-200 dark:border-stone-800 dark:bg-stone-800 sm:grid-cols-4">
           {[
@@ -226,7 +215,7 @@ export function LossWaterfallBridge({
         </div>
       )}
 
-      <div className={`flex min-h-0 flex-col space-y-2 ${compact ? "p-3" : "p-2.5"} ${fillHeight ? "flex-1" : ""}`}>
+      <div className={`flex min-h-0 flex-col space-y-2 ${compact ? "p-2" : "p-2.5"} ${fillHeight ? "flex-1" : ""}`}>
         {model.gaps.length > 0 && <MissingReasonBanner reasons={model.gaps} jobId={jobId} />}
 
         {model.note && (
@@ -235,25 +224,35 @@ export function LossWaterfallBridge({
           </p>
         )}
 
-        <div
-          className="flex shrink-0 flex-wrap gap-x-4 gap-y-1 rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-1.5 dark:border-stone-700 dark:bg-stone-800/40"
-          role="list"
-          aria-label="Colours"
-        >
-          {WATERFALL_LEGEND.map((leg) => (
-            <span
-              key={leg.key}
-              className="inline-flex items-center gap-1.5 text-[11px] font-medium text-stone-600 dark:text-stone-300"
-              role="listitem"
-            >
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
+          <div
+            className="flex flex-wrap gap-x-4 gap-y-1 rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-1.5 dark:border-stone-700 dark:bg-stone-800/40"
+            role="list"
+            aria-label="Colours"
+          >
+            {WATERFALL_LEGEND.map((leg) => (
               <span
-                className="inline-block h-2.5 w-2.5 rounded-sm border border-stone-300/80"
-                style={{ background: leg.fill }}
-                aria-hidden
-              />
-              {leg.name}
-            </span>
-          ))}
+                key={leg.key}
+                className="inline-flex items-center gap-1.5 text-[11px] font-medium text-stone-600 dark:text-stone-300"
+                role="listitem"
+              >
+                <span
+                  className="inline-block h-2.5 w-2.5 rounded-sm border border-stone-300/80"
+                  style={{ background: leg.fill }}
+                  aria-hidden
+                />
+                {leg.name}
+              </span>
+            ))}
+          </div>
+          {embedded ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <ChartDownloadButton hostRef={chartHostRef} filename="energy_loss_bridge" />
+              {model.mode === "bridge" && (
+                <UnitToggle unit={unit} setUnit={setUnit} expectedOk={model.expectedMwh > 0} />
+              )}
+            </div>
+          ) : null}
         </div>
 
         <div
@@ -274,7 +273,6 @@ export function LossWaterfallBridge({
                 paper_bgcolor: "transparent",
                 plot_bgcolor: plotBg,
                 font: { color: fontColor, size: 11, family: "DM Sans, Segoe UI, system-ui, sans-serif" },
-                // No layout annotations — values only in hover (no sticky labels on bars).
                 annotations: [],
                 hoverlabel: plotlyHoverLabel(dark),
                 xaxis: {
@@ -299,7 +297,6 @@ export function LossWaterfallBridge({
                 },
                 bargap: 0.28,
                 showlegend: false,
-                // closest clears on mouseleave — no sticky compare/unified box.
                 hovermode: "closest",
               }}
               config={plotlyUiConfig("energy_loss_bridge")}
@@ -309,7 +306,6 @@ export function LossWaterfallBridge({
           </div>
         </div>
 
-        {/* Full segment table on Bridge tab — Summary stays chart-forward */}
         {!compact && (
           <div className={`overflow-x-auto rounded-xl border border-stone-200/90 dark:border-stone-700 ${fillHeight ? "shrink-0" : ""}`}>
             <table className="w-full min-w-[28rem] text-left text-sm">
@@ -361,6 +357,34 @@ export function LossWaterfallBridge({
           </div>
         )}
       </div>
+    </>
+  );
+
+  if (embedded) {
+    return <div className="flex min-h-0 flex-col">{body}</div>;
+  }
+
+  return (
+    <SectionPanel
+      title={model.mode === "bridge" ? "Energy loss bridge" : "Diagnosed energy losses"}
+      description={
+        model.mode === "bridge"
+          ? "Expected → fault diagnostics → unknown → actual"
+          : "Category bars only. Expected and actual blocked until KPIs are complete."
+      }
+      actions={
+        <div className="flex flex-wrap items-center gap-2">
+          <ChartDownloadButton hostRef={chartHostRef} filename="energy_loss_bridge" />
+          {model.mode === "bridge" && (
+            <UnitToggle unit={unit} setUnit={setUnit} expectedOk={model.expectedMwh > 0} />
+          )}
+        </div>
+      }
+      scrollMargin={false}
+      className={fillHeight ? "flex h-full min-h-0 flex-1 flex-col" : ""}
+      bodyClassName={fillHeight ? "flex min-h-0 flex-1 flex-col space-y-0 p-0" : "space-y-3 p-0"}
+    >
+      {body}
     </SectionPanel>
   );
 }

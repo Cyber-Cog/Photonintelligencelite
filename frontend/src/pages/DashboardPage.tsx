@@ -622,7 +622,32 @@ export function DashboardPage() {
       }
     >
       {activeSection === "summary" && (
-        <div id="results-actions" data-results-pane="summary" className="job-pane flex flex-col gap-5 pb-6">
+        <div id="results-actions" data-results-pane="summary" className="job-pane flex flex-col gap-4 pb-6">
+          {/* Visual plant loss story — first composition after KPI board */}
+          <div
+            className="overflow-hidden rounded-pic-lg border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] shadow-pic"
+            data-tour="summary-loss-preview"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[color:var(--pic-border-subtle)] px-3.5 py-2.5">
+              <div>
+                <p className="tool-eyebrow mb-0.5">Energy story</p>
+                <h3 className="font-display text-sm font-semibold tracking-tight text-[color:var(--pic-text)]">
+                  Expected → losses → actual
+                </h3>
+              </div>
+              <button
+                type="button"
+                className="btn-ghost !px-2.5 !py-1 text-xs font-semibold text-brand-800 dark:text-brand-300"
+                onClick={() => selectSection("bridge")}
+              >
+                Open full loss bridge →
+              </button>
+            </div>
+            <div className="p-2 sm:p-3">
+              <LossWaterfallBridge kpis={data.kpis} results={data.results} jobId={jobId} compact embedded />
+            </div>
+          </div>
+
           {ownerActions ? (
             <OwnerActionCenter
               model={ownerActions}
