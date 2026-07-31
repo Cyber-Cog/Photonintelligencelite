@@ -462,7 +462,7 @@
 
   /* Fixed bottom action bar — spans viewport, aligns with Layout padding */
   .workflow-action-bar {
-    @apply pointer-events-none fixed bottom-0 left-0 right-0 z-30;
+    @apply pointer-events-none fixed bottom-0 left-0 right-0 z-30 pb-[env(safe-area-inset-bottom)];
   }
   .workflow-action-bar-inner {
     @apply pointer-events-auto border-t border-[color:var(--pic-border)] bg-[color:var(--pic-surface-chrome)] px-4 py-3 shadow-[0_-4px_16px_rgba(28,25,23,0.06)] backdrop-blur-md dark:shadow-[0_-4px_16px_rgba(0,0,0,0.35)] sm:px-6 lg:px-8;

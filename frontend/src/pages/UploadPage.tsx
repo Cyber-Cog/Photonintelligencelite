@@ -259,7 +259,7 @@ export function UploadPage() {
   );
 
   return (
-    <div className={`tool-enter flow-shell w-full ${review ? "pb-28" : "flow-stack"}`}>
+    <div className={`tool-enter flow-shell w-full ${review ? "pb-[calc(5.5rem+env(safe-area-inset-bottom))]" : "flow-stack"}`}>
       <StepIndicator current={1} jobId={replaceJobId ?? review?.job_id} />
 
       <PageHeader
@@ -346,86 +346,91 @@ export function UploadPage() {
       )}
 
       {showWorkspace && (
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(300px,380px)] xl:items-start">
-          <div className="space-y-4">
-            {path === "template" && !review ? (
-              <div className="rounded-xl border border-brand-200/70 bg-brand-50/50 px-4 py-3 dark:border-brand-700/45 dark:bg-brand-950/20">
-                <p className="text-sm text-[color:var(--pic-text-secondary)]">
-                  Prefer the Complete Analysis Pack for full fault coverage. Download, fill, then upload below.
-                </p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <button type="button" className="btn-primary text-xs" disabled={downloading !== null} onClick={() => void download("excel")}>
-                    {downloading === "excel" ? <Spinner className="h-3.5 w-3.5" /> : null}
-                    Excel template
-                  </button>
-                  <button type="button" className="btn-secondary text-xs" disabled={downloading !== null} onClick={() => void download("zip")}>
-                    {downloading === "zip" ? <Spinner className="h-3.5 w-3.5" /> : null}
-                    CSV package
-                  </button>
-                </div>
-                {dlError ? <p className="mt-2 text-sm text-rose-600">{dlError}</p> : null}
-              </div>
-            ) : null}
+        <>
+          {!review ? (
+            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(280px,340px)] xl:items-start">
+              <div className="space-y-4">
+                {path === "template" ? (
+                  <div className="rounded-xl border border-brand-200/70 bg-brand-50/50 px-4 py-3 dark:border-brand-700/45 dark:bg-brand-950/20">
+                    <p className="text-sm text-[color:var(--pic-text-secondary)]">
+                      Prefer the Complete Analysis Pack for full fault coverage. Download, fill, then upload below.
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <button type="button" className="btn-primary text-xs" disabled={downloading !== null} onClick={() => void download("excel")}>
+                        {downloading === "excel" ? <Spinner className="h-3.5 w-3.5" /> : null}
+                        Excel template
+                      </button>
+                      <button type="button" className="btn-secondary text-xs" disabled={downloading !== null} onClick={() => void download("zip")}>
+                        {downloading === "zip" ? <Spinner className="h-3.5 w-3.5" /> : null}
+                        CSV package
+                      </button>
+                    </div>
+                    {dlError ? <p className="mt-2 text-sm text-rose-600">{dlError}</p> : null}
+                  </div>
+                ) : null}
 
-            {dropzone}
+                {dropzone}
 
-            {!review && selectedFiles.length > 0 && (
-              <ul className="divide-y divide-[color:var(--pic-border-subtle)] overflow-hidden rounded-lg border border-[color:var(--pic-border)]">
-                {selectedFiles.map((f, i) => (
-                  <li key={`${f.name}-${i}`} className="flex items-center justify-between gap-3 bg-[color:var(--pic-surface-raised)] px-3 py-2.5 text-sm">
-                    <span className="truncate font-medium">{f.name}</span>
-                    <button
-                      type="button"
-                      className="text-xs font-semibold text-rose-600 hover:underline"
-                      onClick={() => setSelectedFiles((prev) => prev.filter((_, j) => j !== i))}
-                    >
-                      Remove
+                {selectedFiles.length > 0 && (
+                  <ul className="divide-y divide-[color:var(--pic-border-subtle)] overflow-hidden rounded-lg border border-[color:var(--pic-border)]">
+                    {selectedFiles.map((f, i) => (
+                      <li key={`${f.name}-${i}`} className="flex items-center justify-between gap-3 bg-[color:var(--pic-surface-raised)] px-3 py-2.5 text-sm">
+                        <span className="truncate font-medium">{f.name}</span>
+                        <button
+                          type="button"
+                          className="text-xs font-semibold text-rose-600 hover:underline"
+                          onClick={() => setSelectedFiles((prev) => prev.filter((_, j) => j !== i))}
+                        >
+                          Remove
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                {selectedFiles.length > 0 && (
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-xs text-[color:var(--pic-text-muted)]">
+                      {selectedFiles.length} file(s) · {totalMb.toFixed(2)} MB
+                    </p>
+                    <button type="button" className="btn-primary text-sm" onClick={() => void runUpload()} disabled={uploading}>
+                      {uploading ? <Spinner className="h-4 w-4" /> : null}
+                      Upload &amp; review
                     </button>
-                  </li>
-                ))}
-              </ul>
-            )}
+                  </div>
+                )}
 
-            {!review && selectedFiles.length > 0 && (
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="text-xs text-[color:var(--pic-text-muted)]">
-                  {selectedFiles.length} file(s) · {totalMb.toFixed(2)} MB
-                </p>
-                <button type="button" className="btn-primary text-sm" onClick={() => void runUpload()} disabled={uploading}>
-                  {uploading ? <Spinner className="h-4 w-4" /> : null}
-                  Upload &amp; review
-                </button>
+                {uploading && (
+                  <div className="space-y-1">
+                    <ProgressBar pct={progress} />
+                    <p className="text-xs text-[color:var(--pic-text-muted)]">
+                      {phaseHint ?? `Uploading… ${progress}%`}
+                      {elapsedSec > 0 ? <span className="ml-1.5 tabular-nums">· {elapsedSec}s</span> : null}
+                    </p>
+                    {activityPhase ? <ParseActivityConsole lines={activityLines} phase={activityPhase} live /> : null}
+                  </div>
+                )}
+
+                {error ? <p className="text-sm text-rose-600 dark:text-rose-400">{error}</p> : null}
               </div>
-            )}
 
-            {uploading && (
-              <div className="space-y-1">
-                <ProgressBar pct={progress} />
-                <p className="text-xs text-[color:var(--pic-text-muted)]">
-                  {phaseHint ?? `Uploading… ${progress}%`}
-                  {elapsedSec > 0 ? <span className="ml-1.5 tabular-nums">· {elapsedSec}s</span> : null}
-                </p>
-                {activityPhase ? <ParseActivityConsole lines={activityLines} phase={activityPhase} live /> : null}
-              </div>
-            )}
-
-            {error ? <p className="text-sm text-rose-600 dark:text-rose-400">{error}</p> : null}
-
-            {review && review.file_inventory && review.file_inventory.length > 0 ? (
-              <UploadFilesTable
-                files={review.file_inventory}
-                totalRows={review.total_rows ?? 0}
+              <UploadIntelligencePanel hierarchy={[]} showPlaceholder />
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {error ? <p className="text-sm text-rose-600 dark:text-rose-400">{error}</p> : null}
+              {review.file_inventory && review.file_inventory.length > 0 ? (
+                <UploadFilesTable files={review.file_inventory} totalRows={review.total_rows ?? 0} />
+              ) : null}
+              <UploadIntelligencePanel
+                hierarchy={review.hierarchy_overview ?? []}
+                architecture={review.architecture_summary}
+                moduleImpact={review.module_impact_preview}
+                layout="review"
               />
-            ) : null}
-          </div>
-
-          <UploadIntelligencePanel
-            hierarchy={review?.hierarchy_overview ?? []}
-            architecture={review?.architecture_summary}
-            moduleImpact={review?.module_impact_preview}
-            showPlaceholder={!review}
-          />
-        </div>
+            </div>
+          )}
+        </>
       )}
 
       {review ? (
