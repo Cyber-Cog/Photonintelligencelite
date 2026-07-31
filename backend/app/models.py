@@ -112,6 +112,9 @@ class Job(Base):
     """Small summary only (titles/severities/loss totals) — full result objects live on disk
     under the job directory until cleanup, never duplicated permanently into Postgres."""
 
+    ai_integrity_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    """Cached fault-run integrity check (rules + optional ZenMux). Shown on Results; not chat."""
+
     total_execution_time_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
     downloaded_pdf: Mapped[bool] = mapped_column(Boolean, default=False)
     downloaded_excel: Mapped[bool] = mapped_column(Boolean, default=False)

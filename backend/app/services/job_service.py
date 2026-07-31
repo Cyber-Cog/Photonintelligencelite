@@ -300,6 +300,29 @@ def process_job(job_id: str, settings: Settings) -> None:
             job.total_execution_time_ms = run.total_execution_time_ms
             job.completed_at = datetime.now(timezone.utc)
             job.report_expires_at = datetime.now(timezone.utc) + timedelta(minutes=settings.limits.report_ttl_minutes)
+
+            try:
+                from backend.app.services.fault_run_ai_check import run_fault_run_integrity_check
+
+                job.ai_integrity_json = run_fault_run_integrity_check(
+                    settings,
+                    results=results_payload["results"],
+                    kpis=results_payload["kpis"],
+                    results_summary=job.results_summary_json,
+                )
+            except Exception:  # noqa: BLE001 — never fail the job on integrity check
+                logger.exception("ai integrity check failed for job=%s", job_id)
+                job.ai_integrity_json = {
+                    "status": "error",
+                    "configured": bool((settings.zenmux_api_key or "").strip()),
+                    "source": "none",
+                    "summary": "Integrity check crashed; analysis results are still valid.",
+                    "findings": [],
+                    "checked_at": datetime.now(timezone.utc).isoformat(),
+                    "model": None,
+                    "error": "Integrity check internal error",
+                }
+
             _set_state(db, job, JobState.COMPLETED, "Analysis complete.")
             try:
                 from backend.app.auth.audit import record_audit

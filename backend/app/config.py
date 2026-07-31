@@ -9,7 +9,7 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from analytics.common.config_loader import DeploymentLimits, deployment_limits
@@ -70,6 +70,25 @@ class Settings(BaseSettings):
     smtp_password: str | None = Field(default=None, validation_alias="SMTP_PASSWORD")
     smtp_from: str | None = Field(default=None, validation_alias="SMTP_FROM")
     smtp_use_tls: bool = Field(default=True, validation_alias="SMTP_USE_TLS")
+
+    # ZenMux / OpenAI-compatible API for fault-run integrity checks (server-side only).
+    # Use a chat key (sk-ai-v1-…). Management keys (sk-mg-v1-…) are often rejected for completions.
+    zenmux_api_key: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("ZENMUX_API_KEY", "zenmux_api_key"),
+    )
+    zenmux_base_url: str = Field(
+        default="https://zenmux.ai/api/v1",
+        validation_alias=AliasChoices("ZENMUX_BASE_URL", "zenmux_base_url"),
+    )
+    zenmux_model: str = Field(
+        default="google/gemini-2.5-flash",
+        validation_alias=AliasChoices("ZENMUX_MODEL", "zenmux_model"),
+    )
+    zenmux_timeout_sec: float = Field(
+        default=45.0,
+        validation_alias=AliasChoices("ZENMUX_TIMEOUT_SEC", "zenmux_timeout_sec"),
+    )
 
     @property
     def job_root_path(self) -> Path:

@@ -111,6 +111,7 @@ def _clear_analysis_outputs(settings: Settings, job: Job) -> None:
             shutil.rmtree(d, ignore_errors=True)
         d.mkdir(parents=True, exist_ok=True)
     job.results_summary_json = None
+    job.ai_integrity_json = None
     job.completed_at = None
     job.report_expires_at = None
     job.total_execution_time_ms = None

@@ -55,6 +55,7 @@ def _ensure_job_columns() -> None:
             ("user_id", "VARCHAR(36)"),
             ("is_demo", "BOOLEAN DEFAULT FALSE"),
             ("abandoned_at", "TIMESTAMP WITH TIME ZONE"),
+            ("ai_integrity_json", "JSON"),
         ],
     )
 

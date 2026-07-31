@@ -19,8 +19,9 @@ frontend/.vite/
 ## Env
 .env
 .env.local
-!.env.example
 .deploy-secrets/
+.env*
+!.env.example
 
 ## Data / temp artifacts (never commit operational SCADA data)
 uploads/
@@ -46,4 +47,3 @@ logs/
 *.log
 
 .vercel
-.env*

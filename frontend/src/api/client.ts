@@ -589,6 +589,16 @@ export async function getResults(jobId: string) {
   return apiFetch<ResultsResponse>(`/api/jobs/${jobId}/results`);
 }
 
+export async function getAiIntegrity(jobId: string) {
+  return apiFetch<import("@/types").AiIntegrityCheck>(`/api/jobs/${jobId}/ai-integrity`);
+}
+
+export async function rerunAiIntegrity(jobId: string) {
+  return apiFetch<import("@/types").AiIntegrityCheck>(`/api/jobs/${jobId}/ai-integrity`, {
+    method: "POST",
+  });
+}
+
 export async function startDemo(onProgress?: (p: ConnectProgress) => void) {
   return withConnectRetry(
     () => apiFetch<{ job_id: string; state: string }>("/api/demo", { method: "POST" }),

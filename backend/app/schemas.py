@@ -336,11 +336,31 @@ class KpiResponse(BaseModel):
     inverter_pr: list[InverterPrRow] = Field(default_factory=list)
 
 
+class IntegrityFinding(BaseModel):
+    severity: str  # pass | warn | fail
+    code: str
+    message: str
+    module_id: Optional[str] = None
+
+
+class AiIntegrityCheck(BaseModel):
+    status: str  # pass | warn | fail | skipped | error
+    configured: bool = False
+    source: str = "none"  # none | rules | ai | rules+ai
+    summary: str = ""
+    findings: list[IntegrityFinding] = Field(default_factory=list)
+    checked_at: Optional[str] = None
+    model: Optional[str] = None
+    error: Optional[str] = None
+
+
 class ResultsResponse(BaseModel):
     job_id: str
     kpis: KpiResponse
     results: list[dict[str, Any]]
     """Serialized ResultObject list (analytics.core.result.ResultObject.model_dump())."""
+    ai_integrity: Optional[AiIntegrityCheck] = None
+    """Cached run-integrity checklist; omitted/null when never run or skipped quietly."""
 
 
 class DemoJobResponse(BaseModel):

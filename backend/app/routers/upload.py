@@ -754,6 +754,7 @@ async def replace_upload(
     job.error_summary = None
     job.validation_summary_json = None
     job.results_summary_json = None
+    job.ai_integrity_json = None
     job.completed_at = None
     job.report_expires_at = None
     job.total_execution_time_ms = None

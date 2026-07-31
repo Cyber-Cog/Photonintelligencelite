@@ -383,6 +383,25 @@ export interface ResultsResponse {
   job_id: string;
   kpis: KpiResponse;
   results: ResultObject[];
+  ai_integrity?: AiIntegrityCheck | null;
+}
+
+export interface IntegrityFinding {
+  severity: string;
+  code: string;
+  message: string;
+  module_id?: string | null;
+}
+
+export interface AiIntegrityCheck {
+  status: string;
+  configured: boolean;
+  source: string;
+  summary: string;
+  findings: IntegrityFinding[];
+  checked_at?: string | null;
+  model?: string | null;
+  error?: string | null;
 }
 
 export interface AdminUser {

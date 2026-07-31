@@ -10,11 +10,13 @@ import { KpiStrip, type KpiStripItem } from "@/components/KpiStrip";
 import { LossWaterfallBridge } from "@/components/LossWaterfallBridge";
 import { OwnerActionCenter } from "@/components/OwnerActionCenter";
 import { ResultCard } from "@/components/ResultCard";
+import { RunIntegrityPanel } from "@/components/RunIntegrityPanel";
 import { SummaryInsightPanels } from "@/components/SummaryInsightPanels";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { InfoBanner } from "@/components/ui/InfoBanner";
 import { Spinner } from "@/components/ui/Spinner";
 import { SubnavTabs } from "@/components/ui/SubnavTabs";
+import { useAuth } from "@/context/AuthContext";
 import { useJob } from "@/context/JobContext";
 import {
   isAnalysisModule,
@@ -36,7 +38,7 @@ import {
   resolveResultsSectionId,
   type ResultsSectionId,
 } from "@/lib/resultsNav";
-import type { ResultObject, ResultsResponse } from "@/types";
+import type { ResultObject, ResultsResponse, AiIntegrityCheck } from "@/types";
 
 function fmt(value: number | null, digits = 1): string | null {
   if (value === null || value === undefined) return null;
@@ -288,6 +290,7 @@ export function DashboardPage() {
   const { jobId } = useParams<{ jobId: string }>();
   const navigate = useNavigate();
   const { clearJob } = useJob();
+  const { isSuperadmin } = useAuth();
 
   const [data, setData] = useState<ResultsResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -299,6 +302,7 @@ export function DashboardPage() {
   const [investigateRow, setInvestigateRow] = useState<FaultRow | null>(null);
   const [folderCollapsed, setFolderCollapsed] = useState(false);
   const [faultCategories, setFaultCategories] = useState<FaultCategoriesResponse>(DEFAULT_FAULT_CATEGORIES);
+  const [integrity, setIntegrity] = useState<AiIntegrityCheck | null>(null);
   const mainPaneRef = useRef<HTMLDivElement>(null);
   const modulesRef = useRef<ResultObject[]>([]);
 
@@ -330,6 +334,7 @@ export function DashboardPage() {
         .then((res) => {
           if (cancelled) return;
           setData(res);
+          setIntegrity(res.ai_integrity ?? null);
           setLoading(false);
         })
         .catch((err) => {
@@ -642,6 +647,14 @@ export function DashboardPage() {
     >
       {activeSection === "summary" && (
         <div id="results-actions" data-results-pane="summary" className="job-pane-tight flex flex-col gap-3 pb-6">
+          {jobId ? (
+            <RunIntegrityPanel
+              jobId={jobId}
+              check={integrity}
+              canRerun={isSuperadmin}
+              onUpdated={setIntegrity}
+            />
+          ) : null}
           {/* Single bridge lives under Loss bridge — summary only links there (no duplicate chart). */}
           <button
             type="button"
