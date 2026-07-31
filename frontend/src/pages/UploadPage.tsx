@@ -424,6 +424,8 @@ export function UploadPage() {
                 hierarchy={review.hierarchy_overview ?? []}
                 architecture={review.architecture_summary}
                 moduleImpact={review.module_impact_preview}
+                uploadIntegrity={review.upload_integrity}
+                jobId={review.job_id}
                 layout="review"
               />
             </div>

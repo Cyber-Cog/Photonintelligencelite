@@ -115,6 +115,9 @@ class Job(Base):
     ai_integrity_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     """Cached fault-run integrity check (rules + optional ZenMux). Shown on Results; not chat."""
 
+    upload_integrity_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    """Parse/upload-time integrity check (rules + optional ZenMux). Shown on Upload review."""
+
     total_execution_time_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
     downloaded_pdf: Mapped[bool] = mapped_column(Boolean, default=False)
     downloaded_excel: Mapped[bool] = mapped_column(Boolean, default=False)

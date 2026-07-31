@@ -16,17 +16,21 @@ const PANEL_TONE: Record<string, string> = {
   skipped: "border-stone-200 bg-stone-50/80 dark:border-stone-700 dark:bg-stone-900",
 };
 
-/** Compact non-chat integrity checklist for Results. */
+/** Compact non-chat integrity checklist for Results or Upload review. */
 export function RunIntegrityPanel({
   jobId,
   check,
   canRerun = false,
   onUpdated,
+  eyebrow = "Run integrity",
+  emptyPassMessage = "No display/run contradictions detected.",
 }: {
   jobId: string;
   check: AiIntegrityCheck | null | undefined;
   canRerun?: boolean;
   onUpdated?: (next: AiIntegrityCheck) => void;
+  eyebrow?: string;
+  emptyPassMessage?: string;
 }) {
   const [busy, setBusy] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -59,7 +63,7 @@ export function RunIntegrityPanel({
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <p className="tool-eyebrow mb-0.5">Run integrity</p>
+          <p className="tool-eyebrow mb-0.5">{eyebrow}</p>
           <h3 className="font-display text-sm font-semibold tracking-tight text-[color:var(--pic-text)]">
             {check.summary || "Fault-run integrity check"}
           </h3>
@@ -137,8 +141,19 @@ export function RunIntegrityPanel({
         </ul>
       ) : check.status === "pass" ? (
         <p className="mt-2 text-[12px] text-[color:var(--pic-text-muted)]">
-          No display/run contradictions detected.
+          {emptyPassMessage}
         </p>
+      ) : null}
+      {check.mapping_hints && check.mapping_hints.length > 0 ? (
+        <ul className="mt-2 space-y-1 text-[11px] text-[color:var(--pic-text-muted)]" role="list">
+          {check.mapping_hints.slice(0, 6).map((h, i) => (
+            <li key={`${h.column_name}-${i}`}>
+              Suggest: <span className="text-[color:var(--pic-text)]">{h.column_name}</span>
+              {" → "}
+              <span className="font-medium text-[color:var(--pic-text)]">{h.canonical_field}</span>
+            </li>
+          ))}
+        </ul>
       ) : null}
     </section>
   );

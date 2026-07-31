@@ -116,6 +116,9 @@ _COLUMN_SYNONYMS: dict[str, tuple[str, ...]] = {
 _DEVICE_TYPE_ALIASES = {
     "plant": "plant",
     "site": "plant",
+    "icr": "icr",
+    "inverter control room": "icr",
+    "pcs room": "icr",
     "inverter": "inverter",
     "inv": "inverter",
     "scb": "scb",

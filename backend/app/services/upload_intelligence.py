@@ -9,6 +9,9 @@ from analytics.common.prerequisites import evaluate_prerequisites
 
 # Signals grouped by SCADA hierarchy for the Upload review screen.
 # SCB and string are separate buckets — do not OR device_id into both (false greens).
+# ICR is optional: omitted from the matrix when absent (no blockers / required signals).
+_OPTIONAL_LEVEL_IDS = frozenset({"icr"})
+
 _HIERARCHY_LEVELS: tuple[tuple[str, str, tuple[tuple[str, str, tuple[str, ...]], ...]], ...] = (
     (
         "plant_wms",
@@ -18,6 +21,13 @@ _HIERARCHY_LEVELS: tuple[tuple[str, str, tuple[tuple[str, str, tuple[str, ...]],
             ("irradiance", "Irradiance (POA or GHI)", ("poa_w_m2", "ghi_w_m2")),
             ("module_temp_c", "Module temperature (°C)", ()),
             ("ambient_temp_c", "Ambient temperature (°C)", ()),
+        ),
+    ),
+    (
+        "icr",
+        "ICR (Inverter Control Room)",
+        (
+            ("icr_id", "ICR ID", ()),
         ),
     ),
     (
@@ -57,8 +67,16 @@ def _field_present(field_id: str, alts: tuple[str, ...], present: set[str]) -> t
     return False, None
 
 
-def build_hierarchy_levels(present: Iterable[str]) -> list[dict[str, Any]]:
-    """Per-hierarchy signal matrix from a set of detected canonical fields."""
+def build_hierarchy_levels(
+    present: Iterable[str],
+    *,
+    show_empty_optional: bool = False,
+) -> list[dict[str, Any]]:
+    """Per-hierarchy signal matrix from a set of detected canonical fields.
+
+    Optional levels (ICR) are omitted when none of their signals are present,
+    so plants without ICR are not forced to show an empty required row.
+    """
     fields = {str(f) for f in present if f}
     levels: list[dict[str, Any]] = []
     for level_id, title, signals in _HIERARCHY_LEVELS:
@@ -74,6 +92,8 @@ def build_hierarchy_levels(present: Iterable[str]) -> list[dict[str, Any]]:
                 }
             )
         detected = sum(1 for i in items if i["present"])
+        if level_id in _OPTIONAL_LEVEL_IDS and detected == 0 and not show_empty_optional:
+            continue
         levels.append(
             {
                 "level_id": level_id,
@@ -81,6 +101,7 @@ def build_hierarchy_levels(present: Iterable[str]) -> list[dict[str, Any]]:
                 "signals": items,
                 "detected_count": detected,
                 "total_count": len(items),
+                "optional": level_id in _OPTIONAL_LEVEL_IDS,
             }
         )
     return levels

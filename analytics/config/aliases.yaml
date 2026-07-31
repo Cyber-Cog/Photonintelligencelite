@@ -219,3 +219,14 @@ string_id:
   - str_id
   - string no
   - string number
+
+icr_id:
+  - ICR ID
+  - icr id
+  - icr_id
+  - icr
+  - inverter control room
+  - inverter control room id
+  - control room id
+  - pcs room
+  - pcs room id

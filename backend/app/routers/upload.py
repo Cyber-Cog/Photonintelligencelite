@@ -24,6 +24,7 @@ from backend.app.config import Settings, get_settings
 from backend.app.database import SessionLocal, get_db
 from backend.app.models import Job, User
 from backend.app.schemas import (
+    AiIntegrityCheck,
     ExcelParseReportOut,
     UploadArchitectureSummary,
     UploadFileInventoryItem,
@@ -46,6 +47,7 @@ from backend.app.services.pack_architecture_import import (
     merge_architecture_into_job_plant,
     plant_config_from_architecture_file,
 )
+from backend.app.services.upload_ai_check import run_upload_integrity_check
 from backend.app.services.upload_intelligence import build_upload_intelligence
 from backend.app.services.upload_inventory import (
     build_inventory_from_parts,
@@ -54,6 +56,7 @@ from backend.app.services.upload_inventory import (
     signal_checklist,
     write_upload_manifest,
 )
+from backend.app.services.wide_csv_reshape import maybe_reshape_wide_csv
 from backend.app.services.storage import (
     DecompressionBombError,
     UploadTooLargeError,
@@ -281,6 +284,33 @@ async def _ingest_uploads(
                 f"{parse_report_out.row_count:,} rows, {inv_n} inverter(s), "
                 f"confidence {parse_report_out.confidence:.0%}."
             )
+
+    # Wide historian CSVs (plant/ICR/INV×metric columns) → tidy long form before mapping.
+    if csv_path.exists():
+        reshape = maybe_reshape_wide_csv(csv_path, max_rows=limits.max_rows)
+        if reshape.reshaped:
+            report_path = paths.raw_dir / "wide_reshape_report.json"
+            report_path.write_text(json.dumps(reshape.to_dict(), indent=2), encoding="utf-8")
+            progress = (
+                f"Reshaped wide SCADA ({reshape.strategy}): {reshape.row_count:,} rows, "
+                f"{len(reshape.inverters_found)} inverter(s)"
+                + (f", {len(reshape.icr_ids)} ICR(s)" if reshape.icr_ids else "")
+                + "."
+            )
+            if parse_report_out is None:
+                parse_report_out = ExcelParseReportOut(
+                    layout="wide_single_header",
+                    strategy=reshape.strategy,
+                    sheet_name="csv",
+                    confidence=reshape.confidence,
+                    header_rows=[0],
+                    timestamp_column="Timestamp",
+                    inverters_found=reshape.inverters_found,
+                    columns_mapped=reshape.columns_mapped,
+                    row_count=reshape.row_count,
+                    warnings=reshape.warnings,
+                )
+
     return converted_paths, parse_report_out, progress, False, architecture_draft
 
 
@@ -433,6 +463,31 @@ def _convert_deferred_excels(
         n_scb = len(architecture_draft.get("architecture") or {})
         arch_note = f" Architecture imported ({n_scb} SCB(s))."
         progress = (progress or "Excel parsed.") + arch_note
+
+    if csv_path.exists():
+        reshape = maybe_reshape_wide_csv(csv_path, max_rows=limits.max_rows)
+        if reshape.reshaped:
+            (paths.raw_dir / "wide_reshape_report.json").write_text(
+                json.dumps(reshape.to_dict(), indent=2), encoding="utf-8"
+            )
+            progress = (
+                f"Reshaped wide SCADA ({reshape.strategy}): {reshape.row_count:,} rows, "
+                f"{len(reshape.inverters_found)} inverter(s)."
+            )
+            if parse_report_out is None:
+                parse_report_out = ExcelParseReportOut(
+                    layout="wide_single_header",
+                    strategy=reshape.strategy,
+                    sheet_name="csv",
+                    confidence=reshape.confidence,
+                    header_rows=[0],
+                    timestamp_column="Timestamp",
+                    inverters_found=reshape.inverters_found,
+                    columns_mapped=reshape.columns_mapped,
+                    row_count=reshape.row_count,
+                    warnings=reshape.warnings,
+                )
+
     return parse_report_out, progress, architecture_draft
 
 
@@ -583,6 +638,30 @@ def _build_upload_response(
     )
     file_inv = intelligence["file_inventory"]
 
+    reshape_report = None
+    reshape_path = paths.raw_dir / "wide_reshape_report.json"
+    if reshape_path.exists():
+        try:
+            reshape_report = json.loads(reshape_path.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001
+            reshape_report = None
+
+    settings = get_settings()
+    upload_check = run_upload_integrity_check(
+        settings,
+        columns=columns,
+        suggestions=suggestions,
+        hierarchy=intelligence["hierarchy_overview"],
+        architecture_summary=intelligence["architecture_summary"],
+        original_filename=job.original_filename,
+        parse_report=parse_report_out.model_dump() if parse_report_out else None,
+        reshape_report=reshape_report,
+        use_ai=True,
+    )
+    job.upload_integrity_json = upload_check
+    db.add(job)
+    db.commit()
+
     return UploadResponse(
         job_id=job.id,
         state=job.state,
@@ -599,6 +678,7 @@ def _build_upload_response(
         architecture_summary=UploadArchitectureSummary(**intelligence["architecture_summary"]),
         module_impact_preview=UploadModuleImpactPreview(**intelligence["module_impact_preview"]),
         original_filename=job.original_filename,
+        upload_integrity=AiIntegrityCheck(**upload_check),
     )
 
 
@@ -755,6 +835,7 @@ async def replace_upload(
     job.validation_summary_json = None
     job.results_summary_json = None
     job.ai_integrity_json = None
+    job.upload_integrity_json = None
     job.completed_at = None
     job.report_expires_at = None
     job.total_execution_time_ms = None

@@ -42,6 +42,7 @@ class UploadHierarchyLevel(BaseModel):
     signals: list[UploadHierarchySignalItem] = Field(default_factory=list)
     detected_count: int = 0
     total_count: int = 0
+    optional: bool = False
 
 
 class UploadArchitectureSummary(BaseModel):
@@ -109,6 +110,8 @@ class UploadResponse(BaseModel):
     architecture_summary: Optional[UploadArchitectureSummary] = None
     module_impact_preview: Optional[UploadModuleImpactPreview] = None
     original_filename: Optional[str] = None
+    upload_integrity: Optional["AiIntegrityCheck"] = None
+    """Parse-time integrity checklist (rules always; AI when ZenMux configured)."""
 
 
 class ColumnMappingSuggestion(BaseModel):
@@ -352,6 +355,8 @@ class AiIntegrityCheck(BaseModel):
     checked_at: Optional[str] = None
     model: Optional[str] = None
     error: Optional[str] = None
+    phase: Optional[str] = None  # upload | results
+    mapping_hints: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class ResultsResponse(BaseModel):

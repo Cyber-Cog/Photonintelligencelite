@@ -11,17 +11,19 @@ import re
 
 import pandas as pd
 
-_INVERTER_STRICT = re.compile(r"^INV-\d{1,3}[A-Z]?$", re.IGNORECASE)
-_SCB_STRICT = re.compile(r"^INV-\d{1,3}[A-Z]?-(?:SCB|SMB)-\d{1,3}$", re.IGNORECASE)
-_STRING_STRICT = re.compile(r"^INV-\d{1,3}[A-Z]?-(?:SCB|SMB)-\d{1,3}-STR-\d{1,3}$", re.IGNORECASE)
+_INVERTER_STRICT = re.compile(r"^(?:ICR\d+-)?INV-\d{1,3}[A-Z]?$", re.IGNORECASE)
+_SCB_STRICT = re.compile(r"^(?:ICR\d+-)?INV-\d{1,3}[A-Z]?-(?:SCB|SMB)-\d{1,3}$", re.IGNORECASE)
+_STRING_STRICT = re.compile(r"^(?:ICR\d+-)?INV-\d{1,3}[A-Z]?-(?:SCB|SMB)-\d{1,3}-STR-\d{1,3}$", re.IGNORECASE)
 # Melted channel ids: SMB-01-STR-03 / SCB-02-STR-12 (no INV prefix)
 _STRING_STANDALONE = re.compile(r"^(?:SMB|SCB)[-_]?\d{1,3}-STR-\d{1,3}$", re.IGNORECASE)
 _STRING_LOOSE = re.compile(r".+-STR-\d{1,3}$", re.IGNORECASE)
+_ICR_STRICT = re.compile(r"^ICR[-_]?\d{1,3}$", re.IGNORECASE)
 
 # Looser fallback patterns seen across OEM exports (e.g. "Inverter01", "INV_01_SCB_02", "SMB-01").
 _SCB_LOOSE = re.compile(r"(INV[-_]?\w+)[-_](SCB|SMB|MPPT)[-_]?(\d+)", re.IGNORECASE)
 _SMB_STANDALONE = re.compile(r"^(?:SMB|SCB|COMBINER|CB)[-_\s]?\d+$", re.IGNORECASE)
 _INVERTER_LOOSE = re.compile(r"(INV(?:ERTER)?)[-_]?(\d+[A-Z]?)", re.IGNORECASE)
+_ICR_LOOSE = re.compile(r"(ICR)[-_]?(\d+)", re.IGNORECASE)
 
 
 def _as_clean_id(equipment_id) -> str | None:
@@ -52,7 +54,21 @@ def derive_level(equipment_id) -> str | None:
         return "scb"
     if _INVERTER_STRICT.match(eid) or _INVERTER_LOOSE.search(eid):
         return "inverter"
+    if _ICR_STRICT.match(eid):
+        return "icr"
     return None
+
+
+def extract_parent_icr(equipment_id) -> str | None:
+    """Parent ICR from ids like ICR1-INV-01 or bare ICR2."""
+    eid = _as_clean_id(equipment_id)
+    if eid is None:
+        return None
+    m_prefix = re.match(r"^(ICR[-_]?\d+)", eid, re.IGNORECASE)
+    if not m_prefix:
+        return None
+    digits = re.search(r"\d+", m_prefix.group(1))
+    return f"ICR{int(digits.group())}" if digits else None
 
 
 def extract_parent_scb(string_id) -> str | None:

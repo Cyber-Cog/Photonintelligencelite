@@ -1,5 +1,7 @@
 import { Badge } from "@/components/ui/Badge";
+import { RunIntegrityPanel } from "@/components/RunIntegrityPanel";
 import type {
+  AiIntegrityCheck,
   UploadArchitectureSummary,
   UploadHierarchyLevel,
   UploadModuleImpactPreview,
@@ -167,6 +169,8 @@ type Props = {
   hierarchy: UploadHierarchyLevel[];
   architecture?: UploadArchitectureSummary | null;
   moduleImpact?: UploadModuleImpactPreview | null;
+  uploadIntegrity?: AiIntegrityCheck | null;
+  jobId?: string | null;
   showPlaceholder?: boolean;
   layout?: "sidebar" | "review";
 };
@@ -175,6 +179,8 @@ export function UploadIntelligencePanel({
   hierarchy,
   architecture,
   moduleImpact,
+  uploadIntegrity,
+  jobId,
   showPlaceholder,
   layout = "sidebar",
 }: Props) {
@@ -183,8 +189,9 @@ export function UploadIntelligencePanel({
       <div className="rounded-xl border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] p-4">
         <p className="font-display text-sm font-semibold text-[color:var(--pic-text)]">After upload you will see</p>
         <ul className="mt-3 space-y-2 text-sm text-[color:var(--pic-text-muted)]">
-          <li>Signals at plant, inverter, and SCB/string levels</li>
+          <li>Signals at plant, ICR (if present), inverter, and SCB/string levels</li>
           <li>Inverter, SCB, and string counts</li>
+          <li>Parse integrity checklist (rules always; AI when configured)</li>
           <li>Which analyses may not run until Setup is complete</li>
         </ul>
       </div>
@@ -194,6 +201,14 @@ export function UploadIntelligencePanel({
   if (layout === "review") {
     return (
       <div className="space-y-4">
+        {uploadIntegrity && jobId ? (
+          <RunIntegrityPanel
+            jobId={jobId}
+            check={uploadIntegrity}
+            eyebrow="Upload parse check"
+            emptyPassMessage="Parse/mapping look consistent — no upload integrity issues."
+          />
+        ) : null}
         <div className="grid gap-4 lg:grid-cols-3">
           {architecture ? <ArchitectureCard arch={architecture} compact /> : null}
           <div className="rounded-xl border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] p-3.5 lg:col-span-2 lg:p-4">
@@ -211,6 +226,14 @@ export function UploadIntelligencePanel({
 
   return (
     <div className="flex flex-col gap-4">
+      {uploadIntegrity && jobId ? (
+        <RunIntegrityPanel
+          jobId={jobId}
+          check={uploadIntegrity}
+          eyebrow="Upload parse check"
+          emptyPassMessage="Parse/mapping look consistent — no upload integrity issues."
+        />
+      ) : null}
       {architecture ? <ArchitectureCard arch={architecture} /> : null}
       <div className="rounded-xl border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] p-4">
         <p className="font-display text-sm font-semibold text-[color:var(--pic-text)]">Signals by hierarchy</p>

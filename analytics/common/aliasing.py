@@ -12,6 +12,7 @@ import re
 from dataclasses import dataclass
 
 from analytics.common.config_loader import load_aliases
+from analytics.common.wide_headers import metric_suffix_for_aliasing, parse_wide_device_column
 
 HIGH_CONFIDENCE = 0.90
 MEDIUM_CONFIDENCE = 0.60
@@ -36,6 +37,21 @@ _PATTERN_CHANNEL_CURRENT = re.compile(
     r"^(?:(?:strings?\s*currents?\s*(?:\(a\))?\s*)?(?:i|str(?:ing)?|ch(?:annel)?)\s*\d{1,3}"
     r"|(?:i|str(?:ing)?|ch(?:annel)?)\s*\d{1,3}\s*(?:current|idc|a)?)$"
 )
+_PATTERN_ICR_ID = re.compile(
+    r"^(?:icr|inverter\s*control\s*room|pcs\s*room)(?:\s*(?:id|no|number|#))?\s*\d*$"
+)
+
+# Official tidy metric header → canonical (keys are _normalize()'d: no parens).
+_METRIC_HEADER_TO_CANONICAL = {
+    "ac power kw": "ac_power_kw",
+    "dc power kw": "dc_power_kw",
+    "dc current a": "dc_current_a",
+    "dc voltage v": "dc_voltage_v",
+    "irradiance w m2": "poa_w_m2",
+    "ghi w m2": "ghi_w_m2",
+    "module temp c": "module_temp_c",
+    "ambient temp c": "ambient_temp_c",
+}
 
 
 def _normalize(name: str) -> str:
@@ -85,6 +101,9 @@ def _pattern_canonical(normalized: str) -> tuple[str, str] | None:
         return "dc_current_a", "pattern:smb/scb/string current"
     if _PATTERN_DC_VOLTAGE.match(normalized):
         return "dc_voltage_v", "pattern:smb/scb/string voltage"
+    if _PATTERN_ICR_ID.match(normalized) and not normalized.endswith(("current", "voltage", "power")):
+        if re.search(r"\d", normalized):
+            return "icr_id", "pattern:icr id"
     if _PATTERN_SCB_ID.match(normalized) and not normalized.endswith(("current", "voltage", "power")):
         # Bare "smb" / "scb" are exact aliases; numbered ids like "smb 01" land here.
         if re.search(r"\d", normalized):
@@ -92,14 +111,33 @@ def _pattern_canonical(normalized: str) -> tuple[str, str] | None:
     return None
 
 
+def _wide_prefix_canonical(column_name: str) -> ColumnCandidate | None:
+    """Map plant/ICR/INV-prefixed wide headers via metric leaf (pre-melt assist)."""
+    parsed = parse_wide_device_column(column_name)
+    if parsed is None:
+        return None
+    metric = metric_suffix_for_aliasing(column_name) or parsed.metric
+    key = _normalize(metric)
+    field = _METRIC_HEADER_TO_CANONICAL.get(key)
+    if not field:
+        return None
+    return ColumnCandidate(column_name, field, 0.95, f"wide_prefix:{metric}")
+
+
 def score_column(column_name: str) -> ColumnCandidate:
     if _is_garbage_header(column_name):
         return ColumnCandidate(column_name, None, 0.0, None)
 
     # Plant-level totals are not per-inverter AC/DC — never auto-map them into those slots.
+    # Do not block plant/ICR/Inverter-prefixed wide device columns.
     n_raw = _normalize(column_name)
     if n_raw.startswith("plant") and any(x in n_raw for x in ("ac", "dc", "power")):
-        return ColumnCandidate(column_name, None, 0.0, None)
+        if re.search(r"\b(?:icr|inv(?:erter)?)\s*\d*", n_raw):
+            pass
+        elif "time" in n_raw or "date" in n_raw:
+            pass
+        else:
+            return ColumnCandidate(column_name, None, 0.0, None)
 
     lookup = _alias_lookup()
     normalized = n_raw
@@ -113,6 +151,10 @@ def score_column(column_name: str) -> ColumnCandidate:
     if patterned is not None:
         field, label = patterned
         return ColumnCandidate(column_name, field, 0.97, label)
+
+    wide_hit = _wide_prefix_canonical(column_name)
+    if wide_hit is not None:
+        return wide_hit
 
     if _is_ambiguous_column(column_name):
         return ColumnCandidate(column_name, None, 0.0, None)

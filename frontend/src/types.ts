@@ -43,6 +43,7 @@ export interface UploadHierarchyLevel {
   signals: UploadHierarchySignalItem[];
   detected_count: number;
   total_count: number;
+  optional?: boolean;
 }
 
 export interface UploadArchitectureSummary {
@@ -107,6 +108,7 @@ export interface UploadResponse {
   architecture_summary?: UploadArchitectureSummary | null;
   module_impact_preview?: UploadModuleImpactPreview | null;
   original_filename?: string | null;
+  upload_integrity?: AiIntegrityCheck | null;
 }
 
 export interface ArchitectureEntry {
@@ -402,6 +404,12 @@ export interface AiIntegrityCheck {
   checked_at?: string | null;
   model?: string | null;
   error?: string | null;
+  phase?: string | null;
+  mapping_hints?: Array<{
+    column_name: string;
+    canonical_field: string;
+    confidence?: number;
+  }>;
 }
 
 export interface AdminUser {
