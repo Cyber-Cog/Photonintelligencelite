@@ -64,7 +64,9 @@ class UploadModuleImpactItem(BaseModel):
 class UploadModuleImpactPreview(BaseModel):
     preview_note: str = ""
     ready_count: int = 0
+    may_run_count: int = 0
     blocked_count: int = 0
+    may_run_modules: list[UploadModuleImpactItem] = Field(default_factory=list)
     blocked_modules: list[UploadModuleImpactItem] = Field(default_factory=list)
 
 
@@ -210,6 +212,7 @@ class ModuleReadinessOut(BaseModel):
     algorithm_id: str
     title: str
     will_run: bool
+    preliminary: bool = False
     missing_fields: list[str] = Field(default_factory=list)
     missing_config: list[str] = Field(default_factory=list)
     message: str

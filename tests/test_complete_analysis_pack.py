@@ -146,6 +146,12 @@ def test_non_pack_fuzzy_stays_confirm_not_silent_auto():
 
 
 def test_full_fields_prerequisites_all_will_run():
+    by_type = {
+        "inverter": {"ac_power_kw", "dc_power_kw"},
+        "scb": {"dc_current_a", "dc_voltage_v", "scb_id"},
+        "string": {"dc_current_a", "string_id"},
+        "plant": {"poa_w_m2"},
+    }
     rows = evaluate_prerequisites(
         available_fields={
             "ac_power_kw",
@@ -156,6 +162,7 @@ def test_full_fields_prerequisites_all_will_run():
         },
         has_architecture=True,
         has_equipment_ratings=True,
+        available_by_device_type=by_type,
     )
     assert all(r["will_run"] for r in rows), [r for r in rows if not r["will_run"]]
 

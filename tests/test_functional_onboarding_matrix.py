@@ -218,6 +218,7 @@ def test_ds_prerequisites_ready_with_smb_current_and_architecture():
     rows = evaluate_prerequisites(
         available_fields={"dc_current_a", "poa_w_m2"},
         has_architecture=True,
+        available_by_device_type={"scb": {"dc_current_a", "scb_id"}, "plant": {"poa_w_m2"}},
     )
     ds = next(r for r in rows if r["algorithm_id"] == "disconnected_strings")
     assert ds["will_run"] is True
@@ -227,6 +228,7 @@ def test_ds_prerequisites_not_ready_without_architecture():
     rows = evaluate_prerequisites(
         available_fields={"dc_current_a", "poa_w_m2"},
         has_architecture=False,
+        available_by_device_type={"scb": {"dc_current_a"}, "plant": {"poa_w_m2"}},
     )
     ds = next(r for r in rows if r["algorithm_id"] == "disconnected_strings")
     assert ds["will_run"] is False

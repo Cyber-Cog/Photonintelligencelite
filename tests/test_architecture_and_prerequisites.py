@@ -86,15 +86,119 @@ def test_prerequisites_block_clipping_current_without_irr():
 
 
 def test_prerequisites_run_when_complete():
+    by_type = {
+        "scb": {"dc_current_a", "dc_voltage_v", "scb_id"},
+        "inverter": {"ac_power_kw", "dc_power_kw"},
+        "plant": {"poa_w_m2"},
+    }
     rows = evaluate_prerequisites(
         available_fields={"dc_current_a", "poa_w_m2", "ac_power_kw", "dc_power_kw"},
         has_architecture=True,
         has_equipment_ratings=True,
         algorithm_ids=["clipping_current", "box_plot"],
+        available_by_device_type=by_type,
     )
     by_id = {r["algorithm_id"]: r for r in rows}
     assert by_id["clipping_current"]["will_run"] is True
     assert by_id["box_plot"]["will_run"] is True
+
+
+def test_module_damage_needs_scb_level_voltage_not_inverter():
+    """Inverter-only dc_voltage_v must not green Module Damage (Results NEEDS DATA sync)."""
+    by_type = {
+        "inverter": {"ac_power_kw", "dc_voltage_v", "inverter_id"},
+        "plant": {"poa_w_m2"},
+    }
+    rows = evaluate_prerequisites(
+        available_fields={"dc_voltage_v", "ac_power_kw", "poa_w_m2"},
+        has_architecture=True,
+        has_equipment_ratings=True,
+        algorithm_ids=["module_damage"],
+        available_by_device_type=by_type,
+    )
+    assert len(rows) == 1
+    assert rows[0]["will_run"] is False
+    assert rows[0]["preliminary"] is False
+    assert any("scb:" in f or "dc_voltage" in f for f in rows[0]["missing_fields"])
+    assert "SCB-level" in rows[0]["message"]
+
+
+def test_module_damage_will_run_with_scb_voltage():
+    by_type = {"scb": {"dc_voltage_v", "scb_id", "inverter_id"}}
+    rows = evaluate_prerequisites(
+        available_fields={"dc_voltage_v"},
+        has_architecture=True,
+        algorithm_ids=["module_damage"],
+        available_by_device_type=by_type,
+    )
+    assert rows[0]["will_run"] is True
+    assert rows[0]["preliminary"] is False
+
+
+def test_module_damage_preliminary_without_level_evidence():
+    rows = evaluate_prerequisites(
+        available_fields={"dc_voltage_v"},
+        has_architecture=True,
+        algorithm_ids=["module_damage"],
+        level_evidence=False,
+    )
+    assert rows[0]["will_run"] is False
+    assert rows[0]["preliminary"] is True
+    assert "may run" in rows[0]["message"].lower()
+
+
+def test_missing_fields_respects_device_type():
+    missing = missing_fields_for_algorithm(
+        "module_damage",
+        {"dc_voltage_v"},
+        available_by_device_type={"inverter": {"dc_voltage_v"}},
+    )
+    assert "dc_voltage_v" in missing
+
+    missing_ok = missing_fields_for_algorithm(
+        "module_damage",
+        {"dc_voltage_v"},
+        available_by_device_type={"scb": {"dc_voltage_v"}},
+    )
+    assert missing_ok == set()
+
+
+def test_populated_columns_by_device_type_separates_levels():
+    import pandas as pd
+
+    from analytics.core.context import CanonicalDataAccess
+
+    df = pd.DataFrame(
+        {
+            "timestamp_utc": pd.to_datetime(
+                ["2024-01-01T00:00:00Z", "2024-01-01T00:01:00Z", "2024-01-01T00:00:00Z"]
+            ),
+            "device_type": ["inverter", "inverter", "scb"],
+            "ac_power_kw": [100.0, 110.0, None],
+            "dc_voltage_v": [650.0, 660.0, None],  # inverter only — no SCB voltage
+            "scb_id": [None, None, "INV-01-SCB-01"],
+            "dc_current_a": [None, None, 12.0],
+        }
+    )
+    access = CanonicalDataAccess.from_frame(df)
+    by_type = access.populated_columns_by_device_type()
+    assert "dc_voltage_v" in by_type["inverter"]
+    assert "dc_voltage_v" not in by_type.get("scb", set())
+    assert "dc_current_a" in by_type["scb"]
+
+    rows = evaluate_prerequisites(
+        available_fields=access.populated_columns(),
+        has_architecture=True,
+        has_equipment_ratings=True,
+        available_by_device_type=by_type,
+        algorithm_ids=["module_damage", "clipping_current", "disconnected_strings"],
+    )
+    by_id = {r["algorithm_id"]: r for r in rows}
+    assert by_id["module_damage"]["will_run"] is False
+    assert by_id["clipping_current"]["will_run"] is False  # needs irradiance too, and has scb current
+    # disconnected has scb current but missing irradiance
+    assert by_id["disconnected_strings"]["will_run"] is False
+
 
 
 def test_missing_fields_for_orchestrator():
@@ -189,8 +293,10 @@ def test_populated_columns_ignores_all_null_schema():
         available_fields=present,
         has_architecture=True,
         has_equipment_ratings=True,
+        available_by_device_type=access.populated_columns_by_device_type(),
     )
     by_id = {r["algorithm_id"]: r for r in rows}
     assert by_id["clipping_power"]["will_run"] is True
     assert by_id["inverter_efficiency"]["will_run"] is False
     assert by_id["disconnected_strings"]["will_run"] is False
+    assert by_id["module_damage"]["will_run"] is False

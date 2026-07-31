@@ -44,8 +44,13 @@ class AnalysisOrchestrator:
         # Use non-null fields only — schema always lists telemetry columns even when
         # all-null for this upload (same rule as validation readiness).
         available = set(context.canonical.populated_columns())
-        # Prefer the central prerequisite map (includes any-of irradiance groups, etc.).
-        mapped = missing_fields_for_algorithm(spec.algorithm_id, available)
+        by_type = context.canonical.populated_columns_by_device_type()
+        # Prefer the central prerequisite map (includes any-of irradiance groups + levels).
+        mapped = missing_fields_for_algorithm(
+            spec.algorithm_id,
+            available,
+            available_by_device_type=by_type,
+        )
         if mapped or spec.algorithm_id in ALGORITHM_PREREQUISITES:
             return mapped
         if not spec.required_fields:

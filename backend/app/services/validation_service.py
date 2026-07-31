@@ -103,26 +103,41 @@ def _safe_float(value) -> float | None:
     return out
 
 
-def _fields_present_in_canonical(paths) -> set[str]:
-    """Fields with at least one non-null value in standardized data.
+def _fields_present_in_canonical(paths) -> tuple[set[str], dict[str, set[str]]]:
+    """Fields with at least one non-null value in standardized data, plus per-device-type.
 
     Must match orchestrator readiness: empty schema columns (all-null ``dc_power_kw``,
     ``dc_current_a``, etc.) are NOT available. Returning schema ∪ populated was the bug
     that made Validation say \"Will run\" then Results flip to \"Needs input\".
+
+    Per-device-type evidence prevents false greens when e.g. ``dc_voltage_v`` exists only
+    on inverter rows but Module Damage requires SCB-level voltage.
     """
     from analytics.core.context import CanonicalDataAccess
 
     if not paths.canonical_dir.exists() or not any(paths.canonical_dir.rglob("*.parquet")):
-        return set()
+        return set(), {}
     access = CanonicalDataAccess.from_partitions(paths.canonical_dir)
     present = access.populated_columns()
+    by_type = access.populated_columns_by_device_type()
     # Irradiance group: POA or GHI either satisfies clipping prerequisites
     if "poa_w_m2" in present or "ghi_w_m2" in present:
         present = set(present)
         present.add("poa_w_m2")
-    return present
+        for dtype, fields in by_type.items():
+            if "poa_w_m2" in fields or "ghi_w_m2" in fields:
+                fields = set(fields)
+                fields.add("poa_w_m2")
+                by_type[dtype] = fields
+    return present, by_type
 
-def _module_readiness(mapping_cfg: dict, plant_cfg: dict, available_fields: set[str] | None = None) -> list[dict]:
+
+def _module_readiness(
+    mapping_cfg: dict,
+    plant_cfg: dict,
+    available_fields: set[str] | None = None,
+    available_by_device_type: dict[str, set[str]] | None = None,
+) -> list[dict]:
     mapped = set((mapping_cfg.get("column_to_canonical") or {}).values())
     if mapping_cfg.get("timestamp_column"):
         mapped.add("timestamp")
@@ -137,6 +152,8 @@ def _module_readiness(mapping_cfg: dict, plant_cfg: dict, available_fields: set[
         available_fields=fields,
         has_architecture=has_arch,
         has_equipment_ratings=has_ratings,
+        available_by_device_type=available_by_device_type,
+        level_evidence=available_by_device_type is not None,
     )
 
 
@@ -193,8 +210,16 @@ def run_validation_stage(
         report.add(issue)
 
     # Readiness from actual canonical fields (after standardize) so UI matches analysis.
-    canonical_fields = _fields_present_in_canonical(paths) if not report.has_blockers else None
-    readiness = _module_readiness(mapping_cfg, plant_cfg, available_fields=canonical_fields)
+    canonical_fields = None
+    by_device_type = None
+    if not report.has_blockers:
+        canonical_fields, by_device_type = _fields_present_in_canonical(paths)
+    readiness = _module_readiness(
+        mapping_cfg,
+        plant_cfg,
+        available_fields=canonical_fields,
+        available_by_device_type=by_device_type,
+    )
 
     if report.has_blockers:
         job.validation_summary_json = _report_to_dict(report, None, readiness)

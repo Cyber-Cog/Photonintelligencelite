@@ -8,6 +8,7 @@ from analytics.common.plant_structure import DetectedStructure, infer_from_csv
 from analytics.common.prerequisites import evaluate_prerequisites
 
 # Signals grouped by SCADA hierarchy for the Upload review screen.
+# SCB and string are separate buckets — do not OR device_id into both (false greens).
 _HIERARCHY_LEVELS: tuple[tuple[str, str, tuple[tuple[str, str, tuple[str, ...]], ...]], ...] = (
     (
         "plant_wms",
@@ -29,13 +30,19 @@ _HIERARCHY_LEVELS: tuple[tuple[str, str, tuple[tuple[str, str, tuple[str, ...]],
         ),
     ),
     (
-        "scb_string",
-        "SCB / string level",
+        "scb",
+        "SCB / SMB level",
         (
-            ("scb_id", "SCB / SMB ID", ("scb_id", "device_id")),
-            ("string_id", "String ID", ("string_id", "device_id")),
-            ("dc_current_a", "DC / string current (A)", ()),
+            ("scb_id", "SCB / SMB ID", ()),
+            ("dc_current_a", "DC current (A)", ()),
             ("dc_voltage_v", "DC voltage (V)", ()),
+        ),
+    ),
+    (
+        "string",
+        "String level",
+        (
+            ("string_id", "String ID", ()),
         ),
     ),
 )
@@ -182,7 +189,11 @@ def build_module_impact_preview(
     plant_config: Mapping[str, Any] | None,
     architecture_summary: Mapping[str, Any],
 ) -> dict[str, Any]:
-    """Preview which fault/diagnostic modules may not run based on detected columns."""
+    """Preview which fault/diagnostic modules may not run based on detected columns.
+
+    Column-only preview cannot confirm hierarchy levels — level-sensitive modules
+    (Module Damage, clipping by current, …) are never counted as confirmed ready here.
+    """
     present = _present_from_suggestions(suggestions)
     plant = plant_config or {}
     has_arch = bool(architecture_summary.get("detected")) or bool(plant.get("architecture"))
@@ -195,13 +206,29 @@ def build_module_impact_preview(
         available_fields=present,
         has_architecture=has_arch,
         has_equipment_ratings=has_ratings,
+        level_evidence=False,
     )
-    blocked = [r for r in rows if not r["will_run"]]
+    blocked = [r for r in rows if not r["will_run"] and not r.get("preliminary")]
+    may_run = [r for r in rows if r.get("preliminary")]
     ready = [r for r in rows if r["will_run"]]
     return {
-        "preview_note": "Based on detected columns only — Validate confirms after parsing rows.",
+        "preview_note": (
+            "Preliminary — based on detected column names only. "
+            "Validate confirms hierarchy levels (e.g. SCB vs inverter voltage) before Results."
+        ),
         "ready_count": len(ready),
+        "may_run_count": len(may_run),
         "blocked_count": len(blocked),
+        "may_run_modules": [
+            {
+                "algorithm_id": r["algorithm_id"],
+                "title": r["title"],
+                "message": r["message"],
+                "missing_fields": r.get("missing_fields") or [],
+                "missing_config": r.get("missing_config") or [],
+            }
+            for r in may_run
+        ],
         "blocked_modules": [
             {
                 "algorithm_id": r["algorithm_id"],

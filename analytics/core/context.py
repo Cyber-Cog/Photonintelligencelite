@@ -141,6 +141,44 @@ class CanonicalDataAccess:
                     present.add(c)
         return present
 
+    def populated_columns_by_device_type(self, *, batch_size: int = 8) -> dict[str, set[str]]:
+        """Per ``device_type``: fields with at least one non-null value on that type's rows.
+
+        Used by Validation / orchestrator so SCB-only algorithms (e.g. module_damage)
+        are not marked ready when ``dc_voltage_v`` exists only on inverter/plant rows.
+        """
+        types: list[str] = []
+        if self._frame is not None:
+            if "device_type" in self._frame.columns:
+                types = [
+                    str(t)
+                    for t in self._frame["device_type"].dropna().unique().tolist()
+                    if t is not None and str(t) != ""
+                ]
+        else:
+            assert self._partition_dir is not None
+            types = [
+                d.name.split("=", 1)[1]
+                for d in sorted(self._partition_dir.glob("device_type=*"))
+                if "=" in d.name
+            ]
+
+        cols = [c for c in self.columns() if c and c != "device_type"]
+        by_type: dict[str, set[str]] = {t: set() for t in types}
+        for dtype in types:
+            present = by_type[dtype]
+            # device_type itself is always "present" for rows of this partition
+            present.add("device_type")
+            for i in range(0, len(cols), batch_size):
+                batch = cols[i : i + batch_size]
+                df = self.frame(columns=[*batch, "device_type"], device_types=[dtype])
+                if df.empty:
+                    continue
+                for c in batch:
+                    if c in df.columns and df[c].notna().any():
+                        present.add(c)
+        return by_type
+
     def equipment_ids(self, device_type: str) -> list[str]:
         df = self.frame(columns=["device_id"], device_types=[device_type])
         return sorted(df["device_id"].dropna().unique().tolist())

@@ -13,6 +13,7 @@ export function UploadReviewBar({ review, onClear, onContinue, continuing }: Pro
   const arch = review.architecture_summary;
   const impact = review.module_impact_preview;
   const blocked = impact?.blocked_count ?? 0;
+  const mayRun = impact?.may_run_count ?? 0;
 
   const summaryParts = [
     `${fileCount} file${fileCount === 1 ? "" : "s"}`,
@@ -28,9 +29,11 @@ export function UploadReviewBar({ review, onClear, onContinue, continuing }: Pro
   const status =
     blocked > 0
       ? `${blocked} analysis module${blocked === 1 ? "" : "s"} may not run — review impact panel, then continue to Setup`
-      : arch?.detected
-        ? "Signals and architecture detected — continue to Setup"
-        : "Continue to Setup to confirm mapping and architecture";
+      : mayRun > 0
+        ? `${mayRun} module${mayRun === 1 ? "" : "s"} may run after Validate confirms levels — continue to Setup`
+        : arch?.detected
+          ? "Signals and architecture detected — continue to Setup"
+          : "Continue to Setup to confirm mapping and architecture";
 
   return (
     <div className="workflow-action-bar">
@@ -40,7 +43,9 @@ export function UploadReviewBar({ review, onClear, onContinue, continuing }: Pro
             <p className="text-[color:var(--pic-text-secondary)]">{summaryParts.join(" · ")}</p>
             <p
               className={`text-xs ${
-                blocked > 0 ? "text-amber-700 dark:text-amber-400" : "text-[color:var(--pic-text-muted)]"
+                blocked > 0 || mayRun > 0
+                  ? "text-amber-700 dark:text-amber-400"
+                  : "text-[color:var(--pic-text-muted)]"
               }`}
             >
               {status}

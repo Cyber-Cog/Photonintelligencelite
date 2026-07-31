@@ -165,6 +165,7 @@ def test_disconnected_string_readiness_true_with_smb_dc_current_and_arch():
     rows = evaluate_prerequisites(
         available_fields={"dc_current_a", "poa_w_m2"},
         has_architecture=True,
+        available_by_device_type={"scb": {"dc_current_a", "scb_id"}, "plant": {"poa_w_m2"}},
     )
     ds = next(r for r in rows if r["algorithm_id"] == "disconnected_strings")
     assert ds["will_run"] is True

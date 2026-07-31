@@ -65,7 +65,9 @@ export interface UploadModuleImpactItem {
 export interface UploadModuleImpactPreview {
   preview_note: string;
   ready_count: number;
+  may_run_count?: number;
   blocked_count: number;
+  may_run_modules?: UploadModuleImpactItem[];
   blocked_modules: UploadModuleImpactItem[];
 }
 
@@ -175,6 +177,7 @@ export interface ModuleReadiness {
   algorithm_id: string;
   title: string;
   will_run: boolean;
+  preliminary?: boolean;
   missing_fields: string[];
   missing_config: string[];
   message: string;

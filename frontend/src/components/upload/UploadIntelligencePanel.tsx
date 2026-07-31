@@ -93,20 +93,38 @@ function ArchitectureCard({ arch, compact }: { arch: UploadArchitectureSummary; 
 }
 
 function ModuleImpactCard({ impact }: { impact: UploadModuleImpactPreview }) {
-  const showAll = impact.blocked_modules.length <= 4;
+  const mayRun = impact.may_run_modules ?? [];
+  const mayRunCount = impact.may_run_count ?? mayRun.length;
+  const showAllBlocked = impact.blocked_modules.length <= 4;
 
   return (
     <div className="rounded-xl border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] p-3.5 lg:p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="font-display text-sm font-semibold text-[color:var(--pic-text)]">Analysis impact</p>
         <span className="text-xs tabular-nums text-[color:var(--pic-text-muted)]">
-          {impact.ready_count} ready · {impact.blocked_count} blocked
+          {impact.ready_count} ready
+          {mayRunCount > 0 ? ` · ${mayRunCount} may run` : ""}
+          {" · "}
+          {impact.blocked_count} blocked
         </span>
       </div>
       <p className="mt-1.5 text-xs text-[color:var(--pic-text-muted)]">{impact.preview_note}</p>
+      {mayRun.length > 0 && (
+        <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+          {mayRun.map((m) => (
+            <li
+              key={m.algorithm_id}
+              className="rounded-lg border border-sky-200/80 bg-sky-50/60 px-3 py-2 dark:border-sky-900/40 dark:bg-sky-950/20"
+            >
+              <p className="text-sm font-medium text-sky-950 dark:text-sky-100">{m.title}</p>
+              <p className="mt-0.5 line-clamp-2 text-xs text-sky-900/90 dark:text-sky-200/90">{m.message}</p>
+            </li>
+          ))}
+        </ul>
+      )}
       {impact.blocked_modules.length > 0 ? (
-        showAll ? (
-          <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+        showAllBlocked ? (
+          <ul className={`grid gap-2 sm:grid-cols-2 ${mayRun.length > 0 ? "mt-2" : "mt-3"}`}>
             {impact.blocked_modules.map((m) => (
               <li
                 key={m.algorithm_id}
@@ -118,7 +136,7 @@ function ModuleImpactCard({ impact }: { impact: UploadModuleImpactPreview }) {
             ))}
           </ul>
         ) : (
-          <details className="group mt-3">
+          <details className={`group ${mayRun.length > 0 ? "mt-2" : "mt-3"}`}>
             <summary className="cursor-pointer list-none text-sm font-medium text-amber-800 dark:text-amber-200">
               <span className="group-open:hidden">{impact.blocked_count} modules may not run — show details</span>
               <span className="hidden group-open:inline">Hide module details</span>
@@ -136,9 +154,11 @@ function ModuleImpactCard({ impact }: { impact: UploadModuleImpactPreview }) {
             </ul>
           </details>
         )
-      ) : (
-        <p className="mt-3 text-sm text-emerald-800 dark:text-emerald-300">All fault modules have the columns they need at this stage.</p>
-      )}
+      ) : mayRun.length === 0 ? (
+        <p className="mt-3 text-sm text-emerald-800 dark:text-emerald-300">
+          Confirmed column coverage for modules that do not need hierarchy-level checks.
+        </p>
+      ) : null}
     </div>
   );
 }
