@@ -7,6 +7,7 @@ import {
   downloadAuthenticated,
 } from "@/api/client";
 import { DocsSectionExplorer, useActiveSection } from "@/components/DocsSectionExplorer";
+import { DownloadTemplateMenu } from "@/components/DownloadTemplateMenu";
 import { AuthTeaser } from "@/components/RequireAuth";
 import { ALGORITHM_DOCS } from "@/content/algorithms";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -39,12 +40,11 @@ function DocsContent() {
         description="Calculation logic, required inputs, outputs, and thresholds for each fault and KPI module. Download the Complete Analysis Pack for the preferred SCADA upload format that supports full module coverage."
         actions={
           <>
-            <button type="button" className="btn-secondary text-xs" onClick={() => void download("excel")}>
-              Download template
-            </button>
-            <button type="button" className="btn-ghost text-xs" onClick={() => void download("zip")}>
-              Download CSV package
-            </button>
+            <DownloadTemplateMenu
+              buttonClassName="btn-secondary text-xs"
+              onSelect={(kind) => void download(kind)}
+              align="right"
+            />
             <Link to="/upload" className="btn-primary text-xs">
               Upload files
             </Link>

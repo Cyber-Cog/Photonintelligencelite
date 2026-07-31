@@ -8,6 +8,7 @@ import {
   startDemo,
 } from "@/api/client";
 import { BrandWordmark, PRODUCT_NAME } from "@/components/BrandWordmark";
+import { DownloadTemplateMenu } from "@/components/DownloadTemplateMenu";
 import { HeroProductStory } from "@/components/HeroProductStory";
 import { Reveal } from "@/components/Reveal";
 import { Spinner } from "@/components/ui/Spinner";
@@ -220,9 +221,10 @@ export function LandingPage() {
                 {demoLoading ? <Spinner className="h-4 w-4" /> : null}
                 {demoButtonLabel}
               </button>
-              <button type="button" className="btn-ghost landing-cta-btn px-4 py-2.5 text-sm" onClick={() => void goTemplate("excel")}>
-                Download template
-              </button>
+              <DownloadTemplateMenu
+                buttonClassName="btn-secondary landing-cta-btn px-4 py-2.5 text-sm"
+                onSelect={(kind) => void goTemplate(kind)}
+              />
             </div>
             {demoError ? <p className="mt-3 text-sm text-rose-600 dark:text-rose-400">{demoError}</p> : null}
           </div>
@@ -350,12 +352,10 @@ export function LandingPage() {
                 {demoLoading ? <Spinner className="h-4 w-4" /> : null}
                 {demoButtonLabel}
               </button>
-              <button type="button" className="btn-secondary landing-cta-btn text-sm" onClick={() => void goTemplate("excel")}>
-                Download template
-              </button>
-              <button type="button" className="btn-ghost landing-cta-btn text-sm" onClick={() => void goTemplate("zip")}>
-                CSV package
-              </button>
+              <DownloadTemplateMenu
+                buttonClassName="btn-secondary landing-cta-btn text-sm"
+                onSelect={(kind) => void goTemplate(kind)}
+              />
             </div>
             {demoError ? <p className="mt-3 text-sm text-rose-600 dark:text-rose-400">{demoError}</p> : null}
           </Reveal>

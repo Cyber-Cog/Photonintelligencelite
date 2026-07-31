@@ -10,6 +10,7 @@ import {
   uploadFiles,
   waitForUploadReady,
 } from "@/api/client";
+import { DownloadTemplateMenu } from "@/components/DownloadTemplateMenu";
 import { StepIndicator } from "@/components/StepIndicator";
 import { ParseActivityConsole } from "@/components/upload/ParseActivityConsole";
 import { UploadFilesTable } from "@/components/upload/UploadFilesTable";
@@ -300,14 +301,13 @@ export function UploadPage() {
                 </button>
               ) : null}
               {path === "template" && !review ? (
-                <button
-                  type="button"
-                  className="btn-ghost text-xs"
+                <DownloadTemplateMenu
+                  buttonClassName="btn-ghost text-xs"
                   disabled={downloading !== null}
-                  onClick={() => void download("excel")}
-                >
-                  Download template
-                </button>
+                  downloading={downloading}
+                  onSelect={(kind) => void download(kind)}
+                  align="right"
+                />
               ) : null}
               {!replaceJobId && path ? (
                 <button type="button" className="btn-ghost text-xs" onClick={() => choosePath(path === "template" ? "own" : "template")}>
@@ -368,14 +368,12 @@ export function UploadPage() {
                       Prefer the Complete Analysis Pack for full fault coverage. Download, fill, then upload below.
                     </p>
                     <div className="mt-2 flex flex-wrap gap-2">
-                      <button type="button" className="btn-primary text-xs" disabled={downloading !== null} onClick={() => void download("excel")}>
-                        {downloading === "excel" ? <Spinner className="h-3.5 w-3.5" /> : null}
-                        Excel template
-                      </button>
-                      <button type="button" className="btn-secondary text-xs" disabled={downloading !== null} onClick={() => void download("zip")}>
-                        {downloading === "zip" ? <Spinner className="h-3.5 w-3.5" /> : null}
-                        CSV package
-                      </button>
+                      <DownloadTemplateMenu
+                        buttonClassName="btn-secondary text-xs"
+                        disabled={downloading !== null}
+                        downloading={downloading}
+                        onSelect={(kind) => void download(kind)}
+                      />
                     </div>
                     {dlError ? <p className="mt-2 text-sm text-rose-600">{dlError}</p> : null}
                   </div>
