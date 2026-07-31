@@ -134,3 +134,26 @@ class FunnelStats(BaseModel):
     failed: int
     abandoned: int
     demo: int
+
+
+class FaultModuleCategoryOut(BaseModel):
+    algorithm_id: str
+    label: str
+    hint: str = ""
+    category: str  # actionable | non_actionable
+    is_default: bool = True
+
+
+class FaultCategoriesOut(BaseModel):
+    actionable: list[str]
+    non_actionable: list[str]
+    categories: dict[str, str]
+    modules: list[FaultModuleCategoryOut]
+
+
+class FaultCategoriesUpdateRequest(BaseModel):
+    """Assign fault modules to actionable vs non-actionable buckets."""
+
+    actionable: list[str] | None = None
+    non_actionable: list[str] | None = None
+    categories: dict[str, str] | None = None

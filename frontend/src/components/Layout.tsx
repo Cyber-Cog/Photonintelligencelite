@@ -112,11 +112,14 @@ export function Layout({ children }: { children: ReactNode }) {
   const location = useLocation();
   const isLanding = location.pathname === "/";
   const isProcessing = /\/jobs\/[^/]+\/processing\/?$/.test(location.pathname);
-  const isJobView = /\/jobs\/[^/]+\/(dashboard|data|architecture|explore)\/?$/.test(location.pathname);
+  /** Locked viewport for tool panes that need internal scroll (Raw data / Explorer / Architecture).
+   * Results (dashboard) intentionally uses document scroll so charts are not frozen in nested traps. */
+  const isLockedJobView = /\/jobs\/[^/]+\/(data|architecture|explore)\/?$/.test(location.pathname);
+  const isResults = /\/jobs\/[^/]+\/dashboard\/?$/.test(location.pathname);
   const isWorkflow =
     location.pathname === "/upload" ||
     /^\/jobs\/[^/]+\/(setup|validate)\/?$/.test(location.pathname);
-  const shellMax = isProcessing || isJobView || isWorkflow ? "max-w-none" : "max-w-6xl";
+  const shellMax = isProcessing || isLockedJobView || isResults || isWorkflow ? "max-w-none" : "max-w-6xl";
   /** Shared horizontal padding so header / main / footer edges stay aligned. */
   const shellPadX = "px-4 sm:px-6 lg:px-8";
 
@@ -124,7 +127,7 @@ export function Layout({ children }: { children: ReactNode }) {
     rememberAppPath(`${location.pathname}${location.search}${location.hash}`);
   }, [location.pathname, location.search, location.hash]);
 
-  const fillViewport = isProcessing || isJobView;
+  const fillViewport = isProcessing || isLockedJobView;
 
   return (
     <div

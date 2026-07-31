@@ -441,3 +441,18 @@ export interface AuditEvent {
   detail: Record<string, unknown> | null;
   created_at: string;
 }
+
+export interface FaultModuleCategory {
+  algorithm_id: string;
+  label: string;
+  hint: string;
+  category: "actionable" | "non_actionable";
+  is_default: boolean;
+}
+
+export interface FaultCategoriesResponse {
+  actionable: string[];
+  non_actionable: string[];
+  categories: Record<string, "actionable" | "non_actionable">;
+  modules: FaultModuleCategory[];
+}

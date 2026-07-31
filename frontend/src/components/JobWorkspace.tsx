@@ -10,6 +10,9 @@ export const JOB_VIEWPORT_SHELL = "h-full min-h-0 flex-1";
 /**
  * One composition shell for Results / Raw data / Explorer / Architecture.
  * Nav + titlebar live in chrome; body is aside + main (or full-bleed children).
+ *
+ * `documentScroll`: Results mode — page scrolls as one document (no nested scroll prison).
+ * Omit for locked tool panes (Explorer / Raw data) that fill the viewport.
  */
 export function JobWorkspace({
   title,
@@ -21,6 +24,7 @@ export function JobWorkspace({
   children,
   mainClassName = "",
   flushMain = false,
+  documentScroll = false,
   footer,
   className = "",
   titleTour,
@@ -36,16 +40,25 @@ export function JobWorkspace({
   aside?: ReactNode;
   children: ReactNode;
   mainClassName?: string;
-  /** Diagnostics / bridge: main pane manages its own overflow. */
+  /** Diagnostics / bridge: main pane manages its own overflow (locked viewport only). */
   flushMain?: boolean;
+  /** Natural document scroll — use on Results so charts are not trapped. */
+  documentScroll?: boolean;
   footer?: ReactNode;
   className?: string;
   titleTour?: string;
   mainRef?: RefObject<HTMLDivElement>;
 }) {
+  const shell = documentScroll ? "min-h-0 w-full flex-1" : JOB_VIEWPORT_SHELL;
+  const rootOverflow = documentScroll ? "" : "overflow-hidden";
+
   return (
-    <div className={`tool-enter flex ${JOB_VIEWPORT_SHELL} flex-col overflow-hidden ${className}`}>
-      <div className="job-workspace flex min-h-0 flex-1 flex-col">
+    <div className={`tool-enter flex ${shell} flex-col ${rootOverflow} ${className}`}>
+      <div
+        className={`job-workspace flex min-h-0 flex-1 flex-col ${
+          documentScroll ? "job-workspace-document" : ""
+        }`}
+      >
         <header className="job-workspace-chrome">
           <div className="job-workspace-nav">
             <JobNav />
@@ -64,13 +77,19 @@ export function JobWorkspace({
         </header>
 
         {aside ? (
-          <div className="job-workspace-body">
+          <div className={`job-workspace-body ${documentScroll ? "job-workspace-body-document" : ""}`}>
             <aside className="job-workspace-aside" aria-label="Section navigation">
               {aside}
             </aside>
             <div
               ref={mainRef}
-              className={`job-workspace-main ${flushMain ? "job-workspace-main-flush" : ""} ${mainClassName}`}
+              className={`job-workspace-main ${
+                documentScroll
+                  ? "job-workspace-main-document"
+                  : flushMain
+                    ? "job-workspace-main-flush"
+                    : ""
+              } ${mainClassName}`}
               data-tour="results-main"
             >
               {children}
@@ -79,7 +98,13 @@ export function JobWorkspace({
         ) : (
           <div
             ref={mainRef}
-            className={`job-workspace-main min-h-0 flex-1 ${flushMain ? "job-workspace-main-flush" : ""} ${mainClassName}`}
+            className={`job-workspace-main min-h-0 flex-1 ${
+              documentScroll
+                ? "job-workspace-main-document"
+                : flushMain
+                  ? "job-workspace-main-flush"
+                  : ""
+            } ${mainClassName}`}
           >
             {children}
           </div>

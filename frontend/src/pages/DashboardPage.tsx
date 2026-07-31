@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ApiError, getResults, reportUrl } from "@/api/client";
+import { ApiError, getFaultCategories, getResults, reportUrl } from "@/api/client";
 import { BoxPlotAnalysisPanel } from "@/components/BoxPlotAnalysisPanel";
 import { EvidenceInvestigateModal } from "@/components/EvidenceInvestigateModal";
 import { FaultsTable } from "@/components/FaultsTable";
@@ -22,6 +22,10 @@ import {
   needsDataLine,
   orderDiagModules,
 } from "@/lib/diagnosticsModules";
+import {
+  DEFAULT_FAULT_CATEGORIES,
+  type FaultCategoriesResponse,
+} from "@/lib/faultCategories";
 import { buildFaultRows, type FaultRow } from "@/lib/faultsTable";
 import { diagnoseKpiGaps, fixHref } from "@/lib/missingReasons";
 import { buildOwnerActions } from "@/lib/ownerActions";
@@ -218,7 +222,7 @@ function DiagnosticsFolderList({
 
   return (
     <nav
-      className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-pic-lg border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)]"
+      className="flex w-full flex-col rounded-pic-lg border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)]"
       aria-label="Diagnostic modules"
       data-tour="diagnostics-folder-list"
     >
@@ -249,7 +253,7 @@ function DiagnosticsFolderList({
         )}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
+      <div className="p-2">
         {total === 0 ? (
           <p className="px-2 py-3 text-[11px] text-[color:var(--pic-text-muted)]">No modules for this run</p>
         ) : (
@@ -294,8 +298,23 @@ export function DashboardPage() {
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [investigateRow, setInvestigateRow] = useState<FaultRow | null>(null);
   const [folderCollapsed, setFolderCollapsed] = useState(false);
+  const [faultCategories, setFaultCategories] = useState<FaultCategoriesResponse>(DEFAULT_FAULT_CATEGORIES);
   const mainPaneRef = useRef<HTMLDivElement>(null);
   const modulesRef = useRef<ResultObject[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getFaultCategories()
+      .then((res) => {
+        if (!cancelled) setFaultCategories(res);
+      })
+      .catch(() => {
+        /* keep defaults */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!jobId) return;
@@ -525,7 +544,7 @@ export function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="tool-enter flex h-full min-h-0 flex-1 items-center justify-center gap-3 text-sm text-[color:var(--pic-text-muted)]">
+      <div className="tool-enter flex min-h-[40vh] flex-1 items-center justify-center gap-3 text-sm text-[color:var(--pic-text-muted)]">
         <Spinner className="h-5 w-5" /> Loading results…
       </div>
     );
@@ -556,6 +575,7 @@ export function DashboardPage() {
       title="Results"
       titleTour="results-welcome"
       subtitle={`${okCount} modules ready · ${blockedCount} need data`}
+      documentScroll
       status={
         <JobStatusChip tone={statusTone}>
           {thinResults ? "Limited coverage" : blockedCount > 0 ? "Partial mapping" : "Analysis ready"}
@@ -582,7 +602,7 @@ export function DashboardPage() {
               inset
             />
           </div>
-          <KpiStrip items={kpiItems} flush />
+          <KpiStrip items={kpiItems} flush compact />
           {thinResults ? (
             <div className="border-t border-[color:var(--pic-border-subtle)] px-3 py-2 sm:px-4">
               <InfoBanner
@@ -613,7 +633,6 @@ export function DashboardPage() {
           issueCount={ownerActions?.issueCount ?? 0}
         />
       }
-      flushMain={activeSection === "diagnostics" || activeSection === "bridge"}
       mainRef={mainPaneRef}
       footer={
         <button type="button" className="btn-ghost !px-2 !py-0.5 text-[11px]" onClick={handleNewAnalysis}>
@@ -622,31 +641,27 @@ export function DashboardPage() {
       }
     >
       {activeSection === "summary" && (
-        <div id="results-actions" data-results-pane="summary" className="job-pane flex flex-col gap-4 pb-6">
-          {/* Visual plant loss story — first composition after KPI board */}
-          <div
-            className="overflow-hidden rounded-pic-lg border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] shadow-pic"
+        <div id="results-actions" data-results-pane="summary" className="job-pane-tight flex flex-col gap-3 pb-6">
+          {/* Single bridge lives under Loss bridge — summary only links there (no duplicate chart). */}
+          <button
+            type="button"
             data-tour="summary-loss-preview"
+            onClick={() => selectSection("bridge")}
+            className="group flex w-full flex-wrap items-center justify-between gap-2 rounded-pic-lg border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] px-3.5 py-2.5 text-left shadow-pic transition hover:border-brand-300/70 hover:bg-brand-50/30 dark:hover:border-brand-700 dark:hover:bg-brand-950/20"
           >
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[color:var(--pic-border-subtle)] px-3.5 py-2.5">
-              <div>
-                <p className="tool-eyebrow mb-0.5">Energy story</p>
-                <h3 className="font-display text-sm font-semibold tracking-tight text-[color:var(--pic-text)]">
-                  Expected → losses → actual
-                </h3>
-              </div>
-              <button
-                type="button"
-                className="btn-ghost !px-2.5 !py-1 text-xs font-semibold text-brand-800 dark:text-brand-300"
-                onClick={() => selectSection("bridge")}
-              >
-                Open full loss bridge →
-              </button>
+            <div>
+              <p className="tool-eyebrow mb-0.5">Energy story</p>
+              <h3 className="font-display text-sm font-semibold tracking-tight text-[color:var(--pic-text)]">
+                Expected → losses → actual
+              </h3>
+              <p className="mt-0.5 text-[11px] text-[color:var(--pic-text-muted)]">
+                Open the Loss bridge for the waterfall chart and segment table.
+              </p>
             </div>
-            <div className="p-2 sm:p-3">
-              <LossWaterfallBridge kpis={data.kpis} results={data.results} jobId={jobId} compact embedded />
-            </div>
-          </div>
+            <span className="text-xs font-semibold text-brand-800 group-hover:underline dark:text-brand-300">
+              Open loss bridge →
+            </span>
+          </button>
 
           {ownerActions ? (
             <OwnerActionCenter
@@ -654,9 +669,10 @@ export function DashboardPage() {
               onInvestigate={investigateFinding}
               onModule={jumpToModule}
               onSection={(id) => selectSection(id)}
+              compact
             />
           ) : (
-            <div className="rounded-pic-lg border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] px-4 py-6 text-sm text-[color:var(--pic-text-muted)]">
+            <div className="rounded-pic-lg border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] px-4 py-4 text-sm text-[color:var(--pic-text-muted)]">
               No owner actions for this run.
             </div>
           )}
@@ -677,29 +693,29 @@ export function DashboardPage() {
           id="results-bridge"
           data-tour="loss-bridge"
           data-results-pane="bridge"
-          className="flex min-h-0 flex-1 flex-col p-3"
+          className="job-pane-tight pb-6"
         >
-          <LossWaterfallBridge kpis={data.kpis} results={data.results} jobId={jobId} fillHeight />
+          <LossWaterfallBridge kpis={data.kpis} results={data.results} jobId={jobId} />
         </div>
       )}
 
       {activeSection === "faults" && (
-        <div id="results-faults" data-tour="faults-table" data-results-pane="faults" className="job-pane pb-6">
-          <FaultsTable results={data.results} />
+        <div id="results-faults" data-tour="faults-table" data-results-pane="faults" className="job-pane-tight pb-6">
+          <FaultsTable results={data.results} categories={faultCategories} />
         </div>
       )}
 
       {activeSection === "diagnostics" && (
         <div
-          className="flex min-h-0 flex-1 flex-col gap-3 p-3 lg:flex-row"
+          className="flex flex-col gap-3 p-3 pb-6 lg:flex-row lg:items-start"
           data-tour="diagnostics"
           data-results-pane="diagnostics"
         >
           {folderCollapsed && (
-            <div className="hidden shrink-0 lg:flex lg:h-full lg:w-10 lg:flex-col">
+            <div className="hidden shrink-0 lg:flex lg:w-10 lg:flex-col">
               <button
                 type="button"
-                className="flex h-full w-full flex-col items-center gap-2 rounded-pic-lg border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] px-1 py-3 text-[color:var(--pic-text-muted)] transition hover:border-brand-300 hover:bg-brand-50/40 hover:text-brand-700 dark:hover:border-brand-700 dark:hover:bg-brand-950/30 dark:hover:text-brand-300"
+                className="flex w-full flex-col items-center gap-2 rounded-pic-lg border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] px-1 py-3 text-[color:var(--pic-text-muted)] transition hover:border-brand-300 hover:bg-brand-50/40 hover:text-brand-700 dark:hover:border-brand-700 dark:hover:bg-brand-950/30 dark:hover:text-brand-300"
                 onClick={() => setFolderCollapsed(false)}
                 title="Expand module folder"
                 aria-label="Expand module folder"
@@ -716,7 +732,7 @@ export function DashboardPage() {
             </div>
           )}
           <div
-            className={`max-h-[min(32vh,14rem)] min-w-0 shrink-0 overflow-hidden lg:max-h-none lg:h-full lg:w-[16rem] lg:max-w-[30%] lg:shrink-0 ${
+            className={`min-w-0 shrink-0 lg:sticky lg:top-2 lg:w-[16rem] lg:max-w-[30%] ${
               folderCollapsed ? "lg:hidden" : ""
             }`}
           >
@@ -729,10 +745,10 @@ export function DashboardPage() {
             />
           </div>
 
-          <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain lg:h-full lg:min-w-[70%]">
+          <div className="min-w-0 flex-1 lg:min-w-[70%]">
             {!activeModule ? (
               <div
-                className="flex h-full min-h-[12rem] flex-col items-center justify-center rounded-pic-lg border border-dashed border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] px-4 py-8 text-center"
+                className="flex min-h-[12rem] flex-col items-center justify-center rounded-pic-lg border border-dashed border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] px-4 py-8 text-center"
                 data-tour="diagnostics-empty"
               >
                 <p className="font-display text-sm font-semibold text-[color:var(--pic-text)]">

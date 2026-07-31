@@ -17,10 +17,18 @@ export type KpiStripItem = {
  * Plant KPI board — six visual tiles with tone washes and icons.
  * Prefer this over a flat label|value strip so the Results first viewport reads as a plant scoreboard.
  */
-export function KpiStrip({ items, flush = false }: { items: KpiStripItem[]; flush?: boolean }) {
+export function KpiStrip({
+  items,
+  flush = false,
+  compact = false,
+}: {
+  items: KpiStripItem[];
+  flush?: boolean;
+  compact?: boolean;
+}) {
   const board = (
     <div
-      className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6 lg:gap-2.5"
+      className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 ${compact ? "gap-1.5 lg:gap-2" : "gap-2 lg:gap-2.5"}`}
       data-tour="summary-kpis"
       role="group"
       aria-label="Plant KPIs"
@@ -36,6 +44,7 @@ export function KpiStrip({ items, flush = false }: { items: KpiStripItem[]; flus
           index={i}
           missingHint={item.missingHint}
           missingHref={item.missingHref}
+          compact={compact}
         />
       ))}
     </div>
@@ -43,7 +52,11 @@ export function KpiStrip({ items, flush = false }: { items: KpiStripItem[]; flus
 
   if (flush) {
     return (
-      <div className="border-t border-[color:var(--pic-border-subtle)] bg-[color:var(--pic-surface-inset)] px-3 py-2.5 sm:px-4">
+      <div
+        className={`border-t border-[color:var(--pic-border-subtle)] bg-[color:var(--pic-surface-inset)] sm:px-4 ${
+          compact ? "px-3 py-1.5" : "px-3 py-2.5"
+        }`}
+      >
         {board}
       </div>
     );

@@ -231,11 +231,14 @@ export function OwnerActionCenter({
   onInvestigate,
   onModule,
   onSection,
+  compact = false,
 }: {
   model: OwnerActionCenterModel;
   onInvestigate: (algorithmId: string) => void;
   onModule: (algorithmId: string) => void;
   onSection: (sectionId: "faults" | "bridge" | "diagnostics") => void;
+  /** Denser layout without nested scroll prisons (Results summary). */
+  compact?: boolean;
 }) {
   const [filter, setFilter] = useState<SeverityFilter>("all");
   const [selectedId, setSelectedId] = useState<string | null>(model.cards[0]?.id ?? null);
@@ -279,20 +282,26 @@ export function OwnerActionCenter({
 
   return (
     <section
-      className="flex min-h-[min(48vh,28rem)] flex-1 flex-col overflow-hidden rounded-pic-lg border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] shadow-pic"
+      className={`flex flex-col rounded-pic-lg border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] shadow-pic ${
+        compact ? "" : "min-h-[min(40vh,24rem)] overflow-hidden"
+      }`}
       role="region"
       aria-label="Owner action center"
       data-tour="owner-actions"
     >
       <div className="panel-rule shrink-0" aria-hidden />
 
-      <div className="flex shrink-0 flex-wrap items-start justify-between gap-3 border-b border-[color:var(--pic-border-subtle)] px-4 py-3.5 sm:px-5">
+      <div
+        className={`flex shrink-0 flex-wrap items-start justify-between gap-3 border-b border-[color:var(--pic-border-subtle)] ${
+          compact ? "px-3 py-2.5 sm:px-4" : "px-4 py-3.5 sm:px-5"
+        }`}
+      >
         <div className="min-w-0">
           <p className="tool-eyebrow">Action centre</p>
           <h3
-            className={`mt-1 font-display text-lg font-semibold tracking-tight sm:text-xl ${
-              model.healthy ? "text-accent-800 dark:text-accent-300" : "text-[color:var(--pic-text)]"
-            }`}
+            className={`mt-1 font-display font-semibold tracking-tight ${
+              compact ? "text-base sm:text-lg" : "text-lg sm:text-xl"
+            } ${model.healthy ? "text-accent-800 dark:text-accent-300" : "text-[color:var(--pic-text)]"}`}
           >
             {model.headline}
           </h3>
@@ -309,12 +318,16 @@ export function OwnerActionCenter({
       </div>
 
       {model.cards.length === 0 ? (
-        <p className="flex flex-1 items-center justify-center px-4 py-10 text-center text-sm text-[color:var(--pic-text-muted)] sm:px-5">
+        <p className="px-4 py-6 text-center text-sm text-[color:var(--pic-text-muted)] sm:px-5">
           No owner actions for this run. Use Loss bridge and Diagnostics for detail.
         </p>
       ) : (
         <>
-          <div className="flex shrink-0 flex-wrap gap-2 border-b border-[color:var(--pic-border-subtle)] px-4 py-2.5 sm:px-5">
+          <div
+            className={`flex shrink-0 flex-wrap gap-2 border-b border-[color:var(--pic-border-subtle)] ${
+              compact ? "px-3 py-2 sm:px-4" : "px-4 py-2.5 sm:px-5"
+            }`}
+          >
             <FilterChip active={filter === "all"} label="All" count={counts.all} onClick={() => setFilter("all")} />
             <FilterChip active={filter === "high"} label="High" count={counts.high} onClick={() => setFilter("high")} />
             <FilterChip
@@ -326,8 +339,16 @@ export function OwnerActionCenter({
             <FilterChip active={filter === "low"} label="Low" count={counts.low} onClick={() => setFilter("low")} />
           </div>
 
-          <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
-            <div className="min-h-[16rem] space-y-0.5 overflow-y-auto overscroll-contain border-b border-[color:var(--pic-border-subtle)] p-2 lg:min-h-0 lg:border-b-0 lg:border-r">
+          <div
+            className={`grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] ${
+              compact ? "" : "min-h-0 flex-1"
+            }`}
+          >
+            <div
+              className={`space-y-0.5 border-b border-[color:var(--pic-border-subtle)] p-2 lg:border-b-0 lg:border-r ${
+                compact ? "" : "min-h-[16rem] overflow-y-auto overscroll-contain lg:min-h-0"
+              }`}
+            >
               {filtered.length === 0 ? (
                 <p className="px-2.5 py-6 text-center text-xs text-[color:var(--pic-text-muted)]">No issues in this severity band.</p>
               ) : (
@@ -342,7 +363,11 @@ export function OwnerActionCenter({
               )}
             </div>
 
-            <div className="min-h-[16rem] overflow-y-auto overscroll-contain bg-[color:var(--pic-surface-inset)] lg:min-h-0">
+            <div
+              className={`bg-[color:var(--pic-surface-inset)] ${
+                compact ? "" : "min-h-[16rem] overflow-y-auto overscroll-contain lg:min-h-0"
+              }`}
+            >
               {selected ? (
                 <ActionDetail
                   card={selected}

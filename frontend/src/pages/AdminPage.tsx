@@ -11,7 +11,8 @@ import {
   getLastAppPath,
   resolveExitAdmin,
 } from "@/lib/adminReturn";
-import type { AdminJob, AdminSession, AdminUser, AuditEvent, FunnelStats } from "@/types";
+import type { AdminJob, AdminSession, AdminUser, AuditEvent, FaultCategoriesResponse, FunnelStats } from "@/types";
+import { DEFAULT_FAULT_CATEGORIES, type FaultCategory } from "@/lib/faultCategories";
 
 type EditDraft = { name: string; role: "user" | "superadmin" };
 
@@ -243,12 +244,146 @@ function UserActions({
   );
 }
 
+function FaultCategoriesPanel() {
+  const [data, setData] = useState<FaultCategoriesResponse>(DEFAULT_FAULT_CATEGORIES);
+  const [draft, setDraft] = useState<Record<string, FaultCategory>>({});
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  const load = async () => {
+    setErr(null);
+    setLoading(true);
+    try {
+      const res = await adminApi.faultCategories();
+      setData(res);
+      setDraft({ ...res.categories });
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : "Failed to load fault categories.");
+      setData(DEFAULT_FAULT_CATEGORIES);
+      setDraft({ ...DEFAULT_FAULT_CATEGORIES.categories });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void load();
+  }, []);
+
+  const dirty = data.modules.some((m) => (draft[m.algorithm_id] ?? m.category) !== m.category);
+
+  const save = async () => {
+    setBusy(true);
+    setErr(null);
+    setSaved(false);
+    try {
+      const actionable = Object.entries(draft)
+        .filter(([, c]) => c === "actionable")
+        .map(([id]) => id);
+      const non_actionable = Object.entries(draft)
+        .filter(([, c]) => c === "non_actionable")
+        .map(([id]) => id);
+      const res = await adminApi.updateFaultCategories({ actionable, non_actionable });
+      setData(res);
+      setDraft({ ...res.categories });
+      setSaved(true);
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : "Failed to save.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const resetDefaults = () => {
+    const next: Record<string, FaultCategory> = {};
+    for (const m of DEFAULT_FAULT_CATEGORIES.modules) {
+      next[m.algorithm_id] = m.category;
+    }
+    setDraft(next);
+  };
+
+  if (loading) {
+    return <p className="text-sm text-stone-500">Loading fault categories…</p>;
+  }
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="font-display text-lg font-semibold text-stone-900 dark:text-stone-50">
+          Fault actionability
+        </h2>
+        <p className="mt-1 max-w-2xl text-sm text-stone-500">
+          Classify fault modules as Actionable (field / ops response) or Non-actionable (informational /
+          design limits). Results Faults tabs use this classification.
+        </p>
+      </div>
+
+      {err ? <p className="text-sm text-rose-600">{err}</p> : null}
+      {saved && !dirty ? <p className="text-sm text-emerald-700 dark:text-emerald-400">Saved.</p> : null}
+
+      <div className="overflow-x-auto rounded-xl border border-stone-200 dark:border-stone-800">
+        <table className="w-full text-left text-sm">
+          <thead className="bg-stone-50 text-xs uppercase text-stone-400 dark:bg-stone-900/60">
+            <tr>
+              <th className="px-3 py-2">Module</th>
+              <th className="px-3 py-2">Category</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(data.modules.length ? data.modules : DEFAULT_FAULT_CATEGORIES.modules).map((m) => {
+              const value = draft[m.algorithm_id] ?? m.category;
+              return (
+                <tr key={m.algorithm_id} className="border-t border-stone-100 dark:border-stone-900">
+                  <td className="px-3 py-2.5">
+                    <div className="font-medium text-stone-800 dark:text-stone-100">{m.label}</div>
+                    <div className="text-[11px] text-stone-500">{m.hint || m.algorithm_id}</div>
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <select
+                      className="input max-w-xs text-sm"
+                      value={value}
+                      disabled={busy}
+                      onChange={(e) =>
+                        setDraft((d) => ({
+                          ...d,
+                          [m.algorithm_id]: e.target.value as FaultCategory,
+                        }))
+                      }
+                    >
+                      <option value="actionable">Actionable</option>
+                      <option value="non_actionable">Non-actionable</option>
+                    </select>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className="btn-primary text-xs" disabled={busy || !dirty} onClick={() => void save()}>
+          {busy ? "Saving…" : "Save categories"}
+        </button>
+        <button type="button" className="btn-ghost text-xs" disabled={busy} onClick={resetDefaults}>
+          Reset to defaults
+        </button>
+        <button type="button" className="btn-ghost text-xs" disabled={busy} onClick={() => void load()}>
+          Reload
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function AdminConsole() {
   const { user: me } = useAuth();
   const { jobId } = useJob();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [tab, setTab] = useState<"users" | "sessions" | "jobs" | "audit">("users");
+  const [tab, setTab] = useState<"users" | "sessions" | "jobs" | "audit" | "settings">("users");
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [sessions, setSessions] = useState<AdminSession[]>([]);
   const [jobs, setJobs] = useState<AdminJob[]>([]);
@@ -348,7 +483,7 @@ function AdminConsole() {
       ) : null}
 
       <div className="flex flex-wrap gap-2 border-b border-stone-200 pb-2 dark:border-stone-800">
-        {(["users", "sessions", "jobs", "audit"] as const).map((t) => (
+        {(["users", "sessions", "jobs", "audit", "settings"] as const).map((t) => (
           <button
             key={t}
             type="button"
@@ -500,6 +635,8 @@ function AdminConsole() {
           </div>
         </div>
       ) : null}
+
+      {tab === "settings" ? <FaultCategoriesPanel /> : null}
 
       {editing ? (
         <EditUserModal

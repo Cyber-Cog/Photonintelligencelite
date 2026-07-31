@@ -23,9 +23,12 @@ from backend.app.schemas_auth import (
     AdminUserOut,
     AdminUserUpdateRequest,
     AuditEventOut,
+    FaultCategoriesOut,
+    FaultCategoriesUpdateRequest,
     FunnelStats,
     MessageResponse,
 )
+from backend.app.services import fault_categories as fault_cat_service
 
 logger = logging.getLogger("pic_lite.admin")
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -396,6 +399,51 @@ def funnel_stats(
         abandoned=db.query(func.count(Job.id)).filter(Job.abandoned_at.isnot(None)).scalar() or 0,
         demo=db.query(func.count(Job.id)).filter(Job.is_demo.is_(True)).scalar() or 0,
     )
+
+
+@router.get("/fault-categories", response_model=FaultCategoriesOut)
+def get_fault_categories(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_superadmin),
+):
+    return FaultCategoriesOut(**fault_cat_service.category_payload(db))
+
+
+@router.put("/fault-categories", response_model=FaultCategoriesOut)
+def put_fault_categories(
+    payload: FaultCategoriesUpdateRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_superadmin),
+    _: None = Depends(enforce_csrf),
+):
+    if (
+        payload.categories is None
+        and payload.actionable is None
+        and payload.non_actionable is None
+    ):
+        raise HTTPException(400, "Provide categories or actionable / non_actionable lists.")
+    try:
+        data = fault_cat_service.save_categories(
+            db,
+            actionable=payload.actionable,
+            non_actionable=payload.non_actionable,
+            categories=payload.categories,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    record_audit(
+        db,
+        action="admin.fault_categories.update",
+        user_id=admin.id,
+        ip=client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+        detail={
+            "actionable": data.get("actionable"),
+            "non_actionable": data.get("non_actionable"),
+        },
+    )
+    return FaultCategoriesOut(**data)
 
 
 @router.get("/audit", response_model=list[AuditEventOut])

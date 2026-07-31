@@ -267,6 +267,24 @@
     display: flex;
     flex-direction: column;
   }
+  /* Results: document scroll — sticky aside, main grows with content (no nested overflow). */
+  .job-workspace-document {
+    min-height: 0;
+  }
+  .job-workspace-body-document {
+    overflow: visible;
+    align-items: flex-start;
+  }
+  .job-workspace-body-document .job-workspace-aside {
+    position: sticky;
+    top: 0.5rem;
+    max-height: calc(100vh - 6rem);
+  }
+  .job-workspace-main-document {
+    overflow: visible;
+    min-height: 0;
+    flex: 1;
+  }
   .job-pane {
     padding: var(--pic-space-4);
   }

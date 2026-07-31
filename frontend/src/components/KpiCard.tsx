@@ -87,6 +87,7 @@ export function KpiCard({
   index = 0,
   missingHint,
   missingHref,
+  compact = false,
 }: {
   label: string;
   value: number | string | null;
@@ -97,6 +98,7 @@ export function KpiCard({
   index?: number;
   missingHint?: string | null;
   missingHref?: string | null;
+  compact?: boolean;
 }) {
   const unavailable = value === null || value === undefined;
   const display = unavailable ? "—" : value;
@@ -133,13 +135,15 @@ export function KpiCard({
         {ICON_PATHS[icon]}
       </svg>
 
-      <div className="relative flex flex-col gap-1 px-3 pb-2.5 pt-2.5">
+      <div className={`relative flex flex-col gap-1 ${compact ? "px-2.5 pb-2 pt-2" : "px-3 pb-2.5 pt-2.5"}`}>
         <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-stone-500 dark:text-stone-400">
           {label}
         </p>
 
         <p
-          className={`font-display text-[1.5rem] font-bold leading-none tracking-tight tabular-nums ${valueClass}`}
+          className={`font-display font-bold leading-none tracking-tight tabular-nums ${
+            compact ? "text-[1.25rem]" : "text-[1.5rem]"
+          } ${valueClass}`}
         >
           {display}
           {!unavailable && unit ? (

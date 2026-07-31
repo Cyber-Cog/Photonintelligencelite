@@ -126,3 +126,17 @@ class MappingTemplate(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     last_used_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     use_count: Mapped[int] = mapped_column(default=1)
+
+
+class AppSetting(Base):
+    """Platform-wide key/value JSON settings (superadmin-editable).
+
+    Used for fault actionability categories and similar product config that must
+    persist across deploys without shipping a new release.
+    """
+
+    __tablename__ = "app_settings"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)

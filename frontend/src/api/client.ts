@@ -447,7 +447,24 @@ export const adminApi = {
     const qs = q.toString();
     return apiFetch<import("@/types").AuditEvent[]>(`/api/admin/audit${qs ? `?${qs}` : ""}`);
   },
+  faultCategories: () =>
+    apiFetch<import("@/types").FaultCategoriesResponse>("/api/admin/fault-categories"),
+  updateFaultCategories: (body: {
+    actionable?: string[];
+    non_actionable?: string[];
+    categories?: Record<string, "actionable" | "non_actionable">;
+  }) =>
+    apiFetch<import("@/types").FaultCategoriesResponse>("/api/admin/fault-categories", {
+      method: "PUT",
+      headers: authHeaders(),
+      body: JSON.stringify(body),
+    }),
 };
+
+/** Public config — Results uses this for Actionable / Non-actionable tabs. */
+export function getFaultCategories() {
+  return apiFetch<import("@/types").FaultCategoriesResponse>("/api/config/fault-categories");
+}
 
 export async function submitMapping(jobId: string, columnToCanonical: Record<string, string>) {
   return apiFetch<{ job_id: string; state: string }>("/api/mapping", {
