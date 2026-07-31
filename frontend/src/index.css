@@ -447,7 +447,7 @@
   }
 
   .tool-eyebrow {
-    @apply font-display text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-700 dark:text-brand-400;
+    @apply font-display text-[11px] font-semibold uppercase tracking-[0.16em] leading-normal text-brand-700 dark:text-brand-400;
   }
 
   /* Flow pages (Upload / Setup / Validate) — full workspace width */
@@ -1448,7 +1448,8 @@ html.dark .tour-btn-next:hover {
 
 .proc-status-strip {
   position: relative;
-  overflow: hidden;
+  /* Do not clip display-font ascenders (Building reports, In progress, etc.) */
+  overflow: visible;
 }
 
 .proc-progress-pulse {

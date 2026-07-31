@@ -183,17 +183,17 @@ export function ProcessingPage() {
         ) : (
           <>
             {/* Status strip — compact so console/chart dominate */}
-            <header className="proc-status-strip flex flex-col gap-2 rounded-xl border border-stone-200/90 bg-white/90 px-3 py-2.5 shadow-sm shadow-stone-900/[0.03] dark:border-stone-700 dark:bg-stone-900/90 dark:shadow-none sm:flex-row sm:items-center sm:justify-between">
+            <header className="proc-status-strip flex flex-col gap-2.5 rounded-xl border border-stone-200/90 bg-white/90 px-3 py-3 shadow-sm shadow-stone-900/[0.03] dark:border-stone-700 dark:bg-stone-900/90 dark:shadow-none sm:flex-row sm:items-center sm:justify-between sm:px-4 sm:py-3.5">
               <div className="flex min-w-0 items-start gap-2.5">
-                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-50 dark:bg-brand-950/40">
+                <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-50 dark:bg-brand-950/40">
                   <Spinner className="h-4 w-4" />
                 </div>
-                <div className="min-w-0">
-                  <p className="tool-eyebrow mb-0.5">In progress · {formatElapsed(elapsedSec)}</p>
-                  <h2 className="font-display text-base font-semibold tracking-tight text-stone-900 dark:text-stone-50 sm:text-lg">
+                <div className="min-w-0 flex-1">
+                  <p className="tool-eyebrow mb-1">In progress · {formatElapsed(elapsedSec)}</p>
+                  <h2 className="font-display text-base font-semibold leading-snug tracking-tight text-stone-900 dark:text-stone-50 sm:text-lg">
                     {stateLabel}
                   </h2>
-                  <p className="mt-0.5 line-clamp-2 text-sm text-stone-500 dark:text-stone-400">{detail}</p>
+                  <p className="mt-1 text-sm leading-snug text-stone-500 dark:text-stone-400">{detail}</p>
                   {status?.queue_position != null && status.queue_position > 0 && (
                     <p className="mt-1 text-xs text-stone-400">
                       In queue (workers busy) · Position {status.queue_position}
@@ -204,8 +204,8 @@ export function ProcessingPage() {
                 </div>
               </div>
               {status && (
-                <div className="w-full shrink-0 sm:w-44">
-                  <div className="mb-1 flex justify-between text-[10px] font-semibold uppercase tracking-wide text-stone-400">
+                <div className="w-full shrink-0 sm:w-48">
+                  <div className="mb-1.5 flex justify-between text-[10px] font-semibold uppercase leading-normal tracking-wide text-stone-400">
                     <span>Pipeline</span>
                     <span className="tabular-nums text-brand-700 dark:text-brand-400">
                       {progressPct(status.state)}%

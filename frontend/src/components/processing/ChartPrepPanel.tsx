@@ -155,11 +155,11 @@ export function ChartPrepPanel({ state }: { state: string | null | undefined }) 
       className="proc-panel flex min-h-0 flex-col overflow-hidden lg:w-[min(100%,24rem)] lg:shrink-0"
       aria-label="Chart preparation"
     >
-      <header className="flex shrink-0 items-center justify-between gap-2 border-b border-stone-200/80 px-3 py-1.5 dark:border-stone-700/80">
-        <span className="font-display text-[11px] font-semibold uppercase tracking-[0.14em] text-stone-600 dark:text-stone-300">
+      <header className="flex shrink-0 items-center justify-between gap-2 border-b border-stone-200/80 px-3 py-2 dark:border-stone-700/80">
+        <span className="font-display text-[11px] font-semibold uppercase leading-normal tracking-[0.14em] text-stone-600 dark:text-stone-300">
           Chart prep
         </span>
-        <span className="truncate text-[10px] text-stone-400 dark:text-stone-500">{statusCopy}</span>
+        <span className="min-w-0 truncate text-[10px] leading-normal text-stone-400 dark:text-stone-500">{statusCopy}</span>
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto p-2">
