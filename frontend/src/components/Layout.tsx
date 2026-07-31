@@ -206,10 +206,6 @@ export function Layout({ children }: { children: ReactNode }) {
       </main>
       <footer className={`shrink-0 app-footer ${isLanding ? "app-footer-landing" : ""} ${fillViewport ? "app-footer-compact" : ""}`}>
         <div className={`mx-auto flex w-full ${shellMax} flex-wrap items-center justify-center gap-x-1.5 gap-y-1 ${shellPadX}`}>
-          <BrandWordmark variant="footer" />
-          <span className="leading-none text-stone-300 dark:text-stone-600" aria-hidden>
-            ·
-          </span>
           <span className="leading-none">Solar SCADA analytics</span>
           <span className="leading-none text-stone-300 dark:text-stone-600" aria-hidden>
             ·

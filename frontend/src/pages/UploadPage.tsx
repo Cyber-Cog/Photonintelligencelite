@@ -295,11 +295,6 @@ export function UploadPage() {
                   Back to Setup
                 </Link>
               )}
-              {!review ? (
-                <button type="button" className="btn-secondary text-xs" onClick={() => inputRef.current?.click()}>
-                  Browse files
-                </button>
-              ) : null}
               {path === "template" && !review ? (
                 <DownloadTemplateMenu
                   buttonClassName="btn-ghost text-xs"
@@ -365,16 +360,9 @@ export function UploadPage() {
                 {path === "template" ? (
                   <div className="rounded-xl border border-brand-200/70 bg-brand-50/50 px-4 py-3 dark:border-brand-700/45 dark:bg-brand-950/20">
                     <p className="text-sm text-[color:var(--pic-text-secondary)]">
-                      Prefer the Complete Analysis Pack for full fault coverage. Download, fill, then upload below.
+                      Prefer the Complete Analysis Pack for full fault coverage. Download the template from the header,
+                      fill it, then upload below.
                     </p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <DownloadTemplateMenu
-                        buttonClassName="btn-secondary text-xs"
-                        disabled={downloading !== null}
-                        downloading={downloading}
-                        onSelect={(kind) => void download(kind)}
-                      />
-                    </div>
                     {dlError ? <p className="mt-2 text-sm text-rose-600">{dlError}</p> : null}
                   </div>
                 ) : null}
