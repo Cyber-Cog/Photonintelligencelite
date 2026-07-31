@@ -117,6 +117,8 @@ export function Layout({ children }: { children: ReactNode }) {
     location.pathname === "/upload" ||
     /^\/jobs\/[^/]+\/(setup|validate)\/?$/.test(location.pathname);
   const shellMax = isProcessing || isJobView || isWorkflow ? "max-w-none" : "max-w-6xl";
+  /** Shared horizontal padding so header / main / footer edges stay aligned. */
+  const shellPadX = "px-4 sm:px-6 lg:px-8";
 
   useEffect(() => {
     rememberAppPath(`${location.pathname}${location.search}${location.hash}`);
@@ -152,7 +154,7 @@ export function Layout({ children }: { children: ReactNode }) {
         </div>
       ) : null}
       <header className={`shrink-0 app-header ${isLanding ? "app-header-landing" : ""}`}>
-        <div className={`flex h-14 w-full ${shellMax} items-center gap-3 px-4 sm:gap-4 sm:px-6 lg:px-8`}>
+        <div className={`mx-auto flex h-14 w-full ${shellMax} items-center gap-3 sm:gap-4 ${shellPadX}`}>
           <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-5">
             <BrandWordmark variant="header" linkHome />
             <nav className="hidden items-center gap-0.5 sm:flex" aria-label="Primary">
@@ -196,14 +198,14 @@ export function Layout({ children }: { children: ReactNode }) {
           isLanding
             ? "relative flex w-full flex-1 flex-col"
             : fillViewport
-              ? `relative flex w-full ${shellMax} min-h-0 flex-1 flex-col overflow-hidden px-3 py-2 sm:px-4 lg:px-6`
-              : `relative flex w-full ${shellMax} flex-1 flex-col px-4 py-5 sm:px-6 lg:px-8`
+              ? `relative mx-auto flex w-full ${shellMax} min-h-0 flex-1 flex-col overflow-hidden py-2 ${shellPadX}`
+              : `relative mx-auto flex w-full ${shellMax} flex-1 flex-col py-5 ${shellPadX}`
         }
       >
         {children}
       </main>
       <footer className={`shrink-0 app-footer ${isLanding ? "app-footer-landing" : ""} ${fillViewport ? "app-footer-compact" : ""}`}>
-        <div className={`flex w-full ${shellMax} flex-wrap items-center justify-center gap-x-1.5 gap-y-1 px-4 sm:px-6 lg:px-8`}>
+        <div className={`mx-auto flex w-full ${shellMax} flex-wrap items-center justify-center gap-x-1.5 gap-y-1 ${shellPadX}`}>
           <BrandWordmark variant="footer" />
           <span className="leading-none text-stone-300 dark:text-stone-600" aria-hidden>
             ·
