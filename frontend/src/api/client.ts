@@ -281,6 +281,9 @@ export async function waitForUploadReady(
         file_inventory: ctx.file_inventory ?? [],
         total_rows: ctx.total_rows ?? 0,
         signal_checklist: ctx.signal_checklist ?? [],
+        hierarchy_overview: ctx.hierarchy_overview ?? [],
+        architecture_summary: ctx.architecture_summary ?? null,
+        module_impact_preview: ctx.module_impact_preview ?? null,
         original_filename: ctx.original_filename ?? null,
       };
     }

@@ -445,7 +445,7 @@ export function ValidationPage() {
           {(validation.module_readiness?.length ?? 0) > 0 && (
             <SectionPanel
               title="Fault / diagnostic module readiness"
-              description="Blocked modules list explicit missing signals or config. Box plot is an analysis tool (not a fault). Validation uses populated columns only — empty schema columns do not count as available."
+              description="Confirmed after parsing your rows — not a repeat of Upload detection. Blocked modules list missing signals or config. Validation uses populated columns only."
               accent="brand"
               scrollMargin={false}
             >

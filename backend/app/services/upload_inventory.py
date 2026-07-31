@@ -11,6 +11,7 @@ from analytics.common.aliasing import score_columns
 from analytics.common.complete_analysis_pack import looks_like_complete_pack
 from backend.app.services.mapping_service import suggest_mapping
 from backend.app.services.merge_uploads import _classify, _timestamp_col
+from backend.app.services.upload_intelligence import build_hierarchy_levels, enrich_file_inventory_item
 
 # Canonical fields surfaced on the Upload “required signals” checklist.
 CHECKLIST_FIELDS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
@@ -108,16 +109,19 @@ def inventory_item_from_csv(
     if parse_report:
         sheet_name = sheet_name or parse_report.get("sheet_name")
     pack_like = looks_like_complete_pack(columns)
-    return {
-        "filename": display_name,
-        "sheet_name": sheet_name,
-        "row_count": int(len(df)),
-        "detected_as": _detected_as_label(kind, present, unmapped, pack_like=pack_like),
-        "signals_present": sorted(present),
-        "unmapped_column_count": unmapped,
-        "date_range_start": start,
-        "date_range_end": end,
-    }
+    return enrich_file_inventory_item(
+        {
+            "filename": display_name,
+            "sheet_name": sheet_name,
+            "row_count": int(len(df)),
+            "detected_as": _detected_as_label(kind, present, unmapped, pack_like=pack_like),
+            "signals_present": sorted(present),
+            "hierarchy_levels": build_hierarchy_levels(present),
+            "unmapped_column_count": unmapped,
+            "date_range_start": start,
+            "date_range_end": end,
+        }
+    )
 
 
 def build_inventory_from_parts(
@@ -221,7 +225,7 @@ def inventory_from_job(paths, original_label: str | None = None) -> tuple[list[d
     files = manifest.get("files") or []
     row_count = int(manifest.get("row_count") or 0)
     if files:
-        return files, row_count
+        return [enrich_file_inventory_item(dict(f)) for f in files], row_count
 
     csv_path = paths.raw_dir / "input.csv"
     if not csv_path.exists():

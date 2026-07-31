@@ -10,23 +10,27 @@ type Props = {
 export function UploadReviewBar({ review, onClear, onContinue, continuing }: Props) {
   const fileCount = review.file_inventory?.length ?? 0;
   const rows = review.total_rows ?? 0;
-  const missing = (review.signal_checklist ?? []).filter((c) => !c.present && !c.setup_only);
-  const setupOnly = (review.signal_checklist ?? []).filter((c) => !c.present && c.setup_only);
+  const arch = review.architecture_summary;
+  const impact = review.module_impact_preview;
+  const blocked = impact?.blocked_count ?? 0;
 
   const summaryParts = [
     `${fileCount} file${fileCount === 1 ? "" : "s"}`,
     `${rows.toLocaleString()} rows`,
   ];
   if (review.looks_like_complete_pack) {
-    summaryParts.push("Complete Analysis Pack detected");
+    summaryParts.push("Complete Analysis Pack");
+  }
+  if (arch?.detected) {
+    summaryParts.push(`${arch.inverter_count} inv · ${arch.scb_count} SCB`);
   }
 
   const status =
-    missing.length > 0
-      ? `${missing.length} signal${missing.length === 1 ? "" : "s"} missing — map in Setup`
-      : setupOnly.length > 0
-        ? `${setupOnly.length} item${setupOnly.length === 1 ? "" : "s"} to confirm in Setup`
-        : "Ready for Setup";
+    blocked > 0
+      ? `${blocked} analysis module${blocked === 1 ? "" : "s"} may not run — review impact panel, then continue to Setup`
+      : arch?.detected
+        ? "Signals and architecture detected — continue to Setup"
+        : "Continue to Setup to confirm mapping and architecture";
 
   return (
     <div className="workflow-action-bar">
@@ -36,7 +40,7 @@ export function UploadReviewBar({ review, onClear, onContinue, continuing }: Pro
             <p className="text-[color:var(--pic-text-secondary)]">{summaryParts.join(" · ")}</p>
             <p
               className={`text-xs ${
-                missing.length > 0 ? "text-amber-700 dark:text-amber-400" : "text-[color:var(--pic-text-muted)]"
+                blocked > 0 ? "text-amber-700 dark:text-amber-400" : "text-[color:var(--pic-text-muted)]"
               }`}
             >
               {status}

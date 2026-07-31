@@ -30,12 +30,52 @@ export interface ExcelParseReport {
   needs_header_confirm?: boolean;
 }
 
+export interface UploadHierarchySignalItem {
+  id: string;
+  label: string;
+  present: boolean;
+  detected_via?: string | null;
+}
+
+export interface UploadHierarchyLevel {
+  level_id: string;
+  title: string;
+  signals: UploadHierarchySignalItem[];
+  detected_count: number;
+  total_count: number;
+}
+
+export interface UploadArchitectureSummary {
+  detected: boolean;
+  source: string;
+  inverter_count: number;
+  scb_count: number;
+  string_count: number;
+  notes: string[];
+}
+
+export interface UploadModuleImpactItem {
+  algorithm_id: string;
+  title: string;
+  message: string;
+  missing_fields: string[];
+  missing_config: string[];
+}
+
+export interface UploadModuleImpactPreview {
+  preview_note: string;
+  ready_count: number;
+  blocked_count: number;
+  blocked_modules: UploadModuleImpactItem[];
+}
+
 export interface UploadFileInventoryItem {
   filename: string;
   sheet_name?: string | null;
   row_count: number;
   detected_as: string;
   signals_present: string[];
+  hierarchy_levels?: UploadHierarchyLevel[];
   unmapped_column_count: number;
   date_range_start?: string | null;
   date_range_end?: string | null;
@@ -61,6 +101,9 @@ export interface UploadResponse {
   file_inventory?: UploadFileInventoryItem[];
   total_rows?: number;
   signal_checklist?: UploadSignalCheckItem[];
+  hierarchy_overview?: UploadHierarchyLevel[];
+  architecture_summary?: UploadArchitectureSummary | null;
+  module_impact_preview?: UploadModuleImpactPreview | null;
   original_filename?: string | null;
 }
 
@@ -186,6 +229,9 @@ export interface SetupContextResponse {
   file_inventory?: UploadFileInventoryItem[];
   total_rows?: number;
   signal_checklist?: UploadSignalCheckItem[];
+  hierarchy_overview?: UploadHierarchyLevel[];
+  architecture_summary?: UploadArchitectureSummary | null;
+  module_impact_preview?: UploadModuleImpactPreview | null;
   original_filename?: string | null;
 }
 

@@ -29,6 +29,45 @@ class ExcelParseReportOut(BaseModel):
     needs_header_confirm: bool = False
 
 
+class UploadHierarchySignalItem(BaseModel):
+    id: str
+    label: str
+    present: bool
+    detected_via: Optional[str] = None
+
+
+class UploadHierarchyLevel(BaseModel):
+    level_id: str
+    title: str
+    signals: list[UploadHierarchySignalItem] = Field(default_factory=list)
+    detected_count: int = 0
+    total_count: int = 0
+
+
+class UploadArchitectureSummary(BaseModel):
+    detected: bool = False
+    source: str = "not_detected"
+    inverter_count: int = 0
+    scb_count: int = 0
+    string_count: int = 0
+    notes: list[str] = Field(default_factory=list)
+
+
+class UploadModuleImpactItem(BaseModel):
+    algorithm_id: str
+    title: str
+    message: str
+    missing_fields: list[str] = Field(default_factory=list)
+    missing_config: list[str] = Field(default_factory=list)
+
+
+class UploadModuleImpactPreview(BaseModel):
+    preview_note: str = ""
+    ready_count: int = 0
+    blocked_count: int = 0
+    blocked_modules: list[UploadModuleImpactItem] = Field(default_factory=list)
+
+
 class UploadFileInventoryItem(BaseModel):
     """One row in the Upload review “Files in this job” table."""
 
@@ -37,6 +76,7 @@ class UploadFileInventoryItem(BaseModel):
     row_count: int = 0
     detected_as: str = "SCADA data"
     signals_present: list[str] = Field(default_factory=list)
+    hierarchy_levels: list[UploadHierarchyLevel] = Field(default_factory=list)
     unmapped_column_count: int = 0
     date_range_start: Optional[str] = None
     date_range_end: Optional[str] = None
@@ -63,6 +103,9 @@ class UploadResponse(BaseModel):
     file_inventory: list[UploadFileInventoryItem] = Field(default_factory=list)
     total_rows: int = 0
     signal_checklist: list[UploadSignalCheckItem] = Field(default_factory=list)
+    hierarchy_overview: list[UploadHierarchyLevel] = Field(default_factory=list)
+    architecture_summary: Optional[UploadArchitectureSummary] = None
+    module_impact_preview: Optional[UploadModuleImpactPreview] = None
     original_filename: Optional[str] = None
 
 
@@ -212,6 +255,9 @@ class SetupContextResponse(BaseModel):
     file_inventory: list[UploadFileInventoryItem] = Field(default_factory=list)
     total_rows: int = 0
     signal_checklist: list[UploadSignalCheckItem] = Field(default_factory=list)
+    hierarchy_overview: list[UploadHierarchyLevel] = Field(default_factory=list)
+    architecture_summary: Optional[UploadArchitectureSummary] = None
+    module_impact_preview: Optional[UploadModuleImpactPreview] = None
     original_filename: Optional[str] = None
 
 

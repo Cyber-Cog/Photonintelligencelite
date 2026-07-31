@@ -14,7 +14,7 @@ import { StepIndicator } from "@/components/StepIndicator";
 import { ParseActivityConsole } from "@/components/upload/ParseActivityConsole";
 import { UploadFilesTable } from "@/components/upload/UploadFilesTable";
 import { UploadReviewBar } from "@/components/upload/UploadReviewBar";
-import { UploadSignalSidebar } from "@/components/upload/UploadSignalSidebar";
+import { UploadIntelligencePanel } from "@/components/upload/UploadIntelligencePanel";
 import {
   useParseActivityLog,
   type UploadActivityPhase,
@@ -419,9 +419,10 @@ export function UploadPage() {
             ) : null}
           </div>
 
-          <UploadSignalSidebar
-            checklist={review?.signal_checklist ?? []}
-            looksLikePack={Boolean(review?.looks_like_complete_pack)}
+          <UploadIntelligencePanel
+            hierarchy={review?.hierarchy_overview ?? []}
+            architecture={review?.architecture_summary}
+            moduleImpact={review?.module_impact_preview}
             showPlaceholder={!review}
           />
         </div>

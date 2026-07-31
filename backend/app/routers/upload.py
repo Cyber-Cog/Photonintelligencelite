@@ -23,7 +23,15 @@ from backend.app.auth.rate_limit import client_ip
 from backend.app.config import Settings, get_settings
 from backend.app.database import SessionLocal, get_db
 from backend.app.models import Job, User
-from backend.app.schemas import ExcelParseReportOut, UploadFileInventoryItem, UploadResponse, UploadSignalCheckItem
+from backend.app.schemas import (
+    ExcelParseReportOut,
+    UploadArchitectureSummary,
+    UploadFileInventoryItem,
+    UploadHierarchyLevel,
+    UploadModuleImpactPreview,
+    UploadResponse,
+    UploadSignalCheckItem,
+)
 from backend.app.services.excel_parser import ExcelConversionError, parse_excel_to_csv
 from backend.app.services.merge_uploads import merge_csv_files
 from backend.app.services.mapping_service import (
@@ -38,6 +46,7 @@ from backend.app.services.pack_architecture_import import (
     merge_architecture_into_job_plant,
     plant_config_from_architecture_file,
 )
+from backend.app.services.upload_intelligence import build_upload_intelligence
 from backend.app.services.upload_inventory import (
     build_inventory_from_parts,
     inventory_from_job,
@@ -560,6 +569,13 @@ def _build_upload_response(
 
     plant = (job.plant_config_json or {}).get("plant") if job.plant_config_json else None
     checklist = signal_checklist(suggestions, plant_config=plant or {})
+    intelligence = build_upload_intelligence(
+        suggestions=suggestions,
+        plant_config=plant,
+        csv_path=csv_path,
+        file_inventory=file_inv,
+    )
+    file_inv = intelligence["file_inventory"]
 
     return UploadResponse(
         job_id=job.id,
@@ -573,6 +589,9 @@ def _build_upload_response(
         file_inventory=[UploadFileInventoryItem(**f) for f in file_inv],
         total_rows=total_rows,
         signal_checklist=[UploadSignalCheckItem(**c) for c in checklist],
+        hierarchy_overview=[UploadHierarchyLevel(**h) for h in intelligence["hierarchy_overview"]],
+        architecture_summary=UploadArchitectureSummary(**intelligence["architecture_summary"]),
+        module_impact_preview=UploadModuleImpactPreview(**intelligence["module_impact_preview"]),
         original_filename=job.original_filename,
     )
 

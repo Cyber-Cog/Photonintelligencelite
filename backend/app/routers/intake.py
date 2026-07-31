@@ -41,13 +41,17 @@ from backend.app.schemas import (
     RetryValidationRequest,
     ScbStructureOut,
     SetupContextResponse,
+    UploadArchitectureSummary,
     UploadFileInventoryItem,
+    UploadHierarchyLevel,
+    UploadModuleImpactPreview,
     UploadSignalCheckItem,
     ValidationIssueOut,
     ValidationResponse,
 )
 from backend.app.services import validation_service
 from backend.app.services.job_service import get_runner
+from backend.app.services.upload_intelligence import build_upload_intelligence
 from backend.app.services.upload_inventory import inventory_from_job, signal_checklist
 from backend.app.services.mapping_service import (
     detect_pack_match,
@@ -507,6 +511,13 @@ def get_setup_context(
             total_rows = 0
 
     checklist = signal_checklist(suggestions, plant_config=plant or {})
+    intelligence = build_upload_intelligence(
+        suggestions=suggestions,
+        plant_config=plant,
+        csv_path=csv_path,
+        file_inventory=file_inv,
+    )
+    file_inv = intelligence["file_inventory"]
 
     return SetupContextResponse(
         job_id=job.id,
@@ -521,6 +532,9 @@ def get_setup_context(
         file_inventory=[UploadFileInventoryItem(**f) for f in file_inv],
         total_rows=total_rows,
         signal_checklist=[UploadSignalCheckItem(**c) for c in checklist],
+        hierarchy_overview=[UploadHierarchyLevel(**h) for h in intelligence["hierarchy_overview"]],
+        architecture_summary=UploadArchitectureSummary(**intelligence["architecture_summary"]),
+        module_impact_preview=UploadModuleImpactPreview(**intelligence["module_impact_preview"]),
         original_filename=job.original_filename,
     )
 
