@@ -65,7 +65,7 @@ export function ArchitecturePage() {
         <ErrorState
           title="Architecture unavailable"
           message={error}
-          hint="If this job was cleaned up, start a new analysis. Otherwise re-open Setup and save plant architecture."
+          hint="Start a new analysis, or open Setup to save plant architecture."
         />
       )}
       {!loading && data && (

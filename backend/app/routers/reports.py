@@ -41,7 +41,7 @@ def _serve(
     if job.state == JobState.CLEANED_UP.value:
         raise HTTPException(
             410,
-            "This report is no longer available — results were cleaned up after the retention window. Re-run analysis to generate a new report.",
+            "This report has expired. Run analysis again to download a new copy.",
         )
     if job.state != JobState.COMPLETED.value:
         raise HTTPException(409, f"Job is in state '{job.state}'. Reports are only available once completed.")
@@ -51,7 +51,7 @@ def _serve(
     if not file_path.exists():
         raise HTTPException(
             410,
-            "This report is no longer available (files were cleaned up or lost from ephemeral storage). Re-run analysis to regenerate.",
+            "This report has expired. Run analysis again to download a new copy.",
         )
 
     setattr(job, mark_field, True)

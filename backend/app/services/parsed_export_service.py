@@ -1,7 +1,6 @@
 """Build parsed-Excel downloads for a job (Setup / Validate offline verification)."""
 from __future__ import annotations
 
-import csv
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -10,23 +9,24 @@ from analytics.common.parsed_export import (
     canonical_frame_to_scada_rows,
     parsed_export_filename,
     plant_name_from_config,
+    read_raw_csv_headers,
     remap_csv_to_scada_rows,
-    source_columns_for_official,
+    resolve_source_columns_for_official,
 )
 from backend.app.services.explorer_service import _has_canonical, _iter_partition_frames
 
-_CANONICAL_EXPORT_COLS = [
-    "timestamp_utc",
-    "device_id",
-    "ac_power_kw",
-    "dc_power_kw",
-    "dc_current_a",
-    "dc_voltage_v",
-    "poa_w_m2",
-    "ghi_w_m2",
-    "module_temp_c",
-    "ambient_temp_c",
-]
+
+def _rows_have_substance(rows: list[list[Any]]) -> bool:
+    """True when at least one row has a timestamp or metric value worth exporting."""
+    for row in rows:
+        for val in row:
+            if val is None:
+                continue
+            if isinstance(val, float) and val != val:
+                continue
+            if str(val).strip():
+                return True
+    return False
 
 
 def _plant_dict(plant_config_json: Mapping[str, Any] | None) -> dict[str, Any] | None:
@@ -44,14 +44,10 @@ def _scada_rows_from_raw(
 ) -> list[list[Any]]:
     if not raw_csv.exists():
         return []
-    with raw_csv.open("r", encoding="utf-8", newline="") as fh:
-        reader = csv.reader(fh)
-        try:
-            raw_headers = next(reader)
-        except StopIteration:
-            return []
-    raw_headers = [str(h) for h in raw_headers]
-    source_for_official = source_columns_for_official(
+    raw_headers = read_raw_csv_headers(raw_csv)
+    if not raw_headers:
+        return []
+    source_for_official = resolve_source_columns_for_official(
         column_to_canonical, timestamp_column, raw_headers
     )
     if not any(source_for_official.values()):
@@ -64,7 +60,8 @@ def _scada_rows_from_canonical(canonical_dir: Path, max_rows: int) -> list[list[
         return []
     records: list[dict] = []
     remaining = max_rows
-    for part in _iter_partition_frames(canonical_dir, columns=_CANONICAL_EXPORT_COLS):
+    # Do not pass a fixed column list — string/scb partitions may omit device_id etc.
+    for part in _iter_partition_frames(canonical_dir, columns=None):
         if remaining <= 0:
             break
         take = part.iloc[:remaining]
@@ -94,8 +91,13 @@ def export_parsed_excel(
     scada_rows = _scada_rows_from_raw(
         raw_csv, column_to_canonical, timestamp_column, max_rows
     )
-    if not scada_rows:
-        scada_rows = _scada_rows_from_canonical(canonical_dir, max_rows)
+    canonical_rows = _scada_rows_from_canonical(canonical_dir, max_rows)
+    # Raw CSV can be wide/OEM-shaped while Explorer reads normalized parquet — prefer
+    # canonical when raw remap is empty or all blank cells (headers-only download).
+    if _rows_have_substance(canonical_rows) and not _rows_have_substance(scada_rows):
+        scada_rows = canonical_rows
+    elif not _rows_have_substance(scada_rows):
+        scada_rows = canonical_rows or scada_rows
 
     content = build_parsed_workbook_bytes(
         scada_rows=scada_rows,

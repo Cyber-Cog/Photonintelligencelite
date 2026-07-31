@@ -18,8 +18,7 @@ from backend.app.services.storage import job_paths
 router = APIRouter(prefix="/api", tags=["results"])
 
 _RESULTS_GONE = (
-    "Results are no longer available for this job — files were cleaned up after the "
-    "retention window (or lost from ephemeral disk). Re-run analysis to generate fresh results."
+    "These results have expired. Upload your SCADA file and run analysis again."
 )
 
 

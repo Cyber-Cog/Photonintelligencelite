@@ -17,7 +17,7 @@ def get_job_for_request(
 ) -> tuple[Job, User | None]:
     job = db.get(Job, job_id)
     if job is None:
-        raise HTTPException(404, "Job not found. It may have already been cleaned up.")
+        raise HTTPException(404, "This job is no longer available. Start a new analysis.")
     require_job_access(job, user, allow_demo_anonymous=True)
     return job, user
 
@@ -25,6 +25,6 @@ def get_job_for_request(
 def load_job_authorized(db: Session, job_id: str, user: User | None) -> Job:
     job = db.get(Job, job_id)
     if job is None:
-        raise HTTPException(404, "Job not found. It may have already been cleaned up.")
+        raise HTTPException(404, "This job is no longer available. Start a new analysis.")
     require_job_access(job, user, allow_demo_anonymous=True)
     return job

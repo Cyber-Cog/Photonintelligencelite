@@ -278,6 +278,10 @@ export async function waitForUploadReady(
         requires_manual_mapping: ctx.requires_manual_mapping,
         looks_like_complete_pack: ctx.looks_like_complete_pack ?? false,
         pack_match_ratio: ctx.pack_match_ratio ?? 0,
+        file_inventory: ctx.file_inventory ?? [],
+        total_rows: ctx.total_rows ?? 0,
+        signal_checklist: ctx.signal_checklist ?? [],
+        original_filename: ctx.original_filename ?? null,
       };
     }
     opts?.onProgress?.(status.progress_message || "Parsing Excel workbook…");

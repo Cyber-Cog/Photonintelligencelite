@@ -535,13 +535,8 @@ export function DashboardPage() {
     return (
       <div className="tool-enter mx-auto flex max-w-lg flex-col gap-3 py-10">
         <ErrorState
-          title="Could not load results"
+          title="Results no longer available"
           message={error}
-          hint={
-            errorStatus === 410
-              ? "Result files for this job were removed after the retention window, or lost when the server restarted (ephemeral disk). Start a new analysis with the same data to regenerate."
-              : undefined
-          }
         />
         {errorStatus === 410 || errorStatus === 404 ? (
           <button type="button" className="btn-primary text-sm" onClick={handleNewAnalysis}>

@@ -29,6 +29,27 @@ class ExcelParseReportOut(BaseModel):
     needs_header_confirm: bool = False
 
 
+class UploadFileInventoryItem(BaseModel):
+    """One row in the Upload review “Files in this job” table."""
+
+    filename: str
+    sheet_name: Optional[str] = None
+    row_count: int = 0
+    detected_as: str = "SCADA data"
+    signals_present: list[str] = Field(default_factory=list)
+    unmapped_column_count: int = 0
+    date_range_start: Optional[str] = None
+    date_range_end: Optional[str] = None
+
+
+class UploadSignalCheckItem(BaseModel):
+    id: str
+    label: str
+    present: bool
+    setup_only: bool = False
+    hint: Optional[str] = None
+
+
 class UploadResponse(BaseModel):
     job_id: str
     state: str
@@ -39,6 +60,10 @@ class UploadResponse(BaseModel):
     looks_like_complete_pack: bool = False
     pack_match_ratio: float = 0.0
     """Fraction of official Complete Analysis Pack headers present (0..1)."""
+    file_inventory: list[UploadFileInventoryItem] = Field(default_factory=list)
+    total_rows: int = 0
+    signal_checklist: list[UploadSignalCheckItem] = Field(default_factory=list)
+    original_filename: Optional[str] = None
 
 
 class ColumnMappingSuggestion(BaseModel):
@@ -184,6 +209,10 @@ class SetupContextResponse(BaseModel):
     plant_config: Optional[dict[str, Any]] = None
     looks_like_complete_pack: bool = False
     pack_match_ratio: float = 0.0
+    file_inventory: list[UploadFileInventoryItem] = Field(default_factory=list)
+    total_rows: int = 0
+    signal_checklist: list[UploadSignalCheckItem] = Field(default_factory=list)
+    original_filename: Optional[str] = None
 
 
 class ArchitectureUploadResponse(BaseModel):

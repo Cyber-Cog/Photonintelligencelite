@@ -30,6 +30,25 @@ export interface ExcelParseReport {
   needs_header_confirm?: boolean;
 }
 
+export interface UploadFileInventoryItem {
+  filename: string;
+  sheet_name?: string | null;
+  row_count: number;
+  detected_as: string;
+  signals_present: string[];
+  unmapped_column_count: number;
+  date_range_start?: string | null;
+  date_range_end?: string | null;
+}
+
+export interface UploadSignalCheckItem {
+  id: string;
+  label: string;
+  present: boolean;
+  setup_only: boolean;
+  hint?: string | null;
+}
+
 export interface UploadResponse {
   job_id: string;
   state: string;
@@ -39,6 +58,10 @@ export interface UploadResponse {
   parse_report?: ExcelParseReport | null;
   looks_like_complete_pack?: boolean;
   pack_match_ratio?: number;
+  file_inventory?: UploadFileInventoryItem[];
+  total_rows?: number;
+  signal_checklist?: UploadSignalCheckItem[];
+  original_filename?: string | null;
 }
 
 export interface ArchitectureEntry {
@@ -160,6 +183,10 @@ export interface SetupContextResponse {
   plant_config: Record<string, unknown> | null;
   looks_like_complete_pack?: boolean;
   pack_match_ratio?: number;
+  file_inventory?: UploadFileInventoryItem[];
+  total_rows?: number;
+  signal_checklist?: UploadSignalCheckItem[];
+  original_filename?: string | null;
 }
 
 export interface JobStatusResponse {

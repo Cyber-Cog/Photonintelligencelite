@@ -19,6 +19,7 @@ from analytics.common.complete_analysis_pack import OFFICIAL_COLUMN_TO_CANONICAL
 from analytics.common.parsed_export import (
     architecture_hierarchy_rows,
     build_parsed_excel_bytes,
+    canonical_frame_to_scada_rows,
     parsed_export_filename,
     source_columns_for_official,
 )
@@ -128,6 +129,123 @@ def test_build_parsed_excel_bytes_scada_and_companions(tmp_path: Path):
     assert arch["A2"].value == "PLANT"
     assert arch["C2"].value == "plant"
     assert float(arch["D2"].value) == 180.0  # MW → kW
+
+
+def test_build_parsed_excel_bytes_oem_headers_without_saved_mapping(tmp_path: Path):
+    """Setup download before Continue: infer mapping from CSV headers."""
+    csv_path = tmp_path / "input.csv"
+    csv_path.write_text(
+        "Date And Time,Inverter,Pac_kW,POA\n"
+        "2024-01-01 10:00:00,INV-01,12.5,800\n"
+        "2024-01-01 10:15:00,INV-01,13.0,820\n",
+        encoding="utf-8",
+    )
+    raw = build_parsed_excel_bytes(raw_csv=csv_path, mapping_json=None)
+    wb = load_workbook(io.BytesIO(raw))
+    scada = wb["scada"]
+    assert scada.max_row == 3
+    assert scada["A2"].value == "2024-01-01 10:00:00"
+    assert scada["B2"].value == "INV-01"
+    assert float(scada["C2"].value) == 12.5
+
+
+def test_build_parsed_excel_bytes_bom_and_case_insensitive_headers(tmp_path: Path):
+    csv_path = tmp_path / "input.csv"
+    csv_path.write_bytes(
+        "\ufefftimestamp,equipment id,ac power (kw)\n"
+        "2024-01-01 10:00:00,INV-01,9.5\n".encode("utf-8")
+    )
+    raw = build_parsed_excel_bytes(raw_csv=csv_path, mapping_json={})
+    wb = load_workbook(io.BytesIO(raw))
+    scada = wb["scada"]
+    assert scada.max_row == 2
+    assert scada["A2"].value == "2024-01-01 10:00:00"
+    assert scada["B2"].value == "INV-01"
+
+
+def test_parsed_xlsx_endpoint_without_saved_mapping(client, tmp_path):
+    """Download parsed Excel on Setup before mapping is saved to the job."""
+    csrf = _signup(client)
+    csv = (
+        b"Date And Time,Inverter,Pac_kW,POA\n"
+        b"2024-01-01 10:00:00,INV-01,12.5,800\n"
+    )
+    up = client.post(
+        "/api/upload",
+        files={"file": ("oem.csv", csv, "text/csv")},
+        headers={"X-CSRF-Token": csrf},
+    )
+    assert up.status_code == 200, up.text
+    job_id = up.json()["job_id"]
+
+    resp = client.get(f"/api/jobs/{job_id}/parsed.xlsx")
+    assert resp.status_code == 200, resp.text
+    wb = load_workbook(io.BytesIO(resp.content))
+    scada = wb["scada"]
+    assert scada.max_row >= 2
+    assert scada["A2"].value == "2024-01-01 10:00:00"
+
+
+def test_canonical_frame_to_scada_rows_uses_string_id_for_equipment():
+    rows = canonical_frame_to_scada_rows(
+        [
+            {
+                "timestamp_utc": "2024-01-01 10:00:00",
+                "string_id": "SMB-01-STR-01",
+                "dc_current_a": 8.5,
+                "dc_voltage_v": 620.0,
+            }
+        ]
+    )
+    assert len(rows) == 1
+    assert rows[0][0] == "2024-01-01 10:00:00"
+    assert rows[0][1] == "SMB-01-STR-01"
+    assert float(rows[0][4]) == 8.5
+    assert float(rows[0][5]) == 620.0
+
+
+def test_export_prefers_canonical_when_raw_remap_is_hollow(tmp_path: Path):
+    """Wide/OEM raw CSV with stale mapping should not block parquet export."""
+    from backend.app.services.parsed_export_service import export_parsed_excel
+
+    raw_csv = tmp_path / "raw" / "input.csv"
+    raw_csv.parent.mkdir(parents=True)
+    # Stale pack mapping keys that do not exist in this wide-shaped CSV.
+    raw_csv.write_text(
+        "FooBar,BazQux\n1,2\n",
+        encoding="utf-8",
+    )
+    canonical_dir = tmp_path / "canonical" / "device_type=string" / "date=2024-01-01"
+    canonical_dir.mkdir(parents=True)
+    import pandas as pd
+
+    pd.DataFrame(
+        [
+            {
+                "timestamp_utc": "2024-01-01 10:00:00",
+                "string_id": "SMB-01-STR-01",
+                "dc_current_a": 8.1,
+                "dc_voltage_v": 620.0,
+            }
+        ]
+    ).to_parquet(canonical_dir / "part.parquet", index=False)
+
+    mapping = {
+        "column_to_canonical": dict(OFFICIAL_COLUMN_TO_CANONICAL),
+        "timestamp_column": "Timestamp",
+    }
+    content, _ = export_parsed_excel(
+        job_id="test-job-id",
+        raw_csv=raw_csv,
+        canonical_dir=tmp_path / "canonical",
+        mapping_json=mapping,
+        plant_config_json=None,
+    )
+    wb = load_workbook(io.BytesIO(content))
+    scada = wb["scada"]
+    assert scada.max_row >= 2
+    assert scada["A2"].value == "2024-01-01 10:00:00"
+    assert scada["B2"].value == "SMB-01-STR-01"
 
 
 def test_architecture_hierarchy_rows_empty_without_architecture():

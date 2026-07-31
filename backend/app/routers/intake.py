@@ -41,11 +41,14 @@ from backend.app.schemas import (
     RetryValidationRequest,
     ScbStructureOut,
     SetupContextResponse,
+    UploadFileInventoryItem,
+    UploadSignalCheckItem,
     ValidationIssueOut,
     ValidationResponse,
 )
 from backend.app.services import validation_service
 from backend.app.services.job_service import get_runner
+from backend.app.services.upload_inventory import inventory_from_job, signal_checklist
 from backend.app.services.mapping_service import (
     detect_pack_match,
     read_header,
@@ -494,6 +497,17 @@ def get_setup_context(
     if not pack_match:
         needs_manual = True
 
+    file_inv, total_rows = inventory_from_job(paths, job.original_filename)
+    if not total_rows and csv_path.exists():
+        try:
+            import pandas as pd
+
+            total_rows = max(0, len(pd.read_csv(csv_path, usecols=[0])))
+        except Exception:  # noqa: BLE001
+            total_rows = 0
+
+    checklist = signal_checklist(suggestions, plant_config=plant or {})
+
     return SetupContextResponse(
         job_id=job.id,
         state=job.state,
@@ -504,6 +518,10 @@ def get_setup_context(
         plant_config=plant,
         looks_like_complete_pack=pack_match,
         pack_match_ratio=pack_ratio,
+        file_inventory=[UploadFileInventoryItem(**f) for f in file_inv],
+        total_rows=total_rows,
+        signal_checklist=[UploadSignalCheckItem(**c) for c in checklist],
+        original_filename=job.original_filename,
     )
 
 

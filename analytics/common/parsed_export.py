@@ -14,9 +14,11 @@ from typing import Any, Iterable, Mapping, Optional, Sequence
 from openpyxl import Workbook
 
 from analytics.common.architecture_excel import HIERARCHY_COLUMNS
+from analytics.common.aliasing import MEDIUM_CONFIDENCE, score_columns
 from analytics.common.complete_analysis_pack import (
     OFFICIAL_COLUMN_TO_CANONICAL,
     SCADA_COLUMNS,
+    _normalize_header_key,
 )
 
 # Canonical field names used in mapping_json / pipeline (timestamp, not timestamp_utc).
@@ -26,7 +28,48 @@ _CANONICAL_TO_OFFICIAL: dict[str, str] = {
 # Post-standardize parquet uses timestamp_utc; map back to pack Timestamp header.
 _CANONICAL_TO_OFFICIAL["timestamp_utc"] = "Timestamp"
 
+# OEM exports often label the equipment column as Inverter / SMB / String — still one tidy ID column.
+_DEVICE_ID_FIELD_ALIASES: tuple[str, ...] = ("device_id", "inverter_id", "scb_id", "string_id")
+
 _DEFAULT_MAX_ROWS = 200_000
+
+
+def _strip_bom(value: str) -> str:
+    return (value or "").lstrip("\ufeff").strip()
+
+
+def _header_name_lookup(raw_headers: Sequence[str]) -> dict[str, str]:
+    """Normalized header key → actual CSV column name (first occurrence wins)."""
+    out: dict[str, str] = {}
+    for raw in raw_headers:
+        actual = _strip_bom(str(raw))
+        key = _normalize_header_key(actual)
+        if key and key not in out:
+            out[key] = actual
+    return out
+
+
+def _resolve_header_name(name: str, header_set: set[str], lookup: dict[str, str]) -> str | None:
+    """Match a mapping or official name to the CSV column (exact, then normalized)."""
+    if name in header_set:
+        return name
+    key = _normalize_header_key(name)
+    if key in lookup:
+        return lookup[key]
+    return None
+
+
+def _infer_column_to_canonical(raw_headers: Sequence[str]) -> dict[str, str]:
+    """Best-effort mapping from CSV headers when job.mapping_json is empty or stale."""
+    out: dict[str, str] = {}
+    for candidate in score_columns([str(h) for h in raw_headers]):
+        if (
+            candidate.canonical_field
+            and candidate.confidence >= MEDIUM_CONFIDENCE
+            and candidate.column_name not in out
+        ):
+            out[candidate.column_name] = candidate.canonical_field
+    return out
 
 
 def _sanitize_filename_part(value: str, *, max_len: int = 40) -> str:
@@ -65,26 +108,76 @@ def source_columns_for_official(
     raw_headers: Sequence[str],
 ) -> dict[str, str | None]:
     """Map each official SCADA header → source CSV column name (or None)."""
-    header_set = set(raw_headers)
+    cleaned_headers = [_strip_bom(str(h)) for h in raw_headers]
+    header_set = set(cleaned_headers)
+    lookup = _header_name_lookup(cleaned_headers)
     c2c = {str(k): str(v) for k, v in (column_to_canonical or {}).items() if v and v != "ignore"}
 
     by_field: dict[str, str] = {}
     for src, field in c2c.items():
-        if src in header_set and field not in by_field:
-            by_field[field] = src
+        actual = _resolve_header_name(src, header_set, lookup)
+        if actual and field not in by_field:
+            by_field[field] = actual
 
-    if timestamp_column and timestamp_column in header_set:
-        by_field.setdefault("timestamp", timestamp_column)
+    if timestamp_column:
+        ts_actual = _resolve_header_name(timestamp_column, header_set, lookup)
+        if ts_actual:
+            by_field.setdefault("timestamp", ts_actual)
+
+    for alt in _DEVICE_ID_FIELD_ALIASES:
+        if alt in by_field:
+            by_field.setdefault("device_id", by_field[alt])
+            break
 
     out: dict[str, str | None] = {}
     for official in SCADA_COLUMNS:
         field = OFFICIAL_COLUMN_TO_CANONICAL[official]
         src = by_field.get(field)
-        if src is None and official in header_set:
-            # Already pack-shaped (or tidy parse output).
-            src = official
+        if src is None and field == "device_id":
+            for alt in _DEVICE_ID_FIELD_ALIASES[1:]:
+                src = by_field.get(alt)
+                if src:
+                    break
+        if src is None:
+            src = _resolve_header_name(official, header_set, lookup)
         out[official] = src
     return out
+
+
+def resolve_source_columns_for_official(
+    column_to_canonical: Mapping[str, str] | None,
+    timestamp_column: str | None,
+    raw_headers: Sequence[str],
+) -> dict[str, str | None]:
+    """Resolve CSV columns for export; infer from headers when mapping is missing or stale."""
+    cleaned_headers = [_strip_bom(str(h)) for h in raw_headers]
+    resolved = source_columns_for_official(column_to_canonical, timestamp_column, cleaned_headers)
+    if any(resolved.values()):
+        return resolved
+
+    inferred = _infer_column_to_canonical(cleaned_headers)
+    ts_col = timestamp_column
+    if not ts_col:
+        for src, field in inferred.items():
+            if field == "timestamp":
+                ts_col = src
+                break
+    inferred_resolved = source_columns_for_official(inferred, ts_col, cleaned_headers)
+    if any(inferred_resolved.values()):
+        return inferred_resolved
+
+    return resolved
+
+
+def read_raw_csv_headers(raw_csv: Path) -> list[str]:
+    """Read the first CSV row as column names (BOM-safe)."""
+    with raw_csv.open("r", encoding="utf-8-sig", newline="") as fh:
+        reader = csv.reader(fh)
+        try:
+            raw_headers = next(reader)
+        except StopIteration:
+            return []
+    return [_strip_bom(str(h)) for h in raw_headers]
 
 
 def remap_csv_to_scada_rows(
@@ -93,7 +186,7 @@ def remap_csv_to_scada_rows(
     max_rows: int = _DEFAULT_MAX_ROWS,
 ) -> list[list[Any]]:
     rows: list[list[Any]] = []
-    with raw_csv.open("r", encoding="utf-8", newline="") as fh:
+    with raw_csv.open("r", encoding="utf-8-sig", newline="") as fh:
         reader = csv.DictReader(fh)
         for i, rec in enumerate(reader):
             if i >= max_rows:
@@ -124,6 +217,14 @@ def canonical_frame_to_scada_rows(
             field = OFFICIAL_COLUMN_TO_CANONICAL[official]
             if field == "timestamp":
                 val = rec.get("timestamp_utc", rec.get("timestamp", ""))
+            elif field == "device_id":
+                val = (
+                    rec.get("device_id")
+                    or rec.get("string_id")
+                    or rec.get("scb_id")
+                    or rec.get("inverter_id")
+                    or ""
+                )
             else:
                 val = rec.get(field, "")
             if val is None:
@@ -288,14 +389,8 @@ def build_parsed_excel_bytes(
     scada_rows: list[list[Any]] = list(scada_rows_override or [])
 
     if not scada_rows and raw_csv is not None and raw_csv.exists():
-        with raw_csv.open("r", encoding="utf-8", newline="") as fh:
-            reader = csv.reader(fh)
-            try:
-                raw_headers = next(reader)
-            except StopIteration:
-                raw_headers = []
-        raw_headers = [str(h) for h in raw_headers]
-        source_for_official = source_columns_for_official(
+        raw_headers = read_raw_csv_headers(raw_csv)
+        source_for_official = resolve_source_columns_for_official(
             column_to_canonical, timestamp_column, raw_headers
         )
         if any(source_for_official.values()):

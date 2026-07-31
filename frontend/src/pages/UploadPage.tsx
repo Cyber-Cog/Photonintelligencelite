@@ -6,11 +6,15 @@ import {
   completeAnalysisZipUrl,
   downloadAuthenticated,
   replaceUploadFiles,
+  startDemo,
   uploadFiles,
   waitForUploadReady,
 } from "@/api/client";
 import { StepIndicator } from "@/components/StepIndicator";
 import { ParseActivityConsole } from "@/components/upload/ParseActivityConsole";
+import { UploadFilesTable } from "@/components/upload/UploadFilesTable";
+import { UploadReviewBar } from "@/components/upload/UploadReviewBar";
+import { UploadSignalSidebar } from "@/components/upload/UploadSignalSidebar";
 import {
   useParseActivityLog,
   type UploadActivityPhase,
@@ -18,11 +22,11 @@ import {
 import { InfoBanner } from "@/components/ui/InfoBanner";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ProgressBar } from "@/components/ui/ProgressBar";
-import { SectionPanel } from "@/components/ui/SectionPanel";
 import { Spinner } from "@/components/ui/Spinner";
 import { useJob } from "@/context/JobContext";
 import { maybeCompress } from "@/lib/clientGzip";
 import { rememberUploadPath } from "@/lib/uploadPath";
+import type { UploadResponse } from "@/types";
 
 const ACCEPTED = [".csv", ".csv.gz", ".xlsx", ".xlsm", ".xls"];
 
@@ -41,8 +45,8 @@ export function UploadPage() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [path, setPath] = useState<UploadPath | null>(null);
-  const [showDropzone, setShowDropzone] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [review, setReview] = useState<UploadResponse | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -52,12 +56,12 @@ export function UploadPage() {
   const [error, setError] = useState<string | null>(null);
   const [dlError, setDlError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState<"excel" | "zip" | null>(null);
+  const [demoLoading, setDemoLoading] = useState(false);
   const uploadStartedAt = useRef<number | null>(null);
 
   useEffect(() => {
     if (!replaceJobId) return;
-    setPath((prev) => prev ?? "own");
-    setShowDropzone(true);
+    setPath("own");
   }, [replaceJobId]);
 
   useEffect(() => {
@@ -74,7 +78,10 @@ export function UploadPage() {
     return () => window.clearInterval(id);
   }, [uploading]);
 
-  const fileNames = useMemo(() => selectedFiles.map((f) => f.name), [selectedFiles]);
+  const fileNames = useMemo(
+    () => (review ? review.file_inventory?.map((f) => f.filename) ?? [] : selectedFiles.map((f) => f.name)),
+    [review, selectedFiles],
+  );
   const activityLines = useParseActivityLog(
     uploading,
     activityPhase,
@@ -86,19 +93,17 @@ export function UploadPage() {
 
   const choosePath = (next: UploadPath) => {
     setPath(next);
-    setShowDropzone(Boolean(replaceJobId));
     setSelectedFiles([]);
+    setReview(null);
     setError(null);
     setDlError(null);
     setProgress(0);
   };
 
-  const switchPath = () => {
-    setPath(null);
-    setShowDropzone(Boolean(replaceJobId));
+  const clearReview = () => {
+    setReview(null);
     setSelectedFiles([]);
     setError(null);
-    setDlError(null);
     setProgress(0);
   };
 
@@ -139,7 +144,7 @@ export function UploadPage() {
     if (e.dataTransfer.files?.length) addFiles(e.dataTransfer.files);
   };
 
-  const handleUpload = async () => {
+  const runUpload = async () => {
     if (selectedFiles.length === 0 || uploading || !path) return;
     setUploading(true);
     setError(null);
@@ -161,313 +166,270 @@ export function UploadPage() {
       }
       rememberUploadPath(res.job_id, path);
       setJob(res.job_id, res);
-      navigate(`/jobs/${res.job_id}/setup`);
+      setReview(res);
+      setSelectedFiles([]);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Upload failed. Check your connection and try again.");
+    } finally {
       setUploading(false);
       setPhaseHint(null);
       setActivityPhase(null);
     }
   };
 
+  const continueToSetup = () => {
+    if (!review?.job_id) return;
+    navigate(`/jobs/${review.job_id}/setup`);
+  };
+
+  const loadDemo = async () => {
+    setDemoLoading(true);
+    setError(null);
+    try {
+      const res = await startDemo();
+      setJob(res.job_id, null);
+      navigate(`/jobs/${res.job_id}/processing`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not start demo.");
+    } finally {
+      setDemoLoading(false);
+    }
+  };
+
+  const showWorkspace = Boolean(path || replaceJobId);
   const totalMb = selectedFiles.reduce((s, f) => s + f.size, 0) / (1024 * 1024);
 
   const dropzone = (
-    <SectionPanel
-      title={
-        replaceJobId
-          ? "Replace SCADA files"
-          : path === "template"
-            ? "Upload filled template"
-            : "Upload SCADA files"
-      }
-      description={
-        replaceJobId
-          ? "Plant details are kept. Columns that still match by name keep their prior mapping; new columns appear in Setup."
-          : path === "template"
-            ? "Prefer the Complete Analysis Pack for full coverage — if you upload a different format, Setup will detect it and let you map columns."
-            : "Any CSV/XLSX export. Column mapping happens in Setup."
-      }
-      scrollMargin={false}
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => !review && inputRef.current?.click()}
+      onKeyDown={(e) => e.key === "Enter" && !review && inputRef.current?.click()}
+      onDragOver={(e) => {
+        e.preventDefault();
+        if (!review) setDragActive(true);
+      }}
+      onDragLeave={() => setDragActive(false)}
+      onDrop={(e) => {
+        if (review) return;
+        onDrop(e);
+      }}
+      className={`flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed px-4 py-10 text-center transition-all duration-200 ${
+        review
+          ? "cursor-default border-[color:var(--pic-border-subtle)] bg-[color:var(--pic-surface-muted)] opacity-80"
+          : dragActive
+            ? "cursor-pointer border-brand-500 bg-brand-50/50 dark:bg-brand-900/15"
+            : "cursor-pointer border-[color:var(--pic-border)] bg-[color:var(--pic-surface-muted)] hover:border-brand-400 hover:bg-brand-50/30 dark:hover:border-brand-500"
+      }`}
     >
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={() => inputRef.current?.click()}
-        onKeyDown={(e) => e.key === "Enter" && inputRef.current?.click()}
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDragActive(true);
-        }}
-        onDragLeave={() => setDragActive(false)}
-        onDrop={onDrop}
-        className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed px-4 py-12 text-center transition-all duration-200 ${
-          dragActive
-            ? "border-brand-500 bg-brand-50/50 dark:bg-brand-900/15"
-            : "border-stone-300 bg-stone-50/40 hover:border-brand-400 hover:bg-brand-50/30 dark:border-stone-600 dark:bg-stone-950/30 dark:hover:border-brand-500"
-        }`}
-      >
-        <p className="text-sm font-medium text-stone-700 dark:text-stone-200">
-          Drag and drop files, or click to browse
-        </p>
-        <p className="text-xs text-stone-400">.csv · .xlsx · multiple files accepted</p>
-        <input
-          ref={inputRef}
-          type="file"
-          multiple
-          accept=".csv,.gz,.xlsx,.xlsm,.xls"
-          className="hidden"
-          onChange={(e) => e.target.files && addFiles(e.target.files)}
-        />
+      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+          <path d="M12 16V4m0 0L8 8m4-4 4 4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
       </div>
-
-      {selectedFiles.length > 0 && (
-        <ul className="mt-4 divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 dark:divide-stone-800 dark:border-stone-800">
-          {selectedFiles.map((f, i) => (
-            <li key={`${f.name}-${i}`} className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm">
-              <span className="truncate font-medium text-stone-700 dark:text-stone-200">{f.name}</span>
-              <div className="flex shrink-0 items-center gap-2">
-                <span className="text-xs text-stone-400">{(f.size / (1024 * 1024)).toFixed(2)} MB</span>
-                <button
-                  type="button"
-                  className="text-xs font-semibold text-rose-600 hover:underline"
-                  onClick={() => setSelectedFiles((prev) => prev.filter((_, j) => j !== i))}
-                >
-                  Remove
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-      {selectedFiles.length > 0 && (
-        <p className="mt-2 text-xs text-stone-400">
-          {selectedFiles.length} file(s) · {totalMb.toFixed(2)} MB total
+      <div>
+        <p className="text-sm font-medium text-[color:var(--pic-text)]">
+          {review ? "Files uploaded — review below or continue to Setup" : "Drop CSV or Excel files here"}
         </p>
-      )}
-
-      {error && <p className="mt-3 text-sm text-rose-600 dark:text-rose-400">{error}</p>}
-
-      {uploading && (
-        <div className="mt-3 space-y-1">
-          <div className="proc-progress-pulse">
-            <ProgressBar pct={progress} />
-          </div>
-          <p className="text-xs text-stone-400">
-            {phaseHint ?? `Uploading… ${progress}%`}
-            {elapsedSec > 0 ? (
-              <span className="ml-1.5 tabular-nums text-stone-300 dark:text-stone-500">· {elapsedSec}s</span>
-            ) : null}
-          </p>
-          {activityPhase ? (
-            <ParseActivityConsole lines={activityLines} phase={activityPhase} live />
-          ) : null}
+        <p className="mt-1 text-xs text-[color:var(--pic-text-muted)]">
+          {review ? "Use Clear all to upload a different set" : "or browse from your machine · multi-file supported"}
+        </p>
+      </div>
+      {!review ? (
+        <div className="flex flex-wrap justify-center gap-2">
+          {[".csv", ".xlsx", ".xls"].map((ext) => (
+            <span
+              key={ext}
+              className="rounded-md border border-[color:var(--pic-border-subtle)] bg-[color:var(--pic-surface-raised)] px-2 py-0.5 text-[10px] font-medium text-[color:var(--pic-text-muted)]"
+            >
+              {ext}
+            </span>
+          ))}
         </div>
-      )}
-    </SectionPanel>
+      ) : null}
+      <input
+        ref={inputRef}
+        type="file"
+        multiple
+        accept=".csv,.gz,.xlsx,.xlsm,.xls"
+        className="hidden"
+        onChange={(e) => e.target.files && addFiles(e.target.files)}
+      />
+    </div>
   );
 
   return (
-    <div className="tool-enter flow-shell flow-stack">
-      <StepIndicator current={1} jobId={replaceJobId} />
+    <div className={`tool-enter flow-shell ${review ? "pb-24" : "flow-stack"}`}>
+      <StepIndicator current={1} jobId={replaceJobId ?? review?.job_id} />
+
       <PageHeader
         eyebrow={replaceJobId ? "Replace files" : "Start analysis"}
         title={replaceJobId ? "Replace SCADA reports" : "Upload SCADA reports"}
         description={
-          replaceJobId
-            ? "Upload new files for this job. Setup mapping stays available afterward — prior column maps rematch when headers still match."
-            : path
-              ? "Files are merged into a single analysis dataset. After upload we detect whether this looks like the Complete Analysis Pack, then Setup mapping is always available."
-              : "Choose how you will provide plant data. The template path is recommended — not required. Sign-in is required for templates and uploads."
+          review
+            ? "Check which signals were found in each file. Anything missing can be mapped in Setup."
+            : "Upload one or more plant exports. We detect columns per file before you confirm mapping."
         }
         actions={
-          replaceJobId ? (
-            <Link to={`/jobs/${replaceJobId}/setup`} className="btn-ghost text-xs">
-              Back to Setup
-            </Link>
-          ) : path ? (
-            <button type="button" className="btn-ghost text-xs" onClick={switchPath}>
-              Change path
-            </button>
+          showWorkspace ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {!replaceJobId ? (
+                <button type="button" className="btn-ghost text-xs" disabled={demoLoading} onClick={() => void loadDemo()}>
+                  {demoLoading ? <Spinner className="h-3.5 w-3.5" /> : null}
+                  Load demo dataset
+                </button>
+              ) : (
+                <Link to={`/jobs/${replaceJobId}/setup`} className="btn-ghost text-xs">
+                  Back to Setup
+                </Link>
+              )}
+              {!review ? (
+                <button type="button" className="btn-secondary text-xs" onClick={() => inputRef.current?.click()}>
+                  Browse files
+                </button>
+              ) : null}
+              {path === "template" && !review ? (
+                <button
+                  type="button"
+                  className="btn-ghost text-xs"
+                  disabled={downloading !== null}
+                  onClick={() => void download("excel")}
+                >
+                  Download template
+                </button>
+              ) : null}
+              {!replaceJobId && path ? (
+                <button type="button" className="btn-ghost text-xs" onClick={() => choosePath(path === "template" ? "own" : "template")}>
+                  {path === "template" ? "Use own format" : "Use template"}
+                </button>
+              ) : null}
+            </div>
           ) : undefined
         }
       />
 
       {replaceJobId ? (
         <InfoBanner tone="info" title="Replacing files on this job">
-          Plant ratings and architecture are kept. Column mapping is rematched for headers that still exist; new
-          columns show up in Setup for you to map.
+          Plant ratings and architecture are kept. New columns appear in Setup for mapping.
         </InfoBanner>
       ) : null}
 
-      {!path && !replaceJobId && (
+      {!showWorkspace && (
         <div className="grid gap-4 sm:grid-cols-2">
           <button
             type="button"
             onClick={() => choosePath("template")}
-            className="group flex flex-col rounded-pic-xl border border-brand-200/80 bg-gradient-to-br from-brand-50/90 to-[color:var(--pic-surface-raised)] p-5 text-left shadow-pic transition hover:border-brand-400 hover:shadow-pic-md dark:border-brand-700/45 dark:from-brand-950/30 dark:to-[color:var(--pic-surface-raised)] dark:hover:border-brand-500"
+            className="group flex flex-col rounded-pic-xl border border-brand-200/80 bg-gradient-to-br from-brand-50/90 to-[color:var(--pic-surface-raised)] p-5 text-left shadow-pic transition hover:border-brand-400 dark:border-brand-700/45 dark:from-brand-950/30"
           >
             <span className="font-display text-[10px] font-semibold uppercase tracking-[0.14em] text-brand-700 dark:text-brand-300">
               Recommended
             </span>
-            <span className="mt-2 font-display text-base font-semibold tracking-tight text-[color:var(--pic-text)]">
-              Use the Complete Analysis template
-            </span>
+            <span className="mt-2 font-display text-base font-semibold tracking-tight">Complete Analysis Pack</span>
             <span className="mt-2 text-sm leading-relaxed text-[color:var(--pic-text-muted)]">
-              Best for full fault coverage. Download the pack, fill SCADA + Architecture sheets, then upload —
-              hierarchy and capacities import into Setup automatically. If you upload a different format, we detect
-              it and send you to normal mapping.
-            </span>
-            <span className="mt-5 text-xs font-semibold text-brand-700 group-hover:underline dark:text-brand-300">
-              Continue with template →
+              Download the template, fill SCADA + architecture sheets, then upload for automatic detection.
             </span>
           </button>
-
           <button
             type="button"
             onClick={() => choosePath("own")}
-            className="group flex flex-col rounded-pic-xl border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-muted)] p-5 text-left shadow-pic transition hover:border-[color:var(--pic-border-strong)] hover:shadow-pic-md"
+            className="group flex flex-col rounded-pic-xl border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-muted)] p-5 text-left shadow-pic transition hover:border-[color:var(--pic-border-strong)]"
           >
             <span className="font-display text-[10px] font-semibold uppercase tracking-[0.14em] text-[color:var(--pic-text-muted)]">
               Alternate
             </span>
-            <span className="mt-2 font-display text-base font-semibold tracking-tight text-[color:var(--pic-text)]">
-              Upload your own SCADA format
-            </span>
+            <span className="mt-2 font-display text-base font-semibold tracking-tight">Your SCADA / OEM export</span>
             <span className="mt-2 text-sm leading-relaxed text-[color:var(--pic-text-muted)]">
-              Any CSV or Excel export. Map columns to PIC Lite fields in Setup.
-            </span>
-            <span className="mt-5 text-xs font-semibold text-[color:var(--pic-text-secondary)] group-hover:underline">
-              Continue with own files →
+              CSV or Excel from any inverter, SMB, or multi-file plant export.
             </span>
           </button>
         </div>
       )}
 
-      {path === "template" && (
-        <div className="space-y-4">
-          <div className="rounded-2xl border border-brand-200/70 bg-gradient-to-br from-brand-50/80 to-white px-4 py-3.5 shadow-sm shadow-stone-900/[0.02] dark:border-brand-700/45 dark:bg-stone-900 dark:bg-none dark:shadow-none">
-            <p className="font-display text-sm font-semibold tracking-tight text-stone-900 dark:text-stone-50">
-              Complete Analysis Pack
-            </p>
-            <p className="mt-1 text-sm leading-relaxed text-stone-700 dark:text-stone-300">
-              Prefer this path for full fault coverage. Fill the <span className="font-medium">scada</span> sheet
-              (timestamp, equipment IDs, AC power kW, DC current/voltage, POA/GHI) and the{" "}
-              <span className="font-medium">architecture</span> sheet (Plant → Inverter → SCB → String with AC kW
-              and DC kWp capacities). On upload, architecture is imported into Setup automatically — no separate
-              re-entry. OEM SMB exports with string channels I1…In also work via the own-files path.
-            </p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button
-                type="button"
-                className="btn-primary text-xs"
-                disabled={downloading !== null}
-                onClick={() => void download("excel")}
-              >
-                {downloading === "excel" ? <Spinner className="h-3.5 w-3.5" /> : null}
-                Download Excel template
-              </button>
-              <button
-                type="button"
-                className="btn-secondary text-xs"
-                disabled={downloading !== null}
-                onClick={() => void download("zip")}
-              >
-                {downloading === "zip" ? <Spinner className="h-3.5 w-3.5" /> : null}
-                Download CSV package
-              </button>
-            </div>
-            {dlError ? <p className="mt-2 text-sm text-rose-600 dark:text-rose-400">{dlError}</p> : null}
-          </div>
-
-          {!showDropzone ? (
-            <div className="flex justify-end">
-              <button type="button" className="btn-secondary" onClick={() => setShowDropzone(true)}>
-                I filled the template — upload files
-              </button>
-            </div>
-          ) : (
-            <>
-              {dropzone}
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  className="btn-primary"
-                  onClick={handleUpload}
-                  disabled={selectedFiles.length === 0 || uploading}
-                >
-                  {uploading ? <Spinner className="h-4 w-4" /> : null}
-                  Continue
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-      )}
-
-      {path === "own" && (
-        <div className="space-y-4">
-          {!replaceJobId ? (
-            <div className="rounded-2xl border border-stone-200/90 bg-stone-50/90 px-4 py-3.5 shadow-sm shadow-stone-900/[0.02] dark:border-stone-600 dark:bg-stone-900 dark:shadow-none">
-              <p className="font-display text-sm font-semibold tracking-tight text-stone-900 dark:text-stone-50">
-                Own SCADA / OEM export
-              </p>
-              <p className="mt-1 text-sm leading-relaxed text-stone-700 dark:text-stone-300">
-                Upload any CSV or Excel plant export. You will map columns to required signals in Setup before
-                analysis runs.
-              </p>
-              <div className="mt-3 rounded-xl border border-stone-200/80 bg-white/80 px-3 py-2.5 text-xs leading-relaxed text-stone-600 dark:border-stone-700 dark:bg-stone-950/40 dark:text-stone-300">
-                <p className="font-semibold text-stone-800 dark:text-stone-100">What to upload so everything can be detected</p>
-                <ul className="mt-1.5 list-disc space-y-1 pl-4">
-                  <li>
-                    <span className="font-medium text-stone-800 dark:text-stone-100">Complete Analysis Pack columns</span>
-                    {" "}
-                    (single file): Timestamp, Equipment ID, AC Power, DC Current/Voltage, Irradiance/POA (and GHI if available).
-                  </li>
-                  <li>
-                    <span className="font-medium text-stone-800 dark:text-stone-100">SMB / string currents</span>
-                    {" "}
-                    (I1…In under a merged &quot;Strings Current&quot; header) — multi-row Excel headers are stitched automatically.
-                  </li>
-                  <li>
-                    <span className="font-medium text-stone-800 dark:text-stone-100">Multi-file OK</span>
-                    : e.g. one SMB sheet with I1…I24 + a separate irradiance/POA file. Files are merged into one dataset.
-                  </li>
-                </ul>
-              </div>
-              {!showDropzone ? (
-                <div className="mt-3">
-                  <button type="button" className="btn-primary text-xs" onClick={() => setShowDropzone(true)}>
-                    Upload my files
+      {showWorkspace && (
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px] lg:items-start">
+          <div className="space-y-4">
+            {path === "template" && !review ? (
+              <div className="rounded-xl border border-brand-200/70 bg-brand-50/50 px-4 py-3 dark:border-brand-700/45 dark:bg-brand-950/20">
+                <p className="text-sm text-[color:var(--pic-text-secondary)]">
+                  Prefer the Complete Analysis Pack for full fault coverage. Download, fill, then upload below.
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button type="button" className="btn-primary text-xs" disabled={downloading !== null} onClick={() => void download("excel")}>
+                    {downloading === "excel" ? <Spinner className="h-3.5 w-3.5" /> : null}
+                    Excel template
+                  </button>
+                  <button type="button" className="btn-secondary text-xs" disabled={downloading !== null} onClick={() => void download("zip")}>
+                    {downloading === "zip" ? <Spinner className="h-3.5 w-3.5" /> : null}
+                    CSV package
                   </button>
                 </div>
-              ) : null}
-            </div>
-          ) : null}
+                {dlError ? <p className="mt-2 text-sm text-rose-600">{dlError}</p> : null}
+              </div>
+            ) : null}
 
-          {showDropzone ? (
-            <>
-              {dropzone}
-              <div className="flex justify-end gap-2">
-                {replaceJobId ? (
-                  <button type="button" className="btn-ghost text-sm" onClick={() => choosePath("template")}>
-                    Prefer template instead
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  className="btn-primary"
-                  onClick={handleUpload}
-                  disabled={selectedFiles.length === 0 || uploading}
-                >
+            {dropzone}
+
+            {!review && selectedFiles.length > 0 && (
+              <ul className="divide-y divide-[color:var(--pic-border-subtle)] overflow-hidden rounded-lg border border-[color:var(--pic-border)]">
+                {selectedFiles.map((f, i) => (
+                  <li key={`${f.name}-${i}`} className="flex items-center justify-between gap-3 bg-[color:var(--pic-surface-raised)] px-3 py-2.5 text-sm">
+                    <span className="truncate font-medium">{f.name}</span>
+                    <button
+                      type="button"
+                      className="text-xs font-semibold text-rose-600 hover:underline"
+                      onClick={() => setSelectedFiles((prev) => prev.filter((_, j) => j !== i))}
+                    >
+                      Remove
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {!review && selectedFiles.length > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-xs text-[color:var(--pic-text-muted)]">
+                  {selectedFiles.length} file(s) · {totalMb.toFixed(2)} MB
+                </p>
+                <button type="button" className="btn-primary text-sm" onClick={() => void runUpload()} disabled={uploading}>
                   {uploading ? <Spinner className="h-4 w-4" /> : null}
-                  {replaceJobId ? "Replace & continue" : "Continue"}
+                  Upload &amp; review
                 </button>
               </div>
-            </>
-          ) : null}
+            )}
+
+            {uploading && (
+              <div className="space-y-1">
+                <ProgressBar pct={progress} />
+                <p className="text-xs text-[color:var(--pic-text-muted)]">
+                  {phaseHint ?? `Uploading… ${progress}%`}
+                  {elapsedSec > 0 ? <span className="ml-1.5 tabular-nums">· {elapsedSec}s</span> : null}
+                </p>
+                {activityPhase ? <ParseActivityConsole lines={activityLines} phase={activityPhase} live /> : null}
+              </div>
+            )}
+
+            {error ? <p className="text-sm text-rose-600 dark:text-rose-400">{error}</p> : null}
+
+            {review && review.file_inventory && review.file_inventory.length > 0 ? (
+              <UploadFilesTable
+                files={review.file_inventory}
+                totalRows={review.total_rows ?? 0}
+              />
+            ) : null}
+          </div>
+
+          <UploadSignalSidebar
+            checklist={review?.signal_checklist ?? []}
+            looksLikePack={Boolean(review?.looks_like_complete_pack)}
+            showPlaceholder={!review}
+          />
         </div>
       )}
+
+      {review ? (
+        <UploadReviewBar review={review} onClear={clearReview} onContinue={continueToSetup} />
+      ) : null}
     </div>
   );
 }

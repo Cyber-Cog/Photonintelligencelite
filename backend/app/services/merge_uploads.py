@@ -98,23 +98,31 @@ def _merge_plant_level(dfs: list[pd.DataFrame]) -> pd.DataFrame | None:
     return out
 
 
-def merge_csv_files(sources: list[Path], dest: Path, manifest_path: Path | None = None) -> tuple[int, list[str]]:
+def merge_csv_files(
+    sources: list[Path],
+    dest: Path,
+    manifest_path: Path | None = None,
+    *,
+    source_labels: list[str] | None = None,
+    file_inventory: list[dict] | None = None,
+) -> tuple[int, list[str]]:
     """Join plant/weather onto inverter rows by timestamp when possible."""
     if not sources:
         raise ValueError("No source files to merge.")
 
     loaded: list[tuple[str, pd.DataFrame, str]] = []
     names: list[str] = []
-    for p in sources:
+    for i, p in enumerate(sources):
         if not p.exists():
             continue
         df = _read_csv(p)
         if df.empty:
             continue
-        df["_source_file"] = p.name
+        label = (source_labels[i] if source_labels and i < len(source_labels) else None) or p.name
+        df["_source_file"] = label
         kind = _classify(df)
-        loaded.append((kind, df, p.name))
-        names.append(p.name)
+        loaded.append((kind, df, label))
+        names.append(label)
 
     if not loaded:
         raise ValueError("All uploaded files were empty.")
@@ -164,15 +172,12 @@ def merge_csv_files(sources: list[Path], dest: Path, manifest_path: Path | None 
 
     merged.to_csv(dest, index=False)
     if manifest_path:
-        manifest_path.write_text(
-            json.dumps(
-                {
-                    "sources": names,
-                    "row_count": len(merged),
-                    "merge_strategy": "timestamp_join",
-                },
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
+        payload: dict = {
+            "sources": names,
+            "row_count": len(merged),
+            "merge_strategy": "timestamp_join",
+        }
+        if file_inventory:
+            payload["files"] = file_inventory
+        manifest_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     return len(merged), names

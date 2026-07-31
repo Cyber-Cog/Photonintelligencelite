@@ -23,7 +23,7 @@ from backend.app.auth.rate_limit import client_ip
 from backend.app.config import Settings, get_settings
 from backend.app.database import SessionLocal, get_db
 from backend.app.models import Job, User
-from backend.app.schemas import ExcelParseReportOut, UploadResponse
+from backend.app.schemas import ExcelParseReportOut, UploadFileInventoryItem, UploadResponse, UploadSignalCheckItem
 from backend.app.services.excel_parser import ExcelConversionError, parse_excel_to_csv
 from backend.app.services.merge_uploads import merge_csv_files
 from backend.app.services.mapping_service import (
@@ -37,6 +37,13 @@ from backend.app.services.mapping_service import (
 from backend.app.services.pack_architecture_import import (
     merge_architecture_into_job_plant,
     plant_config_from_architecture_file,
+)
+from backend.app.services.upload_inventory import (
+    build_inventory_from_parts,
+    inventory_from_job,
+    read_upload_manifest,
+    signal_checklist,
+    write_upload_manifest,
 )
 from backend.app.services.storage import (
     DecompressionBombError,
@@ -70,6 +77,50 @@ _REPLACEABLE_STATES = {
     JobState.FAILED.value,
     JobState.COMPLETED.value,
 }
+
+
+def _load_parse_report(raw_dir: Path, idx: int) -> dict | None:
+    for name in (f"parse_report_{idx}.json", "parse_report.json"):
+        p = raw_dir / name
+        if p.exists():
+            try:
+                return json.loads(p.read_text(encoding="utf-8"))
+            except Exception:  # noqa: BLE001
+                continue
+    return None
+
+
+def _persist_file_inventory(
+    paths,
+    parts: list[tuple[str, Path, dict | None]],
+    *,
+    row_count: int,
+    source_names: list[str],
+    merge_strategy: str = "timestamp_join",
+) -> list[dict]:
+    files = build_inventory_from_parts(parts)
+    write_upload_manifest(
+        paths.raw_dir / "sources_manifest.json",
+        files=files,
+        row_count=row_count,
+        merge_strategy=merge_strategy,
+        source_names=source_names,
+    )
+    return files
+
+
+def _inventory_parts_from_converted(
+    converted_paths: list[Path],
+    source_names: list[str],
+    raw_dir: Path,
+) -> list[tuple[str, Path, dict | None]]:
+    parts: list[tuple[str, Path, dict | None]] = []
+    for i, path in enumerate(converted_paths):
+        if not path.exists():
+            continue
+        label = source_names[i] if i < len(source_names) else path.name
+        parts.append((label, path, _load_parse_report(raw_dir, i)))
+    return parts
 
 
 def _is_allowed(filename: str) -> bool:
@@ -170,24 +221,51 @@ async def _ingest_uploads(
     for i, uf in enumerate(all_files):
         converted_paths.append(await _ingest_one(uf, i))
 
+    source_names = [
+        sanitize_filename(uf.filename or f"upload_{i}.csv") for i, uf in enumerate(all_files)
+    ]
+
     if excel_deferred:
         return converted_paths, None, "Saving Excel — parsing will continue in the background…", True, None
 
     csv_path = paths.raw_dir / "input.csv"
     manifest_path = paths.raw_dir / "sources_manifest.json"
+    inventory_parts = _inventory_parts_from_converted(converted_paths, source_names, paths.raw_dir)
     if len(converted_paths) > 1:
-        row_count, names = merge_csv_files(converted_paths, csv_path, manifest_path)
+        file_inventory = build_inventory_from_parts(inventory_parts)
+        row_count, names = merge_csv_files(
+            converted_paths,
+            csv_path,
+            manifest_path,
+            source_labels=source_names,
+            file_inventory=file_inventory,
+        )
         for p in converted_paths:
             if p != csv_path:
                 p.unlink(missing_ok=True)
         progress = f"Merged {len(names)} report(s) — {row_count:,} rows."
-    elif parse_report_out:
-        inv_n = len(parse_report_out.inverters_found)
-        progress = (
-            f"Parsed {parse_report_out.layout} ({parse_report_out.strategy}): "
-            f"{parse_report_out.row_count:,} rows, {inv_n} inverter(s), "
-            f"confidence {parse_report_out.confidence:.0%}."
-        )
+    else:
+        row_count = 0
+        if converted_paths and converted_paths[0].exists():
+            import pandas as pd
+
+            row_count = max(0, len(pd.read_csv(converted_paths[0], usecols=[0])))
+            if parse_report_out and parse_report_out.row_count:
+                row_count = parse_report_out.row_count
+            _persist_file_inventory(
+                paths,
+                inventory_parts,
+                row_count=row_count,
+                source_names=source_names,
+                merge_strategy="single_file",
+            )
+        if parse_report_out:
+            inv_n = len(parse_report_out.inverters_found)
+            progress = (
+                f"Parsed {parse_report_out.layout} ({parse_report_out.strategy}): "
+                f"{parse_report_out.row_count:,} rows, {inv_n} inverter(s), "
+                f"confidence {parse_report_out.confidence:.0%}."
+            )
     return converted_paths, parse_report_out, progress, False, architecture_draft
 
 
@@ -225,6 +303,7 @@ def _convert_deferred_excels(
 
     parse_report_out: ExcelParseReportOut | None = None
     converted: list[Path] = []
+    source_labels: list[str] = []
     failures: list[str] = []
     architecture_draft: dict | None = None
     # Also keep any CSV parts already written (mixed excel+csv uploads).
@@ -242,6 +321,7 @@ def _convert_deferred_excels(
         out_csv = paths.raw_dir / (f"part_{idx_s}.csv" if multi else "input.csv")
         report_path = paths.raw_dir / f"parse_report_{idx_s}.json"
         label = excel_target.name
+        source_labels.append(sanitize_filename(label))
         if job_id and db is not None:
             _progress_commit(
                 db,
@@ -285,11 +365,19 @@ def _convert_deferred_excels(
     manifest_path = paths.raw_dir / "sources_manifest.json"
     progress: str | None = None
     unique = list(dict.fromkeys(converted))
+    inventory_parts = _inventory_parts_from_converted(unique, source_labels, paths.raw_dir)
     if len(unique) > 1:
         if job_id and db is not None:
             _progress_commit(db, job_id, f"Merging {len(unique)} parsed report(s)…")
         try:
-            row_count, names = merge_csv_files(unique, csv_path, manifest_path)
+            file_inventory = build_inventory_from_parts(inventory_parts)
+            row_count, names = merge_csv_files(
+                unique,
+                csv_path,
+                manifest_path,
+                source_labels=source_labels,
+                file_inventory=file_inventory,
+            )
         except Exception as exc:  # noqa: BLE001
             raise ExcelConversionError(
                 f"Parsed {len(unique)} file(s) but could not merge them: {exc}"
@@ -305,6 +393,15 @@ def _convert_deferred_excels(
         # Single successful part may still be named part_N.csv
         if unique and unique[0] != csv_path:
             unique[0].replace(csv_path)
+        row_count = parse_report_out.row_count or 0
+        if inventory_parts:
+            _persist_file_inventory(
+                paths,
+                inventory_parts,
+                row_count=row_count,
+                source_names=source_labels or [unique[0].name if unique else "upload.csv"],
+                merge_strategy="single_file",
+            )
         inv_n = len(parse_report_out.inverters_found)
         progress = (
             f"Parsed {parse_report_out.layout} ({parse_report_out.strategy}): "
@@ -451,6 +548,19 @@ def _build_upload_response(
     if not pack_match:
         needs_manual = True
 
+    paths = job_paths(get_settings().job_root_path, job.id)
+    file_inv, total_rows = inventory_from_job(paths, job.original_filename)
+    if not total_rows and csv_path.exists():
+        try:
+            import pandas as pd
+
+            total_rows = max(0, len(pd.read_csv(csv_path, usecols=[0])))
+        except Exception:  # noqa: BLE001
+            total_rows = 0
+
+    plant = (job.plant_config_json or {}).get("plant") if job.plant_config_json else None
+    checklist = signal_checklist(suggestions, plant_config=plant or {})
+
     return UploadResponse(
         job_id=job.id,
         state=job.state,
@@ -460,6 +570,10 @@ def _build_upload_response(
         parse_report=parse_report_out,
         looks_like_complete_pack=pack_match,
         pack_match_ratio=pack_ratio,
+        file_inventory=[UploadFileInventoryItem(**f) for f in file_inv],
+        total_rows=total_rows,
+        signal_checklist=[UploadSignalCheckItem(**c) for c in checklist],
+        original_filename=job.original_filename,
     )
 
 
