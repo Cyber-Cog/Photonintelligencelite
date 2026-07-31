@@ -1,65 +1,71 @@
-import { KpiCard } from "@/components/KpiCard";
-
 type KpiTone = "neutral" | "good" | "bad";
-type KpiIcon = "pr" | "yield" | "availability" | "loss" | "revenue" | "faults";
 
 export type KpiStripItem = {
   label: string;
   value: number | string | null;
   unit?: string;
   tone?: KpiTone;
-  icon?: KpiIcon;
   missingHint?: string | null;
   missingHref?: string | null;
 };
 
+const TONE_VALUE: Record<KpiTone, string> = {
+  neutral: "text-[color:var(--pic-text)]",
+  good: "text-emerald-700 dark:text-emerald-300",
+  bad: "text-rose-700 dark:text-rose-300",
+};
+
 /**
- * Plant KPI board — six visual tiles with tone washes and icons.
- * Prefer this over a flat label|value strip so the Results first viewport reads as a plant scoreboard.
+ * Dense plant KPI matrix — hairline cells, no bordered marketing tiles.
+ * Fits ~10 metrics in one viewport band (5×2 on desktop; wrap ≤2 rows on mobile).
  */
 export function KpiStrip({
   items,
   flush = false,
-  compact = false,
 }: {
   items: KpiStripItem[];
   flush?: boolean;
+  /** @deprecated ignored — matrix is always compact */
   compact?: boolean;
 }) {
   const board = (
-    <div
-      className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 ${compact ? "gap-1.5 lg:gap-2" : "gap-2 lg:gap-2.5"}`}
+    <dl
+      className="kpi-matrix"
       data-tour="summary-kpis"
-      role="group"
       aria-label="Plant KPIs"
     >
-      {items.map((item, i) => (
-        <KpiCard
-          key={item.label}
-          label={item.label}
-          value={item.value}
-          unit={item.unit}
-          tone={item.tone}
-          icon={item.icon ?? "pr"}
-          index={i}
-          missingHint={item.missingHint}
-          missingHref={item.missingHref}
-          compact={compact}
-        />
-      ))}
-    </div>
+      {items.map((item, i) => {
+        const unavailable = item.value === null || item.value === undefined;
+        const tone = item.tone ?? "neutral";
+        const valueClass = unavailable
+          ? "text-[color:var(--pic-text-muted)]"
+          : TONE_VALUE[tone];
+        return (
+          <div
+            key={item.label}
+            className="kpi-matrix-cell"
+            style={{ animationDelay: `${Math.min(i, 9) * 30}ms` }}
+          >
+            <dt className="kpi-matrix-label">{item.label}</dt>
+            <dd className={`kpi-matrix-value ${valueClass}`}>
+              {unavailable ? "—" : item.value}
+              {!unavailable && item.unit ? (
+                <span className="kpi-matrix-unit">{item.unit}</span>
+              ) : null}
+            </dd>
+            {unavailable && item.missingHint && item.missingHref ? (
+              <a href={item.missingHref} className="kpi-matrix-hint" title={item.missingHint}>
+                Fix
+              </a>
+            ) : null}
+          </div>
+        );
+      })}
+    </dl>
   );
 
   if (flush) {
-    return (
-      <div
-        className={`border-t border-[color:var(--pic-border-subtle)] bg-[color:var(--pic-surface-inset)] sm:px-4 ${
-          compact ? "px-3 py-1.5" : "px-3 py-2.5"
-        }`}
-      >
-        {board}
-      </div>
-    );
+    return <div className="kpi-matrix-flush">{board}</div>;
   }
 
   return board;

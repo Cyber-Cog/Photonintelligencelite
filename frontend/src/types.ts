@@ -35,6 +35,10 @@ export interface UploadHierarchySignalItem {
   label: string;
   present: boolean;
   detected_via?: string | null;
+  /** confirmed | mapped_level_tbd — measurements can appear at multiple levels */
+  evidence?: string | null;
+  /** identity (level-specific) | measurement (multi-level) */
+  kind?: string | null;
 }
 
 export interface UploadHierarchyLevel {
@@ -270,6 +274,14 @@ export interface KpiResponse {
   revenue_loss_available: boolean;
   fault_count: number;
   total_ac_energy_kwh: number | null;
+  /** CUF % — generation / (AC capacity × period hours) × 100 */
+  cuf_pct?: number | null;
+  /** PLF % — generation / (DC capacity × period hours) × 100 */
+  plf_pct?: number | null;
+  /** GHI insolation (kWh/m²) over the analysis window */
+  ghi_kwh_m2?: number | null;
+  /** GTI / POA insolation (kWh/m²) over the analysis window */
+  gti_kwh_m2?: number | null;
   /** Per-inverter PR for Summary comparison (not a fault module). */
   inverter_pr?: InverterPrRow[];
 }

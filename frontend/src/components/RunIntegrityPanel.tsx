@@ -48,6 +48,7 @@ export function RunIntegrityPanel({
   onUpdated,
   eyebrow = "Run integrity",
   emptyPassMessage = "No display/run contradictions detected.",
+  quiet = false,
 }: {
   jobId: string;
   check: AiIntegrityCheck | null | undefined;
@@ -55,6 +56,8 @@ export function RunIntegrityPanel({
   onUpdated?: (next: AiIntegrityCheck) => void;
   eyebrow?: string;
   emptyPassMessage?: string;
+  /** Flat divider layout for Summary (less card chrome). */
+  quiet?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -62,7 +65,7 @@ export function RunIntegrityPanel({
   // Always show when a check object exists — including AI-not-configured / skipped.
   if (!check) return null;
 
-  const tone = PANEL_TONE[check.status] ?? PANEL_TONE.skipped;
+  const tone = quiet ? "" : (PANEL_TONE[check.status] ?? PANEL_TONE.skipped);
   const findings = (check.findings || []).filter((f) => f.severity !== "pass");
   const aiLabel = aiLayerStatusLabel(check);
   const rulesCount =
@@ -88,15 +91,20 @@ export function RunIntegrityPanel({
     <section
       data-tour="run-integrity"
       aria-label="Run integrity"
-      className={`rounded-pic-lg border px-3.5 py-3 ${tone}`}
+      className={
+        quiet
+          ? "border-b border-[color:var(--pic-border-subtle)] pb-3"
+          : `rounded-pic-lg border px-3.5 py-3 ${tone}`
+      }
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <p className="tool-eyebrow mb-0.5">{eyebrow}</p>
+          {!quiet ? <p className="tool-eyebrow mb-0.5">{eyebrow}</p> : null}
           <h3 className="font-display text-sm font-semibold tracking-tight text-[color:var(--pic-text)]">
-            {check.summary || "Fault-run integrity check"}
+            {quiet ? "Integrity" : check.summary || "Fault-run integrity check"}
           </h3>
-          <p className="mt-0.5 text-[11px] text-[color:var(--pic-text-muted)]">
+      <p className="mt-0.5 text-[11px] text-[color:var(--pic-text-muted)]" data-testid="ai-layer-status">
+            {quiet && check.summary ? `${check.summary} · ` : ""}
             {check.source === "rules+ai"
               ? "Rules + AI"
               : check.source === "rules"
@@ -104,9 +112,8 @@ export function RunIntegrityPanel({
                 : check.source === "ai"
                   ? "AI"
                   : "System"}
-            {` · rules: ${rulesCount} finding(s)`}
+            {` · ${rulesCount} finding(s)`}
             {` · ${aiLabel}`}
-            {check.model ? ` · ${check.model}` : ""}
             {check.checked_at
               ? ` · ${new Date(check.checked_at).toLocaleString(undefined, {
                   dateStyle: "short",
@@ -130,24 +137,11 @@ export function RunIntegrityPanel({
               disabled={busy}
               onClick={() => void onRerun()}
             >
-              {busy ? "Checking…" : "Re-run check"}
+              {busy ? "Checking…" : "Re-run"}
             </button>
           ) : null}
         </div>
       </div>
-
-      <p
-        className={`mt-2 text-[11px] font-medium ${
-          aiLabel.includes("rejected") || aiLabel.includes("failed")
-            ? "text-rose-800 dark:text-rose-200"
-            : aiLabel.includes("not configured") || aiLabel.includes("skipped")
-              ? "text-[color:var(--pic-text-muted)]"
-              : "text-accent-800 dark:text-accent-200"
-        }`}
-        data-testid="ai-layer-status"
-      >
-        {aiLabel}
-      </p>
 
       {check.error ? (
         <p className="mt-1.5 text-xs text-rose-800 dark:text-rose-200" role="alert">
@@ -161,7 +155,7 @@ export function RunIntegrityPanel({
       ) : null}
 
       {findings.length > 0 ? (
-        <ul className="mt-2.5 space-y-1.5" role="list">
+        <ul className="mt-2 space-y-1" role="list">
           {findings.map((f, i) => (
             <li
               key={`${f.code}-${f.module_id ?? ""}-${i}`}
@@ -184,7 +178,7 @@ export function RunIntegrityPanel({
           ))}
         </ul>
       ) : check.status === "pass" || check.status === "skipped" ? (
-        <p className="mt-2 text-[12px] text-[color:var(--pic-text-muted)]">
+        <p className="mt-1.5 text-[12px] text-[color:var(--pic-text-muted)]">
           {emptyPassMessage}
         </p>
       ) : null}

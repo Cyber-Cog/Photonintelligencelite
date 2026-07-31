@@ -34,15 +34,51 @@ def _dt_hours(ts: pd.Series) -> pd.Series:
     return ts.diff().dt.total_seconds().div(3600.0).fillna(median).clip(lower=1.0 / 3600.0, upper=2.0)
 
 
+def _insolation_from_series(ts: pd.Series, irr: pd.Series) -> Optional[float]:
+    if ts.empty or irr.empty:
+        return None
+    frame = pd.DataFrame({"timestamp_utc": ts, "irr_val": irr}).dropna(subset=["irr_val"])
+    if frame.empty:
+        return None
+    frame = frame.sort_values("timestamp_utc").drop_duplicates("timestamp_utc", keep="first")
+    dt_h = _dt_hours(frame["timestamp_utc"])
+    insolation_wh_m2 = float((frame["irr_val"].to_numpy() * dt_h.to_numpy()).sum())
+    return insolation_wh_m2 / 1000.0
+
+
 def _insolation_kwh_m2(context: AnalysisContext) -> Optional[float]:
+    """POA-preferring insolation used for PR (GTI when POA present, else GHI)."""
     plant_irr = extract_irradiance_frame(context)
     if plant_irr.empty:
         return None
+    return _insolation_from_series(plant_irr["timestamp_utc"], plant_irr["irr_val"])
 
-    plant_irr = plant_irr.sort_values("timestamp_utc")
-    dt_h = _dt_hours(plant_irr["timestamp_utc"])
-    insolation_wh_m2 = float((plant_irr["irr_val"].to_numpy() * dt_h.to_numpy()).sum())
-    return insolation_wh_m2 / 1000.0
+
+def _column_insolation_kwh_m2(context: AnalysisContext, column: str) -> Optional[float]:
+    """Insolation from a single irradiance column (ghi_w_m2 or poa_w_m2)."""
+    irr = context.canonical.frame(columns=["timestamp_utc", "device_type", column])
+    if irr.empty or column not in irr.columns:
+        return None
+    preferred = irr[irr["device_type"].isin(["plant", "wms"])]
+    pool = preferred if not preferred.empty else irr
+    series = pd.to_numeric(pool[column], errors="coerce")
+    return _insolation_from_series(pool["timestamp_utc"], series)
+
+
+def _period_hours(ts: pd.Series, interval_h: float) -> Optional[float]:
+    """Analysis-window hours for CUF/PLF (span of timestamps + one sample interval)."""
+    clean = ts.dropna()
+    if clean.empty:
+        return None
+    span_h = (clean.max() - clean.min()).total_seconds() / 3600.0
+    hours = span_h + max(interval_h, 1.0 / 60.0)
+    return hours if hours > 0 else None
+
+
+def _capacity_factor_pct(total_ac_kwh: float, capacity_kw: float, period_hours: float) -> Optional[float]:
+    if capacity_kw <= 0 or period_hours <= 0:
+        return None
+    return round((total_ac_kwh / (capacity_kw * period_hours)) * 100.0, 2)
 
 
 def _specific_yield_and_pr(context: AnalysisContext, total_ac_kwh: float) -> tuple[Optional[float], Optional[float]]:
@@ -171,6 +207,22 @@ def compute_plant_kpis(context: AnalysisContext, results: list[ResultObject]) ->
 
     availability_pct = _plant_availability_pct(context)
 
+    # GTI = POA insolation when present; GHI = horizontal-only series.
+    gti_kwh_m2 = _column_insolation_kwh_m2(context, "poa_w_m2")
+    ghi_kwh_m2 = _column_insolation_kwh_m2(context, "ghi_w_m2")
+    # If only one irradiance channel exists, GTI falls back to the PR insolation series.
+    if gti_kwh_m2 is None:
+        gti_kwh_m2 = _insolation_kwh_m2(context)
+
+    interval_h = context.sample_interval_minutes / 60.0
+    period_h = _period_hours(ac["timestamp_utc"], interval_h) if not ac.empty else None
+    cuf_pct: Optional[float] = None
+    plf_pct: Optional[float] = None
+    if total_ac_kwh is not None and period_h is not None:
+        # CUF: AC nameplate; PLF: DC nameplate — distinct when AC≠DC.
+        cuf_pct = _capacity_factor_pct(total_ac_kwh, context.plant.ac_capacity_kw, period_h)
+        plf_pct = _capacity_factor_pct(total_ac_kwh, context.plant.dc_capacity_kwp, period_h)
+
     total_loss_kwh = sum(r.loss_energy_kwh or 0.0 for r in results if r.status == ResultStatus.OK)
     fault_count = sum(1 for r in results if r.status == ResultStatus.OK and (r.loss_energy_kwh or 0) > 0)
 
@@ -187,5 +239,9 @@ def compute_plant_kpis(context: AnalysisContext, results: list[ResultObject]) ->
         "revenue_loss_available": context.plant.tariff_inr_per_kwh is not None,
         "fault_count": fault_count,
         "total_ac_energy_kwh": round(total_ac_kwh, 2) if total_ac_kwh is not None else None,
+        "cuf_pct": cuf_pct,
+        "plf_pct": plf_pct,
+        "ghi_kwh_m2": round(ghi_kwh_m2, 3) if ghi_kwh_m2 is not None else None,
+        "gti_kwh_m2": round(gti_kwh_m2, 3) if gti_kwh_m2 is not None else None,
         "inverter_pr": _inverter_pr_rows(context),
     }

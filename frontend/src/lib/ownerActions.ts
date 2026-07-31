@@ -300,17 +300,17 @@ export function buildOwnerActions(
   let headline: string;
   let subline: string;
   if (healthy) {
-    headline = "Plant looks healthy";
+    headline = "Owner Action Centre";
     subline =
       cards.length > 0
-        ? "No urgent faults or blocked checks. Optional improvements are listed here."
-        : "No confirmed faults or blocked checks in this run. Use Losses and Devices for detail.";
+        ? "No urgent faults. Optional items listed below."
+        : "No confirmed faults or blocked checks in this run.";
   } else if (issueCount === 1) {
-    headline = "1 issue needs attention";
-    subline = "Select an issue for detail and next steps.";
+    headline = "Owner Action Centre";
+    subline = "1 issue · select for detail.";
   } else {
-    headline = `${issueCount} issues need attention`;
-    subline = "Select an issue — use Losses or Devices for depth.";
+    headline = "Owner Action Centre";
+    subline = `${issueCount} issues · select for detail.`;
   }
 
   return { headline, subline, healthy, cards, issueCount, totalLossKwh };

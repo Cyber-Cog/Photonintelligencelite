@@ -637,6 +637,110 @@
     animation-delay: 0.18s;
   }
 
+  /* Dense plant KPI matrix — hairline cells, no marketing tiles */
+  .kpi-matrix-flush {
+    border-top: 1px solid var(--pic-border-subtle);
+    background: var(--pic-surface-inset);
+    padding: 0.5rem 0.75rem 0.625rem;
+  }
+  @media (min-width: 640px) {
+    .kpi-matrix-flush {
+      padding-inline: 1rem;
+    }
+  }
+  .kpi-matrix {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0;
+    margin: 0;
+    border: 1px solid var(--pic-border-subtle);
+    border-radius: var(--pic-radius-md);
+    background: var(--pic-surface-raised);
+    overflow: hidden;
+  }
+  @media (min-width: 640px) {
+    .kpi-matrix {
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
+  }
+  .kpi-matrix-cell {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.15rem;
+    min-width: 0;
+    padding: 0.45rem 0.65rem 0.5rem;
+    border-right: 1px solid var(--pic-border-subtle);
+    border-bottom: 1px solid var(--pic-border-subtle);
+    animation: kpiCardEnter 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  /* 2-col mobile: drop right border on even cells */
+  .kpi-matrix-cell:nth-child(2n) {
+    border-right: none;
+  }
+  @media (min-width: 640px) {
+    .kpi-matrix-cell:nth-child(2n) {
+      border-right: 1px solid var(--pic-border-subtle);
+    }
+    .kpi-matrix-cell:nth-child(5n) {
+      border-right: none;
+    }
+    /* Second row — no bottom border */
+    .kpi-matrix-cell:nth-child(n + 6) {
+      border-bottom: none;
+    }
+  }
+  @media (max-width: 639px) {
+    /* Last row on 2-col (items 9–10) */
+    .kpi-matrix-cell:nth-last-child(-n + 2) {
+      border-bottom: none;
+    }
+  }
+  .kpi-matrix-label {
+    margin: 0;
+    font-size: 0.625rem;
+    font-weight: 650;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    line-height: 1.25;
+    color: var(--pic-text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .kpi-matrix-value {
+    margin: 0;
+    font-family: Outfit, "DM Sans", system-ui, sans-serif;
+    font-size: 1.05rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+    font-variant-numeric: tabular-nums;
+  }
+  @media (min-width: 1024px) {
+    .kpi-matrix-value {
+      font-size: 1.125rem;
+    }
+  }
+  .kpi-matrix-unit {
+    margin-left: 0.3rem;
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0;
+    color: var(--pic-text-muted);
+  }
+  .kpi-matrix-hint {
+    font-size: 0.625rem;
+    font-weight: 600;
+    color: #92400e;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  html.dark .kpi-matrix-hint {
+    color: #fde68a;
+  }
+
   /* Summary KPI strip — quiet single-line metrics (not card tiles) */
   .kpi-metric {
     animation: kpiCardEnter 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -646,6 +750,7 @@
   }
   @media (prefers-reduced-motion: reduce) {
     .kpi-metric,
+    .kpi-matrix-cell,
     .kpi-card {
       animation: none;
     }

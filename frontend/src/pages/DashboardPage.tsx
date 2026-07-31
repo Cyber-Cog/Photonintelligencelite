@@ -34,6 +34,7 @@ import { stringHealthFromResults, worstInvertersFromResults } from "@/lib/summar
 import {
   RESULTS_SECTION_EVENT,
   RESULTS_SECTIONS,
+  RESULTS_TOOL_LINKS,
   resolveResultsSectionId,
   type ResultsSectionId,
 } from "@/lib/resultsNav";
@@ -271,58 +272,68 @@ export function DashboardPage() {
   const kpiItems = useMemo((): KpiStripItem[] => {
     if (!data || !jobId) return [];
     const gaps = kpiGaps;
+    const k = data.kpis;
     return [
       {
-        label: "Performance ratio",
-        value: fmt(data.kpis.performance_ratio_pct),
+        label: "Total Generation",
+        value: fmt(k.total_ac_energy_kwh, 0),
+        unit: "kWh",
+      },
+      {
+        label: "PR",
+        value: fmt(k.performance_ratio_pct),
         unit: "%",
-        icon: "pr",
         tone: "good",
         missingHint: gaps?.performance_ratio_pct?.message,
         missingHref: gaps?.performance_ratio_pct ? fixHref(jobId, gaps.performance_ratio_pct.fix) : null,
       },
       {
-        label: "Specific yield",
-        value: fmt(data.kpis.specific_yield_kwh_per_kwp),
+        label: "CUF",
+        value: fmt(k.cuf_pct ?? null),
+        unit: "%",
+      },
+      {
+        label: "PLF",
+        value: fmt(k.plf_pct ?? null),
+        unit: "%",
+      },
+      {
+        label: "Yield",
+        value: fmt(k.specific_yield_kwh_per_kwp),
         unit: "kWh/kWp",
-        icon: "yield",
         missingHint: gaps?.specific_yield_kwh_per_kwp?.message,
         missingHref: gaps?.specific_yield_kwh_per_kwp
           ? fixHref(jobId, gaps.specific_yield_kwh_per_kwp.fix)
           : null,
       },
       {
-        label: "Plant availability",
-        value: fmt(data.kpis.plant_availability_pct),
-        unit: "%",
-        icon: "availability",
-        tone: "good",
-        missingHint: gaps?.plant_availability_pct?.message,
-        missingHref: gaps?.plant_availability_pct
-          ? fixHref(jobId, gaps.plant_availability_pct.fix)
-          : null,
+        label: "GHI",
+        value: fmt(k.ghi_kwh_m2 ?? null, 2),
+        unit: "kWh/m²",
       },
       {
-        label: "Energy loss",
-        value: fmt(data.kpis.estimated_energy_loss_kwh, 0),
+        label: "GTI",
+        value: fmt(k.gti_kwh_m2 ?? null, 2),
+        unit: "kWh/m²",
+      },
+      {
+        label: "Total Energy Loss",
+        value: fmt(k.estimated_energy_loss_kwh, 0),
         unit: "kWh",
-        icon: "loss",
-        tone: data.kpis.estimated_energy_loss_kwh ? "bad" : "neutral",
+        tone: k.estimated_energy_loss_kwh ? "bad" : "neutral",
       },
       {
-        label: "Revenue loss",
-        value: data.kpis.revenue_loss_available ? fmt(data.kpis.revenue_loss_inr, 0) : null,
+        label: "Total Revenue Loss",
+        value: k.revenue_loss_available ? fmt(k.revenue_loss_inr, 0) : null,
         unit: "₹",
-        icon: "revenue",
         tone: "bad",
         missingHint: gaps?.revenue_loss_inr?.message,
         missingHref: gaps?.revenue_loss_inr ? fixHref(jobId, gaps.revenue_loss_inr.fix) : null,
       },
       {
-        label: "Faults",
-        value: data.kpis.fault_count,
-        icon: "faults",
-        tone: data.kpis.fault_count > 0 ? "bad" : "neutral",
+        label: "Total no of faults",
+        value: k.fault_count,
+        tone: k.fault_count > 0 ? "bad" : "neutral",
       },
     ];
   }, [data, kpiGaps, jobId]);
@@ -365,7 +376,10 @@ export function DashboardPage() {
     navigate("/upload");
   };
 
-  const mobileTabs = RESULTS_SECTIONS.map(({ id, label }) => ({ id, label }));
+  const mobileTabs = [
+    ...RESULTS_SECTIONS.map(({ id, label }) => ({ id, label })),
+    ...RESULTS_TOOL_LINKS.map(({ to, label }) => ({ id: `tool:${to}`, label })),
+  ];
 
   if (loading) {
     return (
@@ -401,6 +415,7 @@ export function DashboardPage() {
       titleTour="results-welcome"
       subtitle={`${okCount} modules ready · ${blockedCount} need data`}
       documentScroll
+      hideJobNav
       className="results-shell"
       status={
         <JobStatusChip tone={statusTone}>
@@ -423,12 +438,18 @@ export function DashboardPage() {
             <SubnavTabs
               items={mobileTabs}
               activeId={activeSection}
-              onSelect={(id) => selectSection(id as ResultsSectionId)}
+              onSelect={(id) => {
+                if (id.startsWith("tool:")) {
+                  navigate(`/jobs/${jobId}/${id.slice(5)}`);
+                  return;
+                }
+                selectSection(id as ResultsSectionId);
+              }}
               ariaLabel="Results sections"
               inset
             />
           </div>
-          <KpiStrip items={kpiItems} flush compact />
+          <KpiStrip items={kpiItems} flush />
           {thinResults ? (
             <div className="border-t border-[color:var(--pic-border-subtle)] px-3 py-2 sm:px-4">
               <InfoBanner
@@ -473,35 +494,36 @@ export function DashboardPage() {
       }
     >
       {activeSection === "overview" && (
-        <div id="results-actions" data-results-pane="overview" data-results-pane-alias="summary" className="job-pane-tight flex flex-col gap-3 pb-6">
+        <div id="results-actions" data-results-pane="overview" data-results-pane-alias="summary" className="job-pane-tight flex flex-col gap-5 pb-6">
           {jobId ? (
             <RunIntegrityPanel
               jobId={jobId}
               check={integrity}
               canRerun={isSuperadmin}
               onUpdated={setIntegrity}
+              quiet
             />
           ) : null}
-          {/* Single bridge lives under Losses — overview only links there (no duplicate chart). */}
-          <button
-            type="button"
-            data-tour="summary-loss-preview"
-            onClick={() => selectSection("losses")}
-            className="group flex w-full flex-wrap items-center justify-between gap-2 rounded-pic-lg border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] px-3.5 py-2.5 text-left shadow-pic transition hover:border-brand-300/70 hover:bg-brand-50/30 dark:hover:border-brand-700 dark:hover:bg-brand-950/20"
-          >
-            <div>
-              <p className="tool-eyebrow mb-0.5">Energy story</p>
-              <h3 className="font-display text-sm font-semibold tracking-tight text-[color:var(--pic-text)]">
-                Expected → losses → actual
-              </h3>
-              <p className="mt-0.5 text-[11px] text-[color:var(--pic-text-muted)]">
-                Open Losses for the waterfall chart and segment table.
-              </p>
+
+          <div className="border-t border-[color:var(--pic-border-subtle)] pt-4" data-tour="summary-loss-preview">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <div>
+                <h3 className="font-display text-sm font-semibold tracking-tight text-[color:var(--pic-text)]">
+                  Losses
+                </h3>
+                <p className="mt-0.5 text-[11px] text-[color:var(--pic-text-muted)]">
+                  Expected → diagnosed losses → actual
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => selectSection("losses")}
+                className="text-xs font-medium text-[color:var(--pic-text-secondary)] underline-offset-2 hover:underline"
+              >
+                Open Losses
+              </button>
             </div>
-            <span className="text-xs font-semibold text-brand-800 group-hover:underline dark:text-brand-300">
-              Open losses →
-            </span>
-          </button>
+          </div>
 
           {ownerActions ? (
             <OwnerActionCenter
@@ -512,22 +534,21 @@ export function DashboardPage() {
               compact
             />
           ) : (
-            <div className="rounded-pic-lg border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] px-4 py-4 text-sm text-[color:var(--pic-text-muted)]">
+            <p className="border-t border-[color:var(--pic-border-subtle)] pt-4 text-sm text-[color:var(--pic-text-muted)]">
               No owner actions for this run.
-            </div>
+            </p>
           )}
         </div>
       )}
 
       {activeSection === "performance" && (
-        <div data-results-pane="performance" className="job-pane-tight flex flex-col gap-3 pb-6">
-          <div className="rounded-pic-lg border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] px-3.5 py-3">
-            <p className="tool-eyebrow mb-0.5">Plant scoreboard</p>
+        <div data-results-pane="performance" className="job-pane-tight flex flex-col gap-4 pb-6">
+          <div className="border-b border-[color:var(--pic-border-subtle)] pb-3">
             <h3 className="font-display text-sm font-semibold tracking-tight text-[color:var(--pic-text)]">
               Inverter &amp; string performance
             </h3>
             <p className="mt-0.5 text-[11px] text-[color:var(--pic-text-muted)]">
-              Sticky KPIs stay above. Drill into unit-level PR and string health here.
+              Unit-level PR and string health for this run.
             </p>
           </div>
           <InverterComparisonPanel rows={data.kpis.inverter_pr ?? []} />
@@ -609,25 +630,21 @@ export function DashboardPage() {
 
       {activeSection === "reports" && (
         <div data-results-pane="reports" className="job-pane-tight flex flex-col gap-3 pb-6">
-          <div className="rounded-pic-lg border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] px-4 py-4 shadow-pic">
-            <p className="tool-eyebrow mb-1">Exports</p>
+          <div className="border-b border-[color:var(--pic-border-subtle)] pb-3">
             <h3 className="font-display text-base font-semibold tracking-tight text-[color:var(--pic-text)]">
-              Download plant reports
+              Reports
             </h3>
             <p className="mt-1 max-w-lg text-xs leading-relaxed text-[color:var(--pic-text-muted)]">
-              Excel for tables and segment detail; PDF for the executive brief with KPIs, faults, and loss summary.
+              Excel for tables and segment detail; PDF for KPIs, faults, and loss summary.
             </p>
-            <div className="mt-4 flex flex-wrap gap-2" data-tour="reports-downloads">
-              <a className="btn-secondary text-sm" href={reportUrl(jobId, "xlsx")}>
-                Download Excel
-              </a>
-              <a className="btn-primary text-sm" href={reportUrl(jobId, "pdf")}>
-                Download PDF
-              </a>
-            </div>
           </div>
-          <div className="rounded-pic-lg border border-[color:var(--pic-border-subtle)] bg-[color:var(--pic-surface-inset)] px-4 py-3 text-xs text-[color:var(--pic-text-muted)]">
-            Same links are always available in the Results title bar for quick access.
+          <div className="flex flex-wrap gap-2" data-tour="reports-downloads">
+            <a className="btn-secondary text-sm" href={reportUrl(jobId, "xlsx")}>
+              Download Excel
+            </a>
+            <a className="btn-primary text-sm" href={reportUrl(jobId, "pdf")}>
+              Download PDF
+            </a>
           </div>
         </div>
       )}

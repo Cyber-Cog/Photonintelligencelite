@@ -2,10 +2,11 @@
  * Shared contract between Results sidebar/tabs and the demo tour.
  * Tour activates a section first, then spotlights — no mega-page scroll thrash.
  *
- * In-page sidebar IA (codex-style groups, PIC Lite content):
- *   Plant     → Overview, Performance
- *   Analysis  → Faults, Losses, Devices (diagnostics modules nest here)
+ * In-page sidebar IA (ops rail — no top JobNav on Results):
+ *   Summary   → Summary
+ *   Analysis  → Performance, Faults, Losses, Devices (modules nest here)
  *   Output    → Reports
+ *   Tools     → Raw data, Architecture, Signal Explorer (route links)
  *
  * Nav buttons should expose:
  *   data-results-section="{id}"  and  data-tour="nav-{id}"
@@ -16,16 +17,17 @@
  */
 
 export const RESULTS_SECTION_GROUPS = [
-  { id: "plant", label: "Plant" },
+  { id: "summary", label: "Summary" },
   { id: "analysis", label: "Analysis" },
   { id: "output", label: "Output" },
+  { id: "tools", label: "Tools" },
 ] as const;
 
 export type ResultsSectionGroupId = (typeof RESULTS_SECTION_GROUPS)[number]["id"];
 
 export const RESULTS_SECTIONS = [
-  { id: "overview", label: "Overview", tour: "nav-summary", group: "plant" },
-  { id: "performance", label: "Performance", tour: "nav-performance", group: "plant" },
+  { id: "overview", label: "Summary", tour: "nav-summary", group: "summary" },
+  { id: "performance", label: "Performance", tour: "nav-performance", group: "analysis" },
   { id: "faults", label: "Faults", tour: "nav-faults", group: "analysis" },
   { id: "losses", label: "Losses", tour: "nav-bridge", group: "analysis" },
   { id: "diagnostics", label: "Devices", tour: "nav-diagnostics", group: "analysis" },
@@ -33,6 +35,13 @@ export const RESULTS_SECTIONS = [
 ] as const;
 
 export type ResultsSectionId = (typeof RESULTS_SECTIONS)[number]["id"];
+
+/** Job tool routes — live in Results sidebar (replaces top JobNav on Results). */
+export const RESULTS_TOOL_LINKS = [
+  { to: "data", label: "Raw data", tour: "nav-data" },
+  { to: "architecture", label: "Architecture", tour: "nav-architecture" },
+  { to: "explore", label: "Signal Explorer", tour: "nav-explore" },
+] as const;
 
 export const RESULTS_SECTION_EVENT = "pic:results-section";
 

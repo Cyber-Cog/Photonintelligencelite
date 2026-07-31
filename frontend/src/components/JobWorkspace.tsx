@@ -25,6 +25,7 @@ export function JobWorkspace({
   mainClassName = "",
   flushMain = false,
   documentScroll = false,
+  hideJobNav = false,
   footer,
   className = "",
   titleTour,
@@ -44,6 +45,8 @@ export function JobWorkspace({
   flushMain?: boolean;
   /** Natural document scroll — use on Results so charts are not trapped. */
   documentScroll?: boolean;
+  /** Hide top Results/Raw data/Architecture/Explorer tabs (Results uses sidebar Tools). */
+  hideJobNav?: boolean;
   footer?: ReactNode;
   className?: string;
   titleTour?: string;
@@ -60,9 +63,11 @@ export function JobWorkspace({
         }`}
       >
         <header className="job-workspace-chrome">
-          <div className="job-workspace-nav">
-            <JobNav />
-          </div>
+          {!hideJobNav ? (
+            <div className="job-workspace-nav">
+              <JobNav />
+            </div>
+          ) : null}
           <div className="job-workspace-titlebar">
             <div className="min-w-0" {...(titleTour ? { "data-tour": titleTour } : {})}>
               <div className="flex flex-wrap items-center gap-2">

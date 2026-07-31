@@ -1,7 +1,9 @@
 import type { ReactNode } from "react";
+import { NavLink, useParams } from "react-router-dom";
 import {
   RESULTS_SECTION_GROUPS,
   RESULTS_SECTIONS,
+  RESULTS_TOOL_LINKS,
   type ResultsSectionId,
 } from "@/lib/resultsNav";
 import { moduleNavBadge, needsDataLine } from "@/lib/diagnosticsModules";
@@ -62,6 +64,31 @@ function IconReports() {
   );
 }
 
+function IconData() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h10" />
+    </svg>
+  );
+}
+
+function IconArchitecture() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v18M3 9h18M7 9v12M17 9v12M3 21h18" />
+    </svg>
+  );
+}
+
+function IconExplorer() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden>
+      <circle cx="11" cy="11" r="7" />
+      <path strokeLinecap="round" d="M20 20l-3.5-3.5" />
+    </svg>
+  );
+}
+
 function IconChevron({ open }: { open: boolean }) {
   return (
     <svg
@@ -86,6 +113,12 @@ const SECTION_ICONS: Record<ResultsSectionId, () => ReactNode> = {
   reports: IconReports,
 };
 
+const TOOL_ICONS: Record<(typeof RESULTS_TOOL_LINKS)[number]["to"], () => ReactNode> = {
+  data: IconData,
+  architecture: IconArchitecture,
+  explore: IconExplorer,
+};
+
 function DiagStatusBadge({ result }: { result: ResultObject }) {
   const meta = moduleNavBadge(result);
   return (
@@ -99,8 +132,7 @@ function DiagStatusBadge({ result }: { result: ResultObject }) {
 }
 
 /**
- * Professional in-page Results sidebar — grouped nav, icons, expandable Devices
- * (codex IA / density; PIC Lite brand tokens).
+ * Results ops rail — section panes + tool routes (replaces top JobNav on Results).
  */
 export function ResultsSidebar({
   activeSection,
@@ -125,6 +157,7 @@ export function ResultsSidebar({
   devicesOpen?: boolean;
   onToggleDevices?: () => void;
 }) {
+  const { jobId } = useParams<{ jobId: string }>();
   const modulesOpen = devicesOpen ?? activeSection === "diagnostics";
   const totalModules = faultModules.length + analysisModules.length;
 
@@ -172,7 +205,7 @@ export function ResultsSidebar({
       </div>
 
       <nav className="results-shell-nav" aria-label="Results sections">
-        {RESULTS_SECTION_GROUPS.map((group) => {
+        {RESULTS_SECTION_GROUPS.filter((g) => g.id !== "tools").map((group) => {
           const items = RESULTS_SECTIONS.filter((s) => s.group === group.id);
           if (!items.length) return null;
           return (
@@ -284,6 +317,34 @@ export function ResultsSidebar({
             </div>
           );
         })}
+
+        {jobId ? (
+          <div className="results-nav-group">
+            <p className="results-nav-label">Tools</p>
+            <ul className="space-y-0.5">
+              {RESULTS_TOOL_LINKS.map(({ to, label, tour }) => {
+                const Icon = TOOL_ICONS[to];
+                return (
+                  <li key={to}>
+                    <NavLink
+                      to={`/jobs/${jobId}/${to}`}
+                      data-tour={tour}
+                      className={({ isActive }) =>
+                        `results-nav-item ${isActive ? "results-nav-item-active" : ""}`
+                      }
+                    >
+                      <span className="results-nav-icon">
+                        <Icon />
+                      </span>
+                      <span className="results-nav-item-label">{label}</span>
+                      <span className="results-nav-trail" aria-hidden />
+                    </NavLink>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ) : null}
       </nav>
     </div>
   );

@@ -169,39 +169,47 @@ function ActionDetail({
   onSection: (sectionId: "faults" | "bridge" | "losses" | "diagnostics") => void;
 }) {
   return (
-    <div className="flex h-full flex-col gap-4 p-4 sm:p-5" data-tour="owner-action-detail">
+    <div className="flex h-full flex-col gap-3 p-3 sm:p-4" data-tour="owner-action-detail">
       <div>
-        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-stone-400">Selected issue</p>
-        <h4 className="mt-1.5 font-display text-base font-semibold leading-snug tracking-tight text-stone-900 dark:text-stone-50 break-normal">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[color:var(--pic-text-muted)]">
+          Selected
+        </p>
+        <h4 className="mt-1 font-display text-[15px] font-semibold leading-snug tracking-tight text-[color:var(--pic-text)] break-normal">
           {card.problem}
         </h4>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="rounded-lg border border-stone-100 bg-stone-50/70 px-3 py-2.5 dark:border-stone-800 dark:bg-stone-950/40">
-          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-stone-400">Impact</p>
-          <p className="mt-1 text-sm font-semibold tabular-nums leading-snug text-rose-700 dark:text-rose-300">
+      <dl className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <dt className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[color:var(--pic-text-muted)]">
+            Impact
+          </dt>
+          <dd className="mt-1 text-sm font-semibold tabular-nums leading-snug text-rose-700 dark:text-rose-300">
             {card.impact}
-          </p>
+          </dd>
         </div>
-        <div className="rounded-lg border border-stone-100 bg-stone-50/70 px-3 py-2.5 dark:border-stone-800 dark:bg-stone-950/40">
-          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-stone-400">Severity</p>
-          <p className="mt-1">
-            <span className={`inline-flex rounded-md px-1.5 py-0.5 text-xs font-semibold capitalize ring-1 ring-inset ${TONE_BADGE[card.tone]}`}>
+        <div>
+          <dt className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[color:var(--pic-text-muted)]">
+            Severity
+          </dt>
+          <dd className="mt-1">
+            <span className={`inline-flex rounded px-1.5 py-0.5 text-xs font-medium capitalize ring-1 ring-inset ${TONE_BADGE[card.tone]}`}>
               {severityLabel(card)}
             </span>
-          </p>
+          </dd>
         </div>
-      </div>
+      </dl>
 
       <div>
-        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-stone-400">Next step</p>
-        <p className="mt-1 text-sm leading-snug text-stone-600 dark:text-stone-300 break-normal">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[color:var(--pic-text-muted)]">
+          Next step
+        </p>
+        <p className="mt-1 text-sm leading-snug text-[color:var(--pic-text-secondary)] break-normal">
           {card.nextStep}
         </p>
       </div>
 
-      <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-stone-100 pt-4 dark:border-stone-800">
+      <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-[color:var(--pic-border-subtle)] pt-3">
         <CtaButton
           cta={card.cta}
           onInvestigate={onInvestigate}
@@ -215,7 +223,7 @@ function ActionDetail({
             className="btn-ghost !px-2.5 !py-1 text-[11px]"
             onClick={() => onModule(card.algorithmId!)}
           >
-            Go to module
+            Module
           </button>
         )}
       </div>
@@ -224,7 +232,8 @@ function ActionDetail({
 }
 
 /**
- * Owner-first Action Centre — severity filters, readable list, detail panel when selected.
+ * Owner Action Centre — severity filters, issue list, detail pane.
+ * Flat layout (dividers/spacing) — no nested card chrome.
  */
 export function OwnerActionCenter({
   model,
@@ -282,30 +291,25 @@ export function OwnerActionCenter({
 
   return (
     <section
-      className={`flex flex-col rounded-pic-lg border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] shadow-pic ${
-        compact ? "" : "min-h-[min(40vh,24rem)] overflow-hidden"
-      }`}
+      className="flex flex-col border-t border-[color:var(--pic-border-subtle)]"
       role="region"
-      aria-label="Owner action center"
+      aria-label="Owner action centre"
       data-tour="owner-actions"
     >
-      <div className="panel-rule shrink-0" aria-hidden />
-
       <div
-        className={`flex shrink-0 flex-wrap items-start justify-between gap-3 border-b border-[color:var(--pic-border-subtle)] ${
-          compact ? "px-3 py-2.5 sm:px-4" : "px-4 py-3.5 sm:px-5"
+        className={`flex shrink-0 flex-wrap items-start justify-between gap-3 ${
+          compact ? "pb-2.5 pt-4" : "pb-3 pt-4"
         }`}
       >
         <div className="min-w-0">
-          <p className="tool-eyebrow">Action centre</p>
           <h3
-            className={`mt-1 font-display font-semibold tracking-tight ${
-              compact ? "text-base sm:text-lg" : "text-lg sm:text-xl"
+            className={`font-display font-semibold tracking-tight ${
+              compact ? "text-sm sm:text-base" : "text-base sm:text-lg"
             } ${model.healthy ? "text-accent-800 dark:text-accent-300" : "text-[color:var(--pic-text)]"}`}
           >
             {model.headline}
           </h3>
-          <p className="mt-1 max-w-2xl text-xs text-[color:var(--pic-text-muted)]">{model.subline}</p>
+          <p className="mt-0.5 max-w-2xl text-xs text-[color:var(--pic-text-muted)]">{model.subline}</p>
         </div>
         {summaryChip ? (
           <span
@@ -318,16 +322,12 @@ export function OwnerActionCenter({
       </div>
 
       {model.cards.length === 0 ? (
-        <p className="px-4 py-6 text-center text-sm text-[color:var(--pic-text-muted)] sm:px-5">
-          No owner actions for this run. Use Losses and Devices for detail.
+        <p className="py-4 text-sm text-[color:var(--pic-text-muted)]">
+          No owner actions for this run.
         </p>
       ) : (
         <>
-          <div
-            className={`flex shrink-0 flex-wrap gap-2 border-b border-[color:var(--pic-border-subtle)] ${
-              compact ? "px-3 py-2 sm:px-4" : "px-4 py-2.5 sm:px-5"
-            }`}
-          >
+          <div className={`flex shrink-0 flex-wrap gap-1.5 ${compact ? "pb-2" : "pb-2.5"}`}>
             <FilterChip active={filter === "all"} label="All" count={counts.all} onClick={() => setFilter("all")} />
             <FilterChip active={filter === "high"} label="High" count={counts.high} onClick={() => setFilter("high")} />
             <FilterChip
@@ -340,12 +340,12 @@ export function OwnerActionCenter({
           </div>
 
           <div
-            className={`grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] ${
+            className={`grid border-t border-[color:var(--pic-border-subtle)] lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] ${
               compact ? "" : "min-h-0 flex-1"
             }`}
           >
             <div
-              className={`space-y-0.5 border-b border-[color:var(--pic-border-subtle)] p-2 lg:border-b-0 lg:border-r ${
+              className={`space-y-0.5 py-2 lg:border-r lg:border-[color:var(--pic-border-subtle)] lg:pr-2 ${
                 compact ? "" : "min-h-[16rem] overflow-y-auto overscroll-contain lg:min-h-0"
               }`}
             >
@@ -364,7 +364,7 @@ export function OwnerActionCenter({
             </div>
 
             <div
-              className={`bg-[color:var(--pic-surface-inset)] ${
+              className={`${
                 compact ? "" : "min-h-[16rem] overflow-y-auto overscroll-contain lg:min-h-0"
               }`}
             >
@@ -376,7 +376,7 @@ export function OwnerActionCenter({
                   onSection={onSection}
                 />
               ) : (
-                <p className="px-5 py-10 text-center text-sm text-[color:var(--pic-text-muted)]">Select an issue to see detail.</p>
+                <p className="px-4 py-8 text-center text-sm text-[color:var(--pic-text-muted)]">Select an issue.</p>
               )}
             </div>
           </div>

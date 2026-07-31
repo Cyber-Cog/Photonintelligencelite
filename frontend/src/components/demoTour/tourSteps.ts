@@ -26,7 +26,7 @@ export const DEMO_TOUR_STEPS: TourStepDef[] = [
   {
     id: "welcome",
     title: "Your demo plant",
-    body: "Sample SCADA ran through the full pipeline. Use the left Results sidebar to jump sections — this short tour covers the highlights.",
+    body: "Sample SCADA ran through the full pipeline. Use the left Results sidebar to jump sections and tools — this short tour covers the highlights.",
     route: "dashboard",
     selector: "[data-tour='results-welcome']",
     resultsSection: "overview",
@@ -34,8 +34,8 @@ export const DEMO_TOUR_STEPS: TourStepDef[] = [
   },
   {
     id: "summary",
-    title: "Overview & actions",
-    body: "Sticky KPIs stay in view. Overview holds integrity checks and the Action Centre; Performance covers inverter and string health.",
+    title: "Summary KPIs",
+    body: "Ten plant KPIs in one dense band. Summary also holds integrity status and the Action Centre; Performance covers inverter and string health.",
     route: "dashboard",
     selector: "[data-tour='summary-kpis']",
     resultsSection: ["overview", "summary"],

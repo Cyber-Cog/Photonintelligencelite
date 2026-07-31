@@ -34,6 +34,11 @@ class UploadHierarchySignalItem(BaseModel):
     label: str
     present: bool
     detected_via: Optional[str] = None
+    """Canonical field that satisfied detection (may differ from id for alts)."""
+    evidence: Optional[str] = None
+    """confirmed | mapped_level_tbd — measurements may be present at multiple levels."""
+    kind: Optional[str] = None
+    """identity (level-specific) | measurement (valid at this level, not uniquely partitioned)."""
 
 
 class UploadHierarchyLevel(BaseModel):
@@ -336,6 +341,14 @@ class KpiResponse(BaseModel):
     revenue_loss_available: bool
     fault_count: int
     total_ac_energy_kwh: Optional[float]
+    # CUF % = generation / (AC capacity × period hours) × 100
+    cuf_pct: Optional[float] = None
+    # PLF % = generation / (DC capacity × period hours) × 100
+    plf_pct: Optional[float] = None
+    # GHI insolation over the analysis window (kWh/m²)
+    ghi_kwh_m2: Optional[float] = None
+    # GTI / POA insolation over the analysis window (kWh/m²)
+    gti_kwh_m2: Optional[float] = None
     inverter_pr: list[InverterPrRow] = Field(default_factory=list)
 
 
