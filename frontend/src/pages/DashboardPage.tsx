@@ -10,6 +10,7 @@ import { KpiStrip, type KpiStripItem } from "@/components/KpiStrip";
 import { LossWaterfallBridge } from "@/components/LossWaterfallBridge";
 import { OwnerActionCenter } from "@/components/OwnerActionCenter";
 import { ResultCard } from "@/components/ResultCard";
+import { ResultsSidebar } from "@/components/ResultsSidebar";
 import { RunIntegrityPanel } from "@/components/RunIntegrityPanel";
 import { SummaryInsightPanels } from "@/components/SummaryInsightPanels";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -20,8 +21,6 @@ import { useAuth } from "@/context/AuthContext";
 import { useJob } from "@/context/JobContext";
 import {
   isAnalysisModule,
-  moduleNavBadge,
-  needsDataLine,
   orderDiagModules,
 } from "@/lib/diagnosticsModules";
 import {
@@ -45,49 +44,7 @@ function fmt(value: number | null, digits = 1): string | null {
   return value.toLocaleString(undefined, { maximumFractionDigits: digits });
 }
 
-function FolderIcon({ open = false }: { open?: boolean }) {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      className="h-3.5 w-3.5 shrink-0"
-      aria-hidden="true"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      {open ? (
-        <>
-          <path d="M1.5 6.5h13v5.25A1.75 1.75 0 0 1 12.75 13.5H3.25A1.75 1.75 0 0 1 1.5 11.75V6.5Z" />
-          <path d="M1.5 6.5V4.25A1.75 1.75 0 0 1 3.25 2.5h2.2c.4 0 .78.16 1.06.44L7.5 4h5.25A1.75 1.75 0 0 1 14.5 5.75V6.5" />
-        </>
-      ) : (
-        <path d="M1.5 4.25A1.75 1.75 0 0 1 3.25 2.5h2.2c.4 0 .78.16 1.06.44L7.5 4h5.25A1.75 1.75 0 0 1 14.5 5.75v6A1.75 1.75 0 0 1 12.75 13.5H3.25A1.75 1.75 0 0 1 1.5 11.75v-7.5Z" />
-      )}
-    </svg>
-  );
-}
-
-function FileIcon() {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      className="h-3.5 w-3.5 shrink-0 opacity-90"
-      aria-hidden="true"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M4 1.75h4.5L12.5 5.75v8.5A1.25 1.25 0 0 1 11.25 15.5h-7.5A1.25 1.25 0 0 1 2.5 14.25v-11A1.25 1.25 0 0 1 3.75 2" />
-      <path d="M8.5 1.75V5.5H12.25" />
-    </svg>
-  );
-}
-
-/** Modules worth listing in Diagnostics folder (faults + analysis, preferred order). */
+/** Modules worth listing in Devices folder (faults + analysis, preferred order). */
 function relevantDiagModules(results: ResultObject[]): ResultObject[] {
   const { faults, analysis } = orderDiagModules(results.filter((r) => r.algorithm_id !== "kpis"));
   return [...faults, ...analysis];
@@ -97,192 +54,43 @@ function firstReadyModuleId(modules: ResultObject[]): string | null {
   return modules.find((r) => r.status === "ok")?.algorithm_id ?? modules[0]?.algorithm_id ?? null;
 }
 
-function DiagStatusBadge({ result }: { result: ResultObject }) {
-  const meta = moduleNavBadge(result);
-  return (
-    <span
-      className={`shrink-0 rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ${meta.className}`}
-      title={meta.title}
-    >
-      {meta.label}
-    </span>
-  );
-}
-
-/** Flat Results section rail — lives in workspace aside (no nested card). */
-function ResultsSidebar({
-  activeSection,
-  onSelectSection,
-  faultCount,
-  issueCount,
-}: {
-  activeSection: ResultsSectionId;
-  onSelectSection: (id: ResultsSectionId) => void;
-  faultCount: number | null | undefined;
-  issueCount: number;
-}) {
-  return (
-    <nav className="p-2" aria-label="Results sections" data-tour="results-sidebar">
-      <p className="px-2 pb-2 pt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--pic-text-muted)]">
-        Sections
-      </p>
-      <ul className="space-y-0.5">
-        {RESULTS_SECTIONS.map((item) => {
-          const active = item.id === activeSection;
-          const badge =
-            item.id === "faults" && faultCount != null && faultCount > 0
-              ? faultCount
-              : item.id === "summary" && issueCount > 0
-                ? issueCount
-                : null;
-          return (
-            <li key={item.id}>
-              <button
-                type="button"
-                data-results-section={item.id}
-                data-tour={item.tour}
-                aria-current={active ? "page" : undefined}
-                onClick={() => onSelectSection(item.id)}
-                className={`flex w-full items-center justify-between gap-2 rounded-pic px-2.5 py-2 text-left text-[13px] font-semibold transition duration-150 ${
-                  active
-                    ? "bg-brand-50 text-stone-900 ring-1 ring-brand-200/80 dark:bg-brand-950/40 dark:text-amber-100 dark:ring-brand-800/50"
-                    : "text-[color:var(--pic-text-secondary)] hover:bg-white/80 hover:text-[color:var(--pic-text)] dark:hover:bg-stone-800/60"
-                }`}
-              >
-                <span>{item.label}</span>
-                {badge != null ? (
-                  <span
-                    className={`tabular-nums rounded-pic-sm px-1.5 py-px text-[10px] font-bold ${
-                      active
-                        ? "bg-brand-600 text-white dark:bg-brand-500 dark:text-stone-950"
-                        : "bg-[color:var(--pic-surface-muted)] text-[color:var(--pic-text-muted)]"
-                    }`}
-                  >
-                    {badge}
-                  </span>
-                ) : null}
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-    </nav>
-  );
-}
-
-/** Vertical folder-style module list (lives inside Diagnostics pane only). */
-function DiagnosticsFolderList({
+/** Compact mobile module picker when Devices is active. */
+function MobileDevicesPicker({
   faultModules,
   analysisModules,
   activeModuleId,
   onSelectModule,
-  onCollapse,
 }: {
   faultModules: ResultObject[];
   analysisModules: ResultObject[];
   activeModuleId: string | null;
   onSelectModule: (algorithmId: string) => void;
-  onCollapse?: () => void;
 }) {
-  const total = faultModules.length + analysisModules.length;
-
-  const renderItem = (m: ResultObject) => {
-    const active = activeModuleId === m.algorithm_id;
-    const tip =
-      m.status === "unavailable"
-        ? needsDataLine(m) ?? m.title
-        : m.title + (m.summary ? ` — ${m.summary}` : "");
-    return (
-      <li key={m.algorithm_id} className="pl-1.5">
-        <button
-          type="button"
-          data-results-section={m.algorithm_id}
-          data-tour={`nav-diag-${m.algorithm_id}`}
-          aria-current={active ? "page" : undefined}
-          title={tip}
-          onClick={() => onSelectModule(m.algorithm_id)}
-          className={`flex w-full min-w-0 items-center gap-1.5 rounded-md px-1.5 py-1.5 text-left transition duration-150 ${
-            active
-              ? "bg-brand-50 text-stone-900 ring-1 ring-brand-300/90 dark:bg-brand-950/50 dark:text-amber-50 dark:ring-brand-700/60"
-              : "text-stone-600 hover:bg-stone-50 hover:text-stone-900 dark:text-stone-300 dark:hover:bg-stone-800/70 dark:hover:text-amber-100"
-          }`}
-        >
-          <span
-            className={`shrink-0 ${active ? "text-brand-600 dark:text-brand-400" : "text-stone-400 dark:text-stone-500"}`}
-          >
-            <FileIcon />
-          </span>
-          {/* break-normal + truncate — no mid-word wraps in the modules list */}
-          <span className="min-w-0 flex-1 truncate break-normal text-[12px] font-semibold leading-tight">
-            {m.title}
-          </span>
-          <DiagStatusBadge result={m} />
-        </button>
-      </li>
-    );
-  };
-
+  const modules = [...faultModules, ...analysisModules];
+  if (modules.length === 0) return null;
   return (
-    <nav
-      className="flex w-full flex-col rounded-pic-lg border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)]"
-      aria-label="Diagnostic modules"
-      data-tour="diagnostics-folder-list"
-    >
-      <div className="flex shrink-0 items-center gap-2 border-b border-[color:var(--pic-border-subtle)] px-3 py-2.5">
-        <span className="text-brand-600 dark:text-brand-400">
-          <FolderIcon open />
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--pic-text-muted)]">
-            Modules
-          </p>
-          <p className="text-[11px] font-medium text-[color:var(--pic-text-secondary)]">
-            {total} {total === 1 ? "check" : "checks"}
-          </p>
-        </div>
-        {onCollapse && (
+    <div className="flex flex-wrap gap-1.5 border-b border-[color:var(--pic-border-subtle)] bg-[color:var(--pic-surface-raised)] px-3 py-2 lg:hidden">
+      {modules.map((m) => {
+        const active = m.algorithm_id === activeModuleId;
+        return (
           <button
+            key={m.algorithm_id}
             type="button"
-            className="btn-ghost hidden h-7 w-7 shrink-0 items-center justify-center p-0 text-stone-400 lg:inline-flex"
-            onClick={onCollapse}
-            title="Collapse folder"
-            aria-label="Collapse module folder"
+            data-results-section={m.algorithm_id}
+            data-tour={`nav-diag-${m.algorithm_id}`}
+            onClick={() => onSelectModule(m.algorithm_id)}
+            className={`max-w-[11rem] truncate rounded-pic px-2.5 py-1.5 text-[11px] font-semibold transition ${
+              active
+                ? "bg-brand-50 text-stone-900 ring-1 ring-brand-200/80 dark:bg-brand-950/40 dark:text-amber-100 dark:ring-brand-800/50"
+                : "bg-[color:var(--pic-surface-muted)] text-[color:var(--pic-text-secondary)] hover:bg-brand-50/50 dark:hover:bg-stone-800"
+            }`}
+            title={m.title}
           >
-            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" aria-hidden>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-            </svg>
+            {m.title}
           </button>
-        )}
-      </div>
-
-      <div className="p-2">
-        {total === 0 ? (
-          <p className="px-2 py-3 text-[11px] text-[color:var(--pic-text-muted)]">No modules for this run</p>
-        ) : (
-          <ul className="space-y-0.5">
-            {faultModules.length > 0 && (
-              <li className="pointer-events-none select-none px-2 pb-1 pt-1.5" aria-hidden="true">
-                <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.1em] text-[color:var(--pic-text-muted)]">
-                  <FolderIcon open />
-                  <span>Faults</span>
-                </div>
-              </li>
-            )}
-            {faultModules.map(renderItem)}
-
-            {analysisModules.length > 0 && (
-              <li className="pointer-events-none select-none px-2 pb-1 pt-3" aria-hidden="true">
-                <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.1em] text-[color:var(--pic-text-muted)]">
-                  <FolderIcon open />
-                  <span>Box plot analysis</span>
-                </div>
-              </li>
-            )}
-            {analysisModules.map(renderItem)}
-          </ul>
-        )}
-      </div>
-    </nav>
+        );
+      })}
+    </div>
   );
 }
 
@@ -296,11 +104,11 @@ export function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [errorStatus, setErrorStatus] = useState<number | null>(null);
-  const [activeSection, setActiveSection] = useState<ResultsSectionId>("summary");
+  const [activeSection, setActiveSection] = useState<ResultsSectionId>("overview");
   const [activeModuleId, setActiveModuleId] = useState<string | null>(null);
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [investigateRow, setInvestigateRow] = useState<FaultRow | null>(null);
-  const [folderCollapsed, setFolderCollapsed] = useState(false);
+  const [devicesOpen, setDevicesOpen] = useState(false);
   const [faultCategories, setFaultCategories] = useState<FaultCategoriesResponse>(DEFAULT_FAULT_CATEGORIES);
   const [integrity, setIntegrity] = useState<AiIntegrityCheck | null>(null);
   const mainPaneRef = useRef<HTMLDivElement>(null);
@@ -387,6 +195,7 @@ export function DashboardPage() {
     (id: ResultsSectionId) => {
       setActiveSection(id);
       if (id === "diagnostics") {
+        setDevicesOpen(true);
         setActiveModuleId((cur) => cur ?? firstReadyModuleId(modulesRef.current));
       }
       scrollMainTop();
@@ -397,13 +206,14 @@ export function DashboardPage() {
   const selectModule = useCallback(
     (algorithmId: string) => {
       setActiveSection("diagnostics");
+      setDevicesOpen(true);
       setActiveModuleId(algorithmId);
       scrollMainTop();
     },
     [scrollMainTop],
   );
 
-  // Tour / deep-link: section id or algorithm_id (opens Diagnostics module)
+  // Tour / deep-link: section id or algorithm_id (opens Devices module)
   useEffect(() => {
     const onSection = (ev: Event) => {
       const id = (ev as CustomEvent).detail;
@@ -413,6 +223,7 @@ export function DashboardPage() {
       if (section) {
         setActiveSection(section);
         if (section === "diagnostics") {
+          setDevicesOpen(true);
           setActiveModuleId((cur) => cur ?? firstReadyModuleId(modulesRef.current));
         }
         scrollMainTop();
@@ -422,6 +233,7 @@ export function DashboardPage() {
       const modules = modulesRef.current;
       if (modules.some((m) => m.algorithm_id === id)) {
         setActiveSection("diagnostics");
+        setDevicesOpen(true);
         setActiveModuleId(id);
         scrollMainTop();
       }
@@ -538,6 +350,14 @@ export function DashboardPage() {
     [faultRows, selectSection],
   );
 
+  const handleOwnerSection = useCallback(
+    (id: "faults" | "bridge" | "losses" | "diagnostics") => {
+      const resolved = resolveResultsSectionId(id) ?? (id as ResultsSectionId);
+      selectSection(resolved);
+    },
+    [selectSection],
+  );
+
   if (!jobId) return null;
 
   const handleNewAnalysis = () => {
@@ -581,6 +401,7 @@ export function DashboardPage() {
       titleTour="results-welcome"
       subtitle={`${okCount} modules ready · ${blockedCount} need data`}
       documentScroll
+      className="results-shell"
       status={
         <JobStatusChip tone={statusTone}>
           {thinResults ? "Limited coverage" : blockedCount > 0 ? "Partial mapping" : "Analysis ready"}
@@ -636,6 +457,12 @@ export function DashboardPage() {
           onSelectSection={selectSection}
           faultCount={data.kpis.fault_count}
           issueCount={ownerActions?.issueCount ?? 0}
+          faultModules={faultModules}
+          analysisModules={analysisModules}
+          activeModuleId={activeModuleId}
+          onSelectModule={selectModule}
+          devicesOpen={devicesOpen}
+          onToggleDevices={() => setDevicesOpen((o) => !o)}
         />
       }
       mainRef={mainPaneRef}
@@ -645,8 +472,8 @@ export function DashboardPage() {
         </button>
       }
     >
-      {activeSection === "summary" && (
-        <div id="results-actions" data-results-pane="summary" className="job-pane-tight flex flex-col gap-3 pb-6">
+      {activeSection === "overview" && (
+        <div id="results-actions" data-results-pane="overview" data-results-pane-alias="summary" className="job-pane-tight flex flex-col gap-3 pb-6">
           {jobId ? (
             <RunIntegrityPanel
               jobId={jobId}
@@ -655,11 +482,11 @@ export function DashboardPage() {
               onUpdated={setIntegrity}
             />
           ) : null}
-          {/* Single bridge lives under Loss bridge — summary only links there (no duplicate chart). */}
+          {/* Single bridge lives under Losses — overview only links there (no duplicate chart). */}
           <button
             type="button"
             data-tour="summary-loss-preview"
-            onClick={() => selectSection("bridge")}
+            onClick={() => selectSection("losses")}
             className="group flex w-full flex-wrap items-center justify-between gap-2 rounded-pic-lg border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] px-3.5 py-2.5 text-left shadow-pic transition hover:border-brand-300/70 hover:bg-brand-50/30 dark:hover:border-brand-700 dark:hover:bg-brand-950/20"
           >
             <div>
@@ -668,11 +495,11 @@ export function DashboardPage() {
                 Expected → losses → actual
               </h3>
               <p className="mt-0.5 text-[11px] text-[color:var(--pic-text-muted)]">
-                Open the Loss bridge for the waterfall chart and segment table.
+                Open Losses for the waterfall chart and segment table.
               </p>
             </div>
             <span className="text-xs font-semibold text-brand-800 group-hover:underline dark:text-brand-300">
-              Open loss bridge →
+              Open losses →
             </span>
           </button>
 
@@ -681,7 +508,7 @@ export function DashboardPage() {
               model={ownerActions}
               onInvestigate={investigateFinding}
               onModule={jumpToModule}
-              onSection={(id) => selectSection(id)}
+              onSection={handleOwnerSection}
               compact
             />
           ) : (
@@ -689,9 +516,21 @@ export function DashboardPage() {
               No owner actions for this run.
             </div>
           )}
+        </div>
+      )}
 
+      {activeSection === "performance" && (
+        <div data-results-pane="performance" className="job-pane-tight flex flex-col gap-3 pb-6">
+          <div className="rounded-pic-lg border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] px-3.5 py-3">
+            <p className="tool-eyebrow mb-0.5">Plant scoreboard</p>
+            <h3 className="font-display text-sm font-semibold tracking-tight text-[color:var(--pic-text)]">
+              Inverter &amp; string performance
+            </h3>
+            <p className="mt-0.5 text-[11px] text-[color:var(--pic-text-muted)]">
+              Sticky KPIs stay above. Drill into unit-level PR and string health here.
+            </p>
+          </div>
           <InverterComparisonPanel rows={data.kpis.inverter_pr ?? []} />
-
           <SummaryInsightPanels
             worstInverters={worstInverters}
             stringHealth={stringHealth.rows}
@@ -701,11 +540,12 @@ export function DashboardPage() {
         </div>
       )}
 
-      {activeSection === "bridge" && (
+      {activeSection === "losses" && (
         <div
           id="results-bridge"
           data-tour="loss-bridge"
-          data-results-pane="bridge"
+          data-results-pane="losses"
+          data-results-pane-alias="bridge"
           className="job-pane-tight pb-6"
         >
           <LossWaterfallBridge kpis={data.kpis} results={data.results} jobId={jobId} />
@@ -720,57 +560,29 @@ export function DashboardPage() {
 
       {activeSection === "diagnostics" && (
         <div
-          className="flex flex-col gap-3 p-3 pb-6 lg:flex-row lg:items-start"
+          className="flex flex-col pb-6"
           data-tour="diagnostics"
           data-results-pane="diagnostics"
         >
-          {folderCollapsed && (
-            <div className="hidden shrink-0 lg:flex lg:w-10 lg:flex-col">
-              <button
-                type="button"
-                className="flex w-full flex-col items-center gap-2 rounded-pic-lg border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] px-1 py-3 text-[color:var(--pic-text-muted)] transition hover:border-brand-300 hover:bg-brand-50/40 hover:text-brand-700 dark:hover:border-brand-700 dark:hover:bg-brand-950/30 dark:hover:text-brand-300"
-                onClick={() => setFolderCollapsed(false)}
-                title="Expand module folder"
-                aria-label="Expand module folder"
-                data-tour="diagnostics-folder-expand"
-              >
-                <FolderIcon open={false} />
-                <span
-                  className="text-[9px] font-bold uppercase tracking-[0.14em]"
-                  style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
-                >
-                  Modules
-                </span>
-              </button>
-            </div>
-          )}
-          <div
-            className={`min-w-0 shrink-0 lg:sticky lg:top-2 lg:w-[16rem] lg:max-w-[30%] ${
-              folderCollapsed ? "lg:hidden" : ""
-            }`}
-          >
-            <DiagnosticsFolderList
-              faultModules={faultModules}
-              analysisModules={analysisModules}
-              activeModuleId={activeModuleId}
-              onSelectModule={selectModule}
-              onCollapse={() => setFolderCollapsed(true)}
-            />
-          </div>
-
-          <div className="min-w-0 flex-1 lg:min-w-[70%]">
+          <MobileDevicesPicker
+            faultModules={faultModules}
+            analysisModules={analysisModules}
+            activeModuleId={activeModuleId}
+            onSelectModule={selectModule}
+          />
+          <div className="job-pane-tight min-w-0 flex-1">
             {!activeModule ? (
               <div
                 className="flex min-h-[12rem] flex-col items-center justify-center rounded-pic-lg border border-dashed border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] px-4 py-8 text-center"
                 data-tour="diagnostics-empty"
               >
                 <p className="font-display text-sm font-semibold text-[color:var(--pic-text)]">
-                  Select a diagnostic module
+                  Select a device module
                 </p>
                 <p className="mt-1 max-w-sm text-xs leading-relaxed text-[color:var(--pic-text-muted)]">
                   {diagModules.length === 0
                     ? "No diagnostic modules available for this run."
-                    : "Choose a fault check or box plot analysis from the folder."}
+                    : "Choose a fault check or box plot analysis from Devices in the sidebar."}
                 </p>
               </div>
             ) : (
@@ -791,6 +603,31 @@ export function DashboardPage() {
                 )}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {activeSection === "reports" && (
+        <div data-results-pane="reports" className="job-pane-tight flex flex-col gap-3 pb-6">
+          <div className="rounded-pic-lg border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] px-4 py-4 shadow-pic">
+            <p className="tool-eyebrow mb-1">Exports</p>
+            <h3 className="font-display text-base font-semibold tracking-tight text-[color:var(--pic-text)]">
+              Download plant reports
+            </h3>
+            <p className="mt-1 max-w-lg text-xs leading-relaxed text-[color:var(--pic-text-muted)]">
+              Excel for tables and segment detail; PDF for the executive brief with KPIs, faults, and loss summary.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2" data-tour="reports-downloads">
+              <a className="btn-secondary text-sm" href={reportUrl(jobId, "xlsx")}>
+                Download Excel
+              </a>
+              <a className="btn-primary text-sm" href={reportUrl(jobId, "pdf")}>
+                Download PDF
+              </a>
+            </div>
+          </div>
+          <div className="rounded-pic-lg border border-[color:var(--pic-border-subtle)] bg-[color:var(--pic-surface-inset)] px-4 py-3 text-xs text-[color:var(--pic-text-muted)]">
+            Same links are always available in the Results title bar for quick access.
           </div>
         </div>
       )}

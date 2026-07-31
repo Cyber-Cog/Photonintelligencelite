@@ -2,22 +2,34 @@
  * Shared contract between Results sidebar/tabs and the demo tour.
  * Tour activates a section first, then spotlights — no mega-page scroll thrash.
  *
- * Flat nav (4 sections). Diagnostics modules are picked from the folder list
- * inside the Diagnostics main pane (not nested in the Results sidebar).
+ * In-page sidebar IA (codex-style groups, PIC Lite content):
+ *   Plant     → Overview, Performance
+ *   Analysis  → Faults, Losses, Devices (diagnostics modules nest here)
+ *   Output    → Reports
  *
  * Nav buttons should expose:
  *   data-results-section="{id}"  and  data-tour="nav-{id}"
- * Diagnostics folder items also expose:
+ * Diagnostics / device folder items also expose:
  *   data-results-section="{algorithm_id}"  and  data-tour="nav-diag-{algorithm_id}"
  * Listeners receive window event `pic:results-section` with detail = section id
- * or algorithm_id string (module deep-link opens Diagnostics + that folder item).
+ * or algorithm_id string (module deep-link opens Devices + that folder item).
  */
 
+export const RESULTS_SECTION_GROUPS = [
+  { id: "plant", label: "Plant" },
+  { id: "analysis", label: "Analysis" },
+  { id: "output", label: "Output" },
+] as const;
+
+export type ResultsSectionGroupId = (typeof RESULTS_SECTION_GROUPS)[number]["id"];
+
 export const RESULTS_SECTIONS = [
-  { id: "summary", label: "Summary", tour: "nav-summary" },
-  { id: "bridge", label: "Loss bridge", tour: "nav-bridge" },
-  { id: "faults", label: "Faults", tour: "nav-faults" },
-  { id: "diagnostics", label: "Diagnostics", tour: "nav-diagnostics" },
+  { id: "overview", label: "Overview", tour: "nav-summary", group: "plant" },
+  { id: "performance", label: "Performance", tour: "nav-performance", group: "plant" },
+  { id: "faults", label: "Faults", tour: "nav-faults", group: "analysis" },
+  { id: "losses", label: "Losses", tour: "nav-bridge", group: "analysis" },
+  { id: "diagnostics", label: "Devices", tour: "nav-diagnostics", group: "analysis" },
+  { id: "reports", label: "Reports", tour: "nav-reports", group: "output" },
 ] as const;
 
 export type ResultsSectionId = (typeof RESULTS_SECTIONS)[number]["id"];
@@ -26,9 +38,14 @@ export const RESULTS_SECTION_EVENT = "pic:results-section";
 
 /** Legacy tour/deep-link aliases → current section ids. */
 const SECTION_ALIASES: Record<string, ResultsSectionId> = {
-  actions: "summary",
-  "owner-actions": "summary",
-  "owner_actions": "summary",
+  summary: "overview",
+  actions: "overview",
+  "owner-actions": "overview",
+  owner_actions: "overview",
+  bridge: "losses",
+  "loss-bridge": "losses",
+  "loss_bridge": "losses",
+  devices: "diagnostics",
 };
 
 export function resolveResultsSectionId(v: unknown): ResultsSectionId | null {
@@ -54,8 +71,8 @@ export function requestResultsSection(id: string): void {
 
 /**
  * Activate one Results section. Tries sidebar/tab buttons first, then dispatches
- * `pic:results-section`. Accepts fallbacks (e.g. ["summary","bridge"]).
- * Also accepts algorithm ids for Diagnostics module deep-links.
+ * `pic:results-section`. Accepts fallbacks (e.g. ["overview","losses"]).
+ * Also accepts algorithm ids for Devices module deep-links.
  */
 export async function activateResultsSection(
   section: string | string[] | undefined,

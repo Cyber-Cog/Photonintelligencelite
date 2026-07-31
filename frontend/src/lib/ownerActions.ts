@@ -13,7 +13,7 @@ export type OwnerCta =
   | { kind: "investigate"; algorithmId: string; label: string }
   | { kind: "module"; algorithmId: string; label: string }
   | { kind: "setup"; href: string; label: string }
-  | { kind: "section"; sectionId: "faults" | "bridge" | "diagnostics"; label: string };
+  | { kind: "section"; sectionId: "faults" | "bridge" | "losses" | "diagnostics"; label: string };
 
 export interface OwnerActionCard {
   id: string;
@@ -304,13 +304,13 @@ export function buildOwnerActions(
     subline =
       cards.length > 0
         ? "No urgent faults or blocked checks. Optional improvements are listed here."
-        : "No confirmed faults or blocked checks in this run. Use Loss bridge and Diagnostics for detail.";
+        : "No confirmed faults or blocked checks in this run. Use Losses and Devices for detail.";
   } else if (issueCount === 1) {
     headline = "1 issue needs attention";
     subline = "Select an issue for detail and next steps.";
   } else {
     headline = `${issueCount} issues need attention`;
-    subline = "Select an issue — use Bridge or Diagnostics for depth.";
+    subline = "Select an issue — use Losses or Devices for depth.";
   }
 
   return { headline, subline, healthy, cards, issueCount, totalLossKwh };

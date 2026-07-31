@@ -45,7 +45,7 @@ function CtaButton({
   cta: OwnerCta;
   onInvestigate: (algorithmId: string) => void;
   onModule: (algorithmId: string) => void;
-  onSection: (sectionId: "faults" | "bridge" | "diagnostics") => void;
+  onSection: (sectionId: "faults" | "bridge" | "losses" | "diagnostics") => void;
   primary?: boolean;
 }) {
   const cls = primary ? "btn-primary text-xs" : "btn-secondary !px-2.5 !py-1 text-[11px]";
@@ -166,7 +166,7 @@ function ActionDetail({
   card: OwnerActionCard;
   onInvestigate: (algorithmId: string) => void;
   onModule: (algorithmId: string) => void;
-  onSection: (sectionId: "faults" | "bridge" | "diagnostics") => void;
+  onSection: (sectionId: "faults" | "bridge" | "losses" | "diagnostics") => void;
 }) {
   return (
     <div className="flex h-full flex-col gap-4 p-4 sm:p-5" data-tour="owner-action-detail">
@@ -236,7 +236,7 @@ export function OwnerActionCenter({
   model: OwnerActionCenterModel;
   onInvestigate: (algorithmId: string) => void;
   onModule: (algorithmId: string) => void;
-  onSection: (sectionId: "faults" | "bridge" | "diagnostics") => void;
+  onSection: (sectionId: "faults" | "bridge" | "losses" | "diagnostics") => void;
   /** Denser layout without nested scroll prisons (Results summary). */
   compact?: boolean;
 }) {
@@ -319,7 +319,7 @@ export function OwnerActionCenter({
 
       {model.cards.length === 0 ? (
         <p className="px-4 py-6 text-center text-sm text-[color:var(--pic-text-muted)] sm:px-5">
-          No owner actions for this run. Use Loss bridge and Diagnostics for detail.
+          No owner actions for this run. Use Losses and Devices for detail.
         </p>
       ) : (
         <>
