@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { ApiError, applyArchitecturePattern, architectureTemplateUrl, uploadArchitectureExcel } from "@/api/client";
+import { AppModal } from "@/components/ui/AppModal";
 import {
   emptyInverter,
   fromDetected,
@@ -27,6 +28,9 @@ interface Props {
   embedded?: boolean;
   /** True when architecture was auto-imported from the upload workbook. */
   importedFromUpload?: boolean;
+  /** Open the hierarchy editor modal (e.g. deep-link from validation). */
+  forceEditorOpen?: boolean;
+  onEditorOpenChange?: (open: boolean) => void;
 }
 
 const DETAIL_PAGE_SIZE = 40;
@@ -45,13 +49,24 @@ export function EquipmentStructurePanel({
   onArchitectureParsed,
   embedded = false,
   importedFromUpload = false,
+  forceEditorOpen,
+  onEditorOpenChange,
 }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [patternBusy, setPatternBusy] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
-  const [showDetails, setShowDetails] = useState(false);
+  const [editorOpenInternal, setEditorOpenInternal] = useState(false);
   const [detailLimit, setDetailLimit] = useState(DETAIL_PAGE_SIZE);
+
+  const editorControlled = forceEditorOpen !== undefined;
+  const editorOpen = editorControlled ? Boolean(forceEditorOpen) : editorOpenInternal;
+
+  const setEditorOpen = (open: boolean) => {
+    if (!editorControlled) setEditorOpenInternal(open);
+    onEditorOpenChange?.(open);
+    if (open) setDetailLimit(DETAIL_PAGE_SIZE);
+  };
 
   // Pattern helper state
   const [invCount, setInvCount] = useState(2);
@@ -103,7 +118,6 @@ export function EquipmentStructurePanel({
       const next = fromDetected(res.inverters, res.inverter_ratings);
       onChange(next);
       onArchitectureParsed?.(res);
-      setShowDetails(false);
       setDetailLimit(DETAIL_PAGE_SIZE);
     } catch (err) {
       setLocalError(err instanceof ApiError ? err.message : "Could not parse architecture Excel.");
@@ -129,7 +143,7 @@ export function EquipmentStructurePanel({
         existing_inverters: applyToAll ? [] : equipment,
       });
       onChange(fromPatternPayload(res.inverters as EditableInverter[]));
-      setShowDetails(false);
+      setDetailLimit(DETAIL_PAGE_SIZE);
     } catch (err) {
       setLocalError(err instanceof ApiError ? err.message : "Could not apply pattern.");
     } finally {
@@ -138,6 +152,7 @@ export function EquipmentStructurePanel({
   };
 
   const visible = equipment.slice(0, detailLimit);
+  const previewInverters = equipment.slice(0, 4);
 
   return (
     <section
@@ -161,8 +176,7 @@ export function EquipmentStructurePanel({
               </h3>
             </div>
             <p className="mt-1 pl-3.5 text-xs text-stone-500">
-              Prefer a simple flat SMB table (INV → SCB/SMB → strings). Upload can auto-detect it from the same
-              workbook as SCADA.
+              Confirm counts below, then edit inverter → SMB details in the architecture editor when needed.
             </p>
           </div>
           <button type="button" className="btn-secondary text-xs" onClick={onDetect} disabled={detecting}>
@@ -177,290 +191,374 @@ export function EquipmentStructurePanel({
       </div>
 
       <div className="p-4 sm:p-5">
-      {importedFromUpload && summary.inverterCount > 0 && (
-        <div className="mb-4 rounded-lg border border-emerald-200/90 bg-emerald-50/80 px-3 py-2.5 text-xs text-emerald-900 dark:border-emerald-800/60 dark:bg-emerald-950/30 dark:text-emerald-100">
-          <p className="font-semibold">Detected from upload</p>
-          <p className="mt-0.5 text-emerald-800/90 dark:text-emerald-200/90">
-            Review the counts below. Override with a flat Excel table or bulk pattern only if needed.
-          </p>
-        </div>
-      )}
-
-      {/* Summary tree */}
-      <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <div className="rounded-lg border border-stone-200/90 bg-stone-50 px-3 py-2 dark:border-stone-700 dark:bg-stone-800/60">
-          <p className="text-xs font-medium text-stone-500">Inverters</p>
-          <p className="mt-0.5 font-display text-lg font-semibold text-stone-800 dark:text-stone-100">{summary.inverterCount}</p>
-        </div>
-        <div className="rounded-lg border border-stone-200/90 bg-stone-50 px-3 py-2 dark:border-stone-700 dark:bg-stone-800/60">
-          <p className="text-xs font-medium text-stone-500">SMBs / SCBs</p>
-          <p className="mt-0.5 font-display text-lg font-semibold text-stone-800 dark:text-stone-100">{summary.scbCount}</p>
-        </div>
-        <div className="rounded-lg border border-stone-200/90 bg-stone-50 px-3 py-2 dark:border-stone-700 dark:bg-stone-800/60">
-          <p className="text-xs font-medium text-stone-500">Strings</p>
-          <p className="mt-0.5 font-display text-lg font-semibold text-stone-800 dark:text-stone-100">
-            {summary.stringCount != null ? summary.stringCount.toLocaleString() : "—"}
-          </p>
-        </div>
-        <div className="rounded-lg border border-stone-200/90 bg-stone-50 px-3 py-2 dark:border-stone-700 dark:bg-stone-800/60">
-          <p className="text-xs font-medium text-stone-500">Rated inverters</p>
-          <p className="mt-0.5 font-display text-lg font-semibold text-stone-800 dark:text-stone-100">{summary.ratedCount}</p>
-        </div>
-      </div>
-
-      {notes.length > 0 && (
-        <ul className="mb-4 space-y-1 rounded-md border border-amber-200/80 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800/50 dark:bg-amber-950/30 dark:text-amber-200">
-          {notes.map((n) => (
-            <li key={n}>{n}</li>
-          ))}
-        </ul>
-      )}
-
-      {/* Recommended: flat Excel */}
-      <div className="mb-3 rounded border border-stone-200 p-3 dark:border-stone-700">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-          Recommended: flat Excel (one row per SMB)
-        </p>
-        <p className="mt-1 text-xs text-slate-500">
-          Columns like Inverter ID, SCB/SMB ID, Rating kW, Strings per SCB (Indian OEM headers accepted). Put the
-          sheet in the same workbook as SCADA — named Architecture, Plant, Master, or Inverter List — or upload
-          here. Advanced hierarchy (id / parent_id / device_type) still works.
-        </p>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <a className="btn-secondary text-xs" href={architectureTemplateUrl()} download>
-            Download template
-          </a>
-          <button
-            type="button"
-            className="btn-primary text-xs"
-            disabled={uploading}
-            onClick={() => fileRef.current?.click()}
-          >
-            {uploading ? "Uploading…" : "Upload Excel"}
-          </button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".xlsx,.xlsm"
-            className="hidden"
-            onChange={(e) => void handleUpload(e.target.files?.[0] ?? null)}
-          />
-        </div>
-      </div>
-
-      {/* From SCADA IDs */}
-      <div className="mb-3 rounded border border-stone-200 p-3 dark:border-stone-700">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">From SCADA / upload</p>
-        <p className="mt-1 text-xs text-slate-500">
-          If the workbook already had an architecture sheet (or Inverter + SCB columns), it is imported on upload.
-          Otherwise map Device ID columns and re-detect.
-        </p>
-        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-          <span className={detected || importedFromUpload ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}>
-            {importedFromUpload
-              ? "Detected from upload workbook."
-              : detected
-                ? "Structure detected from SCADA IDs."
-                : "Not detected yet — use flat Excel or re-detect after mapping IDs."}
-          </span>
-        </div>
-      </div>
-
-      {/* Bulk pattern */}
-      <div className="mb-3 rounded border border-stone-200 p-3 dark:border-stone-700">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-          Optional: bulk pattern (uniform plants)
-        </p>
-        <p className="mt-1 text-xs text-slate-500">
-          Apply “N SMBs × M strings” when the plant is regular; edit exceptions via flat Excel.
-        </p>
-        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <div>
-            <label className="label">Inverter count</label>
-            <input
-              type="number"
-              className="input"
-              min={1}
-              max={2000}
-              value={invCount}
-              disabled={applyToAll && equipment.length > 0}
-              onChange={(e) => setInvCount(Number(e.target.value) || 1)}
-            />
+        {importedFromUpload && summary.inverterCount > 0 && (
+          <div className="mb-4 rounded-lg border border-emerald-200/90 bg-emerald-50/80 px-3 py-2.5 text-xs text-emerald-900 dark:border-emerald-800/60 dark:bg-emerald-950/30 dark:text-emerald-100">
+            <p className="font-semibold">Detected from upload</p>
+            <p className="mt-0.5 text-emerald-800/90 dark:text-emerald-200/90">
+              Review the counts below. Override with Excel, a bulk pattern, or the hierarchy editor if needed.
+            </p>
           </div>
-          <div>
-            <label className="label">SMBs / inverter</label>
-            <input
-              type="number"
-              className="input"
-              min={1}
-              max={64}
-              value={smbsPerInv}
-              onChange={(e) => setSmbsPerInv(Number(e.target.value) || 1)}
-            />
-          </div>
-          <div>
-            <label className="label">Strings / SMB</label>
-            <input
-              type="number"
-              className="input"
-              min={1}
-              max={64}
-              value={stringsPerSmb}
-              onChange={(e) => setStringsPerSmb(Number(e.target.value) || 1)}
-            />
-          </div>
-          <div className="flex items-end">
-            <label className="flex items-center gap-2 pb-2 text-xs text-slate-600 dark:text-slate-300">
-              <input
-                type="checkbox"
-                checked={applyToAll}
-                onChange={(e) => setApplyToAll(e.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 text-brand-600"
-              />
-              Apply to current list
-            </label>
-          </div>
-        </div>
-        <div className="mt-3 flex flex-wrap items-center gap-3">
-          <button type="button" className="btn-secondary text-xs" onClick={() => void handlePattern()} disabled={patternBusy}>
-            {patternBusy ? "Applying…" : "Apply pattern"}
-          </button>
-          <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
-            {patternTotals.inverters.toLocaleString()} INV × {Math.max(0, smbsPerInv)} SMB ={" "}
-            <span className="text-brand-700 dark:text-brand-300">{patternTotals.smbs.toLocaleString()} SMBs</span>
-            {" · "}
-            {patternTotals.strings.toLocaleString()} strings
-          </p>
-        </div>
-      </div>
-
-      <div
-        id="setup-field-apply-default-rating"
-        className={`mb-3 flex flex-wrap items-center gap-2 rounded-lg ${
-          highlightDefaultRating ? "setup-field-flash border border-amber-400/80 bg-amber-50/60 p-2 dark:border-amber-700 dark:bg-amber-950/30" : ""
-        }`}
-      >
-        <button
-          type="button"
-          className={`btn-secondary text-xs ${highlightDefaultRating ? "border-amber-500 ring-2 ring-amber-400/70" : ""}`}
-          onClick={() => {
-            if (!(defaultRatingKw > 0)) {
-              onJumpToInverterRating?.();
-              return;
-            }
-            applyRatingToAll();
-          }}
-          disabled={equipment.length === 0 && defaultRatingKw > 0}
-          aria-invalid={highlightDefaultRating}
-        >
-          Apply default rating ({defaultRatingKw > 0 ? `${defaultRatingKw} kW` : "—"}) to all
-        </button>
-        {highlightDefaultRating && (
-          <button
-            type="button"
-            className="text-xs font-semibold text-amber-900 underline dark:text-amber-200"
-            onClick={() => onJumpToInverterRating?.()}
-          >
-            Set default inverter rating above
-          </button>
         )}
-        <button
-          type="button"
-          className="btn-ghost text-xs"
-          onClick={() => setShowDetails((v) => !v)}
-          disabled={equipment.length === 0}
-        >
-          {showDetails ? "Hide row editor" : `Show row editor (${summary.inverterCount} inv)`}
-        </button>
-      </div>
 
-      {localError && <p className="mb-3 text-xs text-rose-600 dark:text-rose-400">{localError}</p>}
+        {/* Summary */}
+        <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="rounded-lg border border-stone-200/90 bg-stone-50 px-3 py-2 dark:border-stone-700 dark:bg-stone-800/60">
+            <p className="text-xs font-medium text-stone-500">Inverters</p>
+            <p className="mt-0.5 font-display text-lg font-semibold text-stone-800 dark:text-stone-100">
+              {summary.inverterCount}
+            </p>
+          </div>
+          <div className="rounded-lg border border-stone-200/90 bg-stone-50 px-3 py-2 dark:border-stone-700 dark:bg-stone-800/60">
+            <p className="text-xs font-medium text-stone-500">SMBs / SCBs</p>
+            <p className="mt-0.5 font-display text-lg font-semibold text-stone-800 dark:text-stone-100">
+              {summary.scbCount}
+            </p>
+          </div>
+          <div className="rounded-lg border border-stone-200/90 bg-stone-50 px-3 py-2 dark:border-stone-700 dark:bg-stone-800/60">
+            <p className="text-xs font-medium text-stone-500">Strings</p>
+            <p className="mt-0.5 font-display text-lg font-semibold text-stone-800 dark:text-stone-100">
+              {summary.stringCount != null ? summary.stringCount.toLocaleString() : "—"}
+            </p>
+          </div>
+          <div className="rounded-lg border border-stone-200/90 bg-stone-50 px-3 py-2 dark:border-stone-700 dark:bg-stone-800/60">
+            <p className="text-xs font-medium text-stone-500">Rated inverters</p>
+            <p className="mt-0.5 font-display text-lg font-semibold text-stone-800 dark:text-stone-100">
+              {summary.ratedCount}
+            </p>
+          </div>
+        </div>
 
-      {showDetails && (
-        <div className="max-h-[480px] space-y-3 overflow-y-auto rounded-md border border-slate-200 p-2 dark:border-slate-700">
-          {visible.map((inv, invIdx) => (
-            <div key={`${inv.inverter_id}-${invIdx}`} className="rounded-md border border-slate-100 p-2 dark:border-slate-800">
-              <div className="mb-2 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_120px_auto] sm:items-end">
-                <div>
-                  <label className="label">Inverter ID</label>
-                  <input
-                    className="input"
-                    value={inv.inverter_id}
-                    onChange={(e) => updateInverter(invIdx, { inverter_id: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="label">Rated kW</label>
-                  <input
-                    type="number"
-                    className="input"
-                    placeholder="—"
-                    value={inv.rated_kw ?? ""}
-                    onChange={(e) =>
-                      updateInverter(invIdx, {
-                        rated_kw: e.target.value === "" ? null : Number(e.target.value),
-                      })
-                    }
-                  />
-                </div>
-                <button
-                  type="button"
-                  className="btn-ghost text-xs text-rose-600"
-                  onClick={() => onChange(equipment.filter((_, i) => i !== invIdx))}
-                >
-                  Remove
-                </button>
-              </div>
-              <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-slate-400">
-                SMBs ({inv.scbs.length})
-              </p>
-              {inv.scbs.slice(0, 12).map((scb, scbIdx) => (
-                <div key={`${scb.scb_id}-${scbIdx}`} className="mb-1 grid grid-cols-1 gap-1 sm:grid-cols-[1fr_100px]">
-                  <input
-                    className="input text-xs"
-                    value={scb.scb_id}
-                    onChange={(e) => updateScb(invIdx, scbIdx, { scb_id: e.target.value })}
-                  />
-                  <input
-                    type="number"
-                    className="input text-xs"
-                    placeholder="strings"
-                    value={scb.strings_per_scb ?? ""}
-                    onChange={(e) =>
-                      updateScb(invIdx, scbIdx, {
-                        strings_per_scb: e.target.value === "" ? null : Number(e.target.value),
-                        strings_detected: false,
-                      })
-                    }
-                  />
-                </div>
-              ))}
-              {inv.scbs.length > 12 && (
-                <p className="text-[10px] text-slate-400">
-                  +{inv.scbs.length - 12} more SMBs. Edit via Excel template for bulk changes.
+        {notes.length > 0 && (
+          <ul className="mb-4 space-y-1 rounded-md border border-amber-200/80 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800/50 dark:bg-amber-950/30 dark:text-amber-200">
+            {notes.map((n) => (
+              <li key={n}>{n}</li>
+            ))}
+          </ul>
+        )}
+
+        {/* Compact hierarchy preview + primary edit CTA */}
+        <div className="mb-4 rounded-lg border border-stone-200/90 bg-stone-50/50 p-3 dark:border-stone-700 dark:bg-stone-800/40">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-stone-500">Hierarchy</p>
+              {summary.inverterCount === 0 ? (
+                <p className="mt-1 text-xs text-stone-500">
+                  No structure yet — upload Excel, apply a pattern, or re-detect from mapped Device IDs.
                 </p>
+              ) : (
+                <ul className="mt-1.5 space-y-0.5 text-xs text-stone-600 dark:text-stone-300">
+                  {previewInverters.map((inv) => (
+                    <li key={inv.inverter_id} className="truncate">
+                      <span className="font-medium text-stone-800 dark:text-stone-100">{inv.inverter_id || "—"}</span>
+                      {" · "}
+                      {inv.scbs.length} SMB
+                      {inv.scbs.length === 1 ? "" : "s"}
+                      {inv.rated_kw != null ? ` · ${inv.rated_kw} kW` : ""}
+                    </li>
+                  ))}
+                  {equipment.length > previewInverters.length ? (
+                    <li className="text-stone-400">+{equipment.length - previewInverters.length} more inverters</li>
+                  ) : null}
+                </ul>
               )}
+              <p className="mt-1.5 text-xs text-stone-500">
+                {importedFromUpload
+                  ? "Detected from upload workbook."
+                  : detected
+                    ? "Structure detected from SCADA IDs."
+                    : "Not detected yet — use Excel, pattern, or re-detect after mapping IDs."}
+              </p>
             </div>
-          ))}
-          {equipment.length > detailLimit && (
             <button
               type="button"
-              className="btn-secondary w-full text-xs"
-              onClick={() => setDetailLimit((n) => n + DETAIL_PAGE_SIZE)}
+              className="btn-primary text-xs"
+              onClick={() => setEditorOpen(true)}
+              disabled={equipment.length === 0}
+              title={equipment.length === 0 ? "Load a structure first (Excel, pattern, or re-detect)" : undefined}
             >
-              Show more ({detailLimit} / {equipment.length})
+              Edit hierarchy
             </button>
-          )}
+          </div>
+        </div>
+
+        {/* Recommended: flat Excel */}
+        <div className="mb-3 rounded border border-stone-200 p-3 dark:border-stone-700">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            Recommended: flat Excel (one row per SMB)
+          </p>
+          <p className="mt-1 text-xs text-slate-500">
+            Columns like Inverter ID, SCB/SMB ID, Rating kW, Strings per SCB. Prefer a sheet in the same workbook as
+            SCADA, or upload here.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <a className="btn-secondary text-xs" href={architectureTemplateUrl()} download>
+              Download template
+            </a>
+            <button
+              type="button"
+              className="btn-primary text-xs"
+              disabled={uploading}
+              onClick={() => fileRef.current?.click()}
+            >
+              {uploading ? "Uploading…" : "Upload Excel"}
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".xlsx,.xlsm"
+              className="hidden"
+              onChange={(e) => void handleUpload(e.target.files?.[0] ?? null)}
+            />
+          </div>
+        </div>
+
+        {/* Bulk pattern */}
+        <details className="mb-3 rounded border border-stone-200 dark:border-stone-700">
+          <summary className="cursor-pointer px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            Optional: bulk pattern (uniform plants)
+          </summary>
+          <div className="border-t border-stone-200 px-3 pb-3 pt-2 dark:border-stone-700">
+            <p className="text-xs text-slate-500">
+              Apply “N SMBs × M strings” when the plant is regular; edit exceptions in the hierarchy editor or Excel.
+            </p>
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <div>
+                <label className="label">Inverter count</label>
+                <input
+                  type="number"
+                  className="input"
+                  min={1}
+                  max={2000}
+                  value={invCount}
+                  disabled={applyToAll && equipment.length > 0}
+                  onChange={(e) => setInvCount(Number(e.target.value) || 1)}
+                />
+              </div>
+              <div>
+                <label className="label">SMBs / inverter</label>
+                <input
+                  type="number"
+                  className="input"
+                  min={1}
+                  max={64}
+                  value={smbsPerInv}
+                  onChange={(e) => setSmbsPerInv(Number(e.target.value) || 1)}
+                />
+              </div>
+              <div>
+                <label className="label">Strings / SMB</label>
+                <input
+                  type="number"
+                  className="input"
+                  min={1}
+                  max={64}
+                  value={stringsPerSmb}
+                  onChange={(e) => setStringsPerSmb(Number(e.target.value) || 1)}
+                />
+              </div>
+              <div className="flex items-end">
+                <label className="flex items-center gap-2 pb-2 text-xs text-slate-600 dark:text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={applyToAll}
+                    onChange={(e) => setApplyToAll(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-brand-600"
+                  />
+                  Apply to current list
+                </label>
+              </div>
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                className="btn-secondary text-xs"
+                onClick={() => void handlePattern()}
+                disabled={patternBusy}
+              >
+                {patternBusy ? "Applying…" : "Apply pattern"}
+              </button>
+              <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                {patternTotals.inverters.toLocaleString()} INV × {Math.max(0, smbsPerInv)} SMB ={" "}
+                <span className="text-brand-700 dark:text-brand-300">
+                  {patternTotals.smbs.toLocaleString()} SMBs
+                </span>
+                {" · "}
+                {patternTotals.strings.toLocaleString()} strings
+              </p>
+            </div>
+          </div>
+        </details>
+
+        <div
+          id="setup-field-apply-default-rating"
+          className={`mb-1 flex flex-wrap items-center gap-2 rounded-lg ${
+            highlightDefaultRating
+              ? "setup-field-flash border border-amber-400/80 bg-amber-50/60 p-2 dark:border-amber-700 dark:bg-amber-950/30"
+              : ""
+          }`}
+        >
           <button
             type="button"
-            className="btn-secondary text-xs"
-            onClick={() => onChange([...equipment, emptyInverter(equipment.length + 1)])}
+            className={`btn-secondary text-xs ${highlightDefaultRating ? "border-amber-500 ring-2 ring-amber-400/70" : ""}`}
+            onClick={() => {
+              if (!(defaultRatingKw > 0)) {
+                onJumpToInverterRating?.();
+                return;
+              }
+              applyRatingToAll();
+            }}
+            disabled={equipment.length === 0 && defaultRatingKw > 0}
+            aria-invalid={highlightDefaultRating}
           >
-            Add one inverter (small plants only)
+            Apply default rating ({defaultRatingKw > 0 ? `${defaultRatingKw} kW` : "—"}) to all
           </button>
+          {highlightDefaultRating && (
+            <button
+              type="button"
+              className="text-xs font-semibold text-amber-900 underline dark:text-amber-200"
+              onClick={() => onJumpToInverterRating?.()}
+            >
+              Set default inverter rating above
+            </button>
+          )}
         </div>
-      )}
+
+        {localError && <p className="mt-3 text-xs text-rose-600 dark:text-rose-400">{localError}</p>}
       </div>
+
+      {editorOpen && (
+        <AppModal
+          titleId="architecture-editor-title"
+          eyebrow="Architecture editor"
+          title="Edit hierarchy"
+          description={
+            <>
+              {summary.inverterCount.toLocaleString()} inverters · {summary.scbCount.toLocaleString()} SMBs
+              {summary.stringCount != null ? ` · ${summary.stringCount.toLocaleString()} strings` : ""}
+              <span className="mt-1 block text-xs text-stone-500">
+                Edit IDs, string counts, and ratings. Large plants: prefer Excel for bulk changes.
+              </span>
+            </>
+          }
+          onClose={() => setEditorOpen(false)}
+          maxWidthClass="max-w-5xl"
+          footer={
+            <>
+              <button
+                type="button"
+                className={`btn-secondary text-xs ${highlightDefaultRating ? "border-amber-500 ring-2 ring-amber-400/70" : ""}`}
+                onClick={() => {
+                  if (!(defaultRatingKw > 0)) {
+                    setEditorOpen(false);
+                    onJumpToInverterRating?.();
+                    return;
+                  }
+                  applyRatingToAll();
+                }}
+                disabled={equipment.length === 0 && defaultRatingKw > 0}
+              >
+                Apply default rating ({defaultRatingKw > 0 ? `${defaultRatingKw} kW` : "—"})
+              </button>
+              <button
+                type="button"
+                className="btn-secondary text-xs"
+                onClick={() => onChange([...equipment, emptyInverter(equipment.length + 1)])}
+              >
+                Add inverter
+              </button>
+              <button type="button" className="btn-primary text-xs" onClick={() => setEditorOpen(false)}>
+                Done
+              </button>
+            </>
+          }
+        >
+          <div className="space-y-3">
+            {visible.map((inv, invIdx) => (
+              <div
+                key={`${inv.inverter_id}-${invIdx}`}
+                className="rounded-lg border border-stone-200 p-3 dark:border-stone-700"
+              >
+                <div className="mb-2 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_120px_auto] sm:items-end">
+                  <div>
+                    <label className="label">Inverter ID</label>
+                    <input
+                      className="input"
+                      value={inv.inverter_id}
+                      onChange={(e) => updateInverter(invIdx, { inverter_id: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="label">Rated kW</label>
+                    <input
+                      type="number"
+                      className="input"
+                      placeholder="—"
+                      value={inv.rated_kw ?? ""}
+                      onChange={(e) =>
+                        updateInverter(invIdx, {
+                          rated_kw: e.target.value === "" ? null : Number(e.target.value),
+                        })
+                      }
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    className="btn-ghost text-xs text-rose-600"
+                    onClick={() => onChange(equipment.filter((_, i) => i !== invIdx))}
+                  >
+                    Remove
+                  </button>
+                </div>
+                <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-stone-400">
+                  SMBs ({inv.scbs.length})
+                </p>
+                <div className="mb-1 grid grid-cols-[1fr_100px] gap-1 text-[10px] font-medium uppercase tracking-wide text-stone-400">
+                  <span>SMB / SCB ID</span>
+                  <span>Strings</span>
+                </div>
+                {inv.scbs.map((scb, scbIdx) => (
+                  <div key={`${scb.scb_id}-${scbIdx}`} className="mb-1 grid grid-cols-1 gap-1 sm:grid-cols-[1fr_100px]">
+                    <input
+                      className="input text-xs"
+                      value={scb.scb_id}
+                      onChange={(e) => updateScb(invIdx, scbIdx, { scb_id: e.target.value })}
+                    />
+                    <input
+                      type="number"
+                      className="input text-xs"
+                      placeholder="strings"
+                      value={scb.strings_per_scb ?? ""}
+                      onChange={(e) =>
+                        updateScb(invIdx, scbIdx, {
+                          strings_per_scb: e.target.value === "" ? null : Number(e.target.value),
+                          strings_detected: false,
+                        })
+                      }
+                    />
+                  </div>
+                ))}
+                {inv.scbs.length === 0 && (
+                  <p className="text-[10px] text-stone-400">No SMBs under this inverter.</p>
+                )}
+              </div>
+            ))}
+            {equipment.length > detailLimit && (
+              <button
+                type="button"
+                className="btn-secondary w-full text-xs"
+                onClick={() => setDetailLimit((n) => n + DETAIL_PAGE_SIZE)}
+              >
+                Show more ({detailLimit} / {equipment.length})
+              </button>
+            )}
+            {equipment.length === 0 && (
+              <p className="py-6 text-center text-sm text-stone-500">
+                No inverters yet. Close and load a structure first, or add one below.
+              </p>
+            )}
+          </div>
+        </AppModal>
+      )}
     </section>
   );
 }

@@ -41,10 +41,10 @@ export function AnalysisConsole({
 
   return (
     <section
-      className="proc-panel flex min-h-0 flex-1 flex-col overflow-hidden"
+      className="proc-panel flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
       aria-label="Analysis console"
     >
-      <header className="flex shrink-0 items-center justify-between gap-2 border-b border-stone-200/80 px-3 py-2 dark:border-stone-700/80">
+      <header className="flex shrink-0 items-center justify-between gap-2 border-b border-stone-200/80 px-3 py-1.5 dark:border-stone-700/80">
         <div className="flex min-w-0 items-center gap-2">
           <span className="font-display text-[11px] font-semibold uppercase leading-normal tracking-[0.14em] text-stone-600 dark:text-stone-300">
             Analysis console
@@ -63,7 +63,7 @@ export function AnalysisConsole({
 
       <div
         ref={scrollerRef}
-        className="proc-log-scroll min-h-0 flex-1 overflow-y-auto px-3 py-2"
+        className="proc-log-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-2"
         role="log"
         aria-live="polite"
         aria-relevant="additions"

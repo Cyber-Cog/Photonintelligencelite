@@ -1419,7 +1419,8 @@ html.dark .tour-btn-next:hover {
 
 .proc-panel {
   @apply rounded-xl border border-stone-200/90 bg-white/90 shadow-sm shadow-stone-900/[0.03] dark:border-stone-700 dark:bg-stone-900/85 dark:shadow-none;
-  min-height: 18rem;
+  /* Fill flex parent; never force taller than remaining viewport (clips under Layout overflow:hidden). */
+  min-height: 0;
 }
 
 /* Compact upload-page parse console — same card language as Processing, smaller footprint */

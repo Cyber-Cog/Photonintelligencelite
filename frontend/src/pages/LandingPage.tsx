@@ -352,10 +352,6 @@ export function LandingPage() {
                 {demoLoading ? <Spinner className="h-4 w-4" /> : null}
                 {demoButtonLabel}
               </button>
-              <DownloadTemplateMenu
-                buttonClassName="btn-secondary landing-cta-btn text-sm"
-                onSelect={(kind) => void goTemplate(kind)}
-              />
             </div>
             {demoError ? <p className="mt-3 text-sm text-rose-600 dark:text-rose-400">{demoError}</p> : null}
           </Reveal>

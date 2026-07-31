@@ -312,7 +312,7 @@ export function ValidationPage() {
       <PageHeader
         eyebrow="Gate before analysis"
         title="Data validation"
-        description="Checked your upload for issues that could affect analysis accuracy. The upload is retained so you can fix mapping and retry without starting over."
+        description="Issues that would skew analysis. Fix mapping or plant details, then continue."
       />
 
       {loading && (

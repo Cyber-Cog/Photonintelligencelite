@@ -165,6 +165,8 @@ export function SetupPage() {
   const [contextError, setContextError] = useState<string | null>(null);
   const [flashField, setFlashField] = useState<string | null>(null);
   const [activeStep, setActiveStep] = useState<SetupStep>("mapping");
+  const [showAutoMapped, setShowAutoMapped] = useState(false);
+  const [architectureEditorOpen, setArchitectureEditorOpen] = useState(false);
   const [looksLikePack, setLooksLikePack] = useState<boolean | null>(
     () => uploadInfo?.looks_like_complete_pack ?? null,
   );
@@ -196,6 +198,10 @@ export function SetupPage() {
           : undefined;
     if (step) setActiveStep(step);
 
+    if (field === "architecture") {
+      setArchitectureEditorOpen(true);
+    }
+
     if (field) {
       const key =
         field.startsWith("canonical:") || field.startsWith("column:") || field in SETUP_FIELD_LABELS
@@ -203,6 +209,10 @@ export function SetupPage() {
           : section === "mapping"
             ? `canonical:${field}`
             : field;
+      // Deep-link into an auto-mapped column — expand that section so the row is visible.
+      if (key.startsWith("canonical:") || key.startsWith("column:")) {
+        setShowAutoMapped(true);
+      }
       setFlashField(key);
       pendingFocusKey.current = key;
       return;
@@ -620,11 +630,10 @@ export function SetupPage() {
         title="Confirm columns and plant details"
         description={
           <>
-            Work through Mapping, Plant, then Architecture. All detected columns are listed below — map what you
-            need, then confirm plant fields before continuing.
+            Mapping → Plant → Architecture. Confirm required fields, then Continue.
             {revisingCompleted
               ? " Editing a completed job clears prior results and re-runs validation."
-              : " Returning from validation or results: edit below and Continue to re-validate."}
+              : ""}
           </>
         }
         actions={
@@ -782,7 +791,14 @@ export function SetupPage() {
               embedded
               scrollMargin
               title="Column mapping"
-              description={`${allColumns.length} detected column${allColumns.length === 1 ? "" : "s"} — review every row (auto-mapped included)`}
+              description={
+                needsReview.length > 0
+                  ? `${needsReview.length} column${needsReview.length === 1 ? "" : "s"} to review` +
+                    (autoMapped.length > 0
+                      ? ` · ${autoMapped.length} auto-mapped (collapsed until you expand)`
+                      : "")
+                  : `${allColumns.length} detected column${allColumns.length === 1 ? "" : "s"}`
+              }
             >
               {fieldErrors.timestamp && (
                 <p className="mb-3 text-xs font-medium text-amber-800 dark:text-amber-200" role="alert">
@@ -790,65 +806,81 @@ export function SetupPage() {
                 </p>
               )}
               <div className="divide-y divide-stone-100 dark:divide-stone-800">
-                {allColumns.map((s: ColumnMappingSuggestion) => {
-                  const mappedAs = mapping[s.column_name];
-                  const isTs = mappedAs === "timestamp" || s.canonical_field === "timestamp";
-                  const isAuto =
-                    s.band === "auto" && !isGarbageHeader(s.column_name) && s.canonical_field !== "timestamp";
-                  const rowId = isTs
-                    ? setupFieldDomId("timestamp")
-                    : mappedAs && mappedAs !== "ignore"
-                      ? setupFieldDomId(`canonical:${mappedAs}`)
-                      : setupFieldDomId(`column:${s.column_name}`);
-                  const invalid = isTs && Boolean(fieldErrors.timestamp);
-                  const flash = flashField === `canonical:${mappedAs}` || flashField === `column:${s.column_name}`;
-                  return (
-                    <div
-                      key={s.column_name}
-                      id={rowId}
-                      className={`flex items-center justify-between gap-4 py-2.5 ${
-                        invalid || flash ? "setup-field-flash rounded px-1" : ""
-                      }`}
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm text-stone-700 dark:text-stone-200">{s.column_name}</p>
-                        <div className="mt-0.5 flex flex-wrap gap-1">
-                          {isAuto ? (
-                            <Badge tone="success">Auto-mapped</Badge>
-                          ) : (
-                            <Badge
-                              tone={s.band === "confirm" || s.canonical_field === "timestamp" ? "warning" : "danger"}
-                            >
-                              {s.canonical_field === "timestamp"
-                                ? "Timestamp: confirm"
-                                : s.band === "confirm"
-                                  ? `${Math.round(s.confidence * 100)}% confidence`
-                                  : "Needs mapping"}
-                            </Badge>
-                          )}
-                          {isGarbageHeader(s.column_name) && <Badge tone="danger">Broken header</Badge>}
-                        </div>
-                      </div>
-                      <select
-                        className={`input max-w-xs ${invalid ? "border-amber-500 ring-2 ring-amber-400/70" : ""}`}
-                        aria-invalid={invalid}
-                        value={mapping[s.column_name] ?? "ignore"}
-                        onChange={(e) => {
-                          autoDetectDone.current = false;
-                          clearFieldError("timestamp");
-                          setMapping((m) => ({ ...m, [s.column_name]: e.target.value }));
-                        }}
+                {(showAutoMapped || needsReview.length === 0 ? allColumns : needsReview).map(
+                  (s: ColumnMappingSuggestion) => {
+                    const mappedAs = mapping[s.column_name];
+                    const isTs = mappedAs === "timestamp" || s.canonical_field === "timestamp";
+                    const isAuto =
+                      s.band === "auto" && !isGarbageHeader(s.column_name) && s.canonical_field !== "timestamp";
+                    const rowId = isTs
+                      ? setupFieldDomId("timestamp")
+                      : mappedAs && mappedAs !== "ignore"
+                        ? setupFieldDomId(`canonical:${mappedAs}`)
+                        : setupFieldDomId(`column:${s.column_name}`);
+                    const invalid = isTs && Boolean(fieldErrors.timestamp);
+                    const flash =
+                      flashField === `canonical:${mappedAs}` || flashField === `column:${s.column_name}`;
+                    return (
+                      <div
+                        key={s.column_name}
+                        id={rowId}
+                        className={`flex items-center justify-between gap-4 py-2.5 ${
+                          invalid || flash ? "setup-field-flash rounded px-1" : ""
+                        }`}
                       >
-                        {CANONICAL_FIELD_OPTIONS.map((opt) => (
-                          <option key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  );
-                })}
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm text-stone-700 dark:text-stone-200">{s.column_name}</p>
+                          <div className="mt-0.5 flex flex-wrap gap-1">
+                            {isAuto ? (
+                              <Badge tone="success">Auto-mapped</Badge>
+                            ) : (
+                              <Badge
+                                tone={
+                                  s.band === "confirm" || s.canonical_field === "timestamp" ? "warning" : "danger"
+                                }
+                              >
+                                {s.canonical_field === "timestamp"
+                                  ? "Timestamp: confirm"
+                                  : s.band === "confirm"
+                                    ? `${Math.round(s.confidence * 100)}% confidence`
+                                    : "Needs mapping"}
+                              </Badge>
+                            )}
+                            {isGarbageHeader(s.column_name) && <Badge tone="danger">Broken header</Badge>}
+                          </div>
+                        </div>
+                        <select
+                          className={`input max-w-xs ${invalid ? "border-amber-500 ring-2 ring-amber-400/70" : ""}`}
+                          aria-invalid={invalid}
+                          value={mapping[s.column_name] ?? "ignore"}
+                          onChange={(e) => {
+                            autoDetectDone.current = false;
+                            clearFieldError("timestamp");
+                            setMapping((m) => ({ ...m, [s.column_name]: e.target.value }));
+                          }}
+                        >
+                          {CANONICAL_FIELD_OPTIONS.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    );
+                  },
+                )}
               </div>
+              {autoMapped.length > 0 && needsReview.length > 0 ? (
+                <button
+                  type="button"
+                  className="btn-ghost mt-3 text-xs"
+                  onClick={() => setShowAutoMapped((v) => !v)}
+                >
+                  {showAutoMapped
+                    ? "Hide auto-mapped columns"
+                    : `Show ${autoMapped.length} auto-mapped column${autoMapped.length === 1 ? "" : "s"}`}
+                </button>
+              ) : null}
             </SectionPanel>
           )}
         </>
@@ -1094,6 +1126,8 @@ export function SetupPage() {
           notes={detectNotes}
           architectureError={fieldErrors.architecture}
           highlightDefaultRating={isInvalid("inverter_capacity_kw")}
+          forceEditorOpen={architectureEditorOpen}
+          onEditorOpenChange={setArchitectureEditorOpen}
           onDetect={() => {
             autoDetectDone.current = true;
             void runDetect();

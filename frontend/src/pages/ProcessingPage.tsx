@@ -155,14 +155,16 @@ export function ProcessingPage() {
   if (!jobId) return null;
 
   return (
-    <div className="proc-screen tool-enter relative flex w-full min-h-0 flex-1 flex-col">
+    <div className="proc-screen tool-enter relative flex min-h-0 w-full flex-1 flex-col overflow-hidden">
       <div className="proc-screen-grid pointer-events-none absolute inset-0" aria-hidden />
 
-      <div className="relative z-[1] flex min-h-0 flex-1 flex-col gap-3 pb-1 pt-0.5">
-        <StepIndicator current={4} jobId={jobId} />
+      <div className="relative z-[1] flex min-h-0 flex-1 flex-col gap-2 pb-0.5 pt-0.5">
+        <div className="shrink-0">
+          <StepIndicator current={4} jobId={jobId} />
+        </div>
 
         {failed ? (
-          <div className="mx-auto w-full max-w-xl">
+          <div className="mx-auto w-full max-w-xl overflow-y-auto">
             <ErrorState
               title="Analysis failed"
               message={status?.error_summary ?? "The job could not be completed."}
@@ -182,30 +184,30 @@ export function ProcessingPage() {
           </div>
         ) : (
           <>
-            {/* Status strip — compact so console/chart dominate */}
-            <header className="proc-status-strip flex flex-col gap-2.5 rounded-xl border border-stone-200/90 bg-white/90 px-3 py-3 shadow-sm shadow-stone-900/[0.03] dark:border-stone-700 dark:bg-stone-900/90 dark:shadow-none sm:flex-row sm:items-center sm:justify-between sm:px-4 sm:py-3.5">
-              <div className="flex min-w-0 items-start gap-2.5">
-                <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-50 dark:bg-brand-950/40">
-                  <Spinner className="h-4 w-4" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="tool-eyebrow mb-1">In progress · {formatElapsed(elapsedSec)}</p>
-                  <h2 className="font-display text-base font-semibold leading-snug tracking-tight text-stone-900 dark:text-stone-50 sm:text-lg">
+            {/* Compact status — one row on sm+ so console/chart keep the height */}
+            <header className="proc-status-strip flex shrink-0 items-center gap-3 rounded-lg border border-stone-200/90 bg-white/90 px-2.5 py-2 shadow-sm shadow-stone-900/[0.03] dark:border-stone-700 dark:bg-stone-900/90 dark:shadow-none sm:px-3">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-brand-50 dark:bg-brand-950/40">
+                <Spinner className="h-3.5 w-3.5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0">
+                  <h2 className="font-display text-sm font-semibold leading-tight tracking-tight text-stone-900 dark:text-stone-50 sm:text-base">
                     {stateLabel}
                   </h2>
-                  <p className="mt-1 text-sm leading-snug text-stone-500 dark:text-stone-400">{detail}</p>
-                  {status?.queue_position != null && status.queue_position > 0 && (
-                    <p className="mt-1 text-xs text-stone-400">
-                      In queue (workers busy) · Position {status.queue_position}
-                      {status.estimated_wait_seconds != null &&
-                        ` · Est. wait ${Math.round(status.estimated_wait_seconds)}s`}
-                    </p>
-                  )}
+                  <span className="text-[10px] font-medium uppercase tracking-wide text-stone-400">
+                    {formatElapsed(elapsedSec)}
+                  </span>
                 </div>
+                <p className="mt-0.5 truncate text-xs leading-snug text-stone-500 dark:text-stone-400" title={detail}>
+                  {detail}
+                  {status?.queue_position != null && status.queue_position > 0
+                    ? ` · Queue #${status.queue_position}`
+                    : ""}
+                </p>
               </div>
               {status && (
-                <div className="w-full shrink-0 sm:w-48">
-                  <div className="mb-1.5 flex justify-between text-[10px] font-semibold uppercase leading-normal tracking-wide text-stone-400">
+                <div className="w-[7.5rem] shrink-0 sm:w-40">
+                  <div className="mb-1 flex justify-between text-[10px] font-semibold uppercase tracking-wide text-stone-400">
                     <span>Pipeline</span>
                     <span className="tabular-nums text-brand-700 dark:text-brand-400">
                       {progressPct(status.state)}%
@@ -218,10 +220,10 @@ export function ProcessingPage() {
               )}
             </header>
 
-            {error && <p className="text-xs text-rose-500">{error}</p>}
+            {error && <p className="shrink-0 text-xs text-rose-500">{error}</p>}
 
-            {/* Main workspace: console + chart prep — dominate remaining viewport */}
-            <div className="flex min-h-[min(72vh,42rem)] flex-1 flex-col gap-2.5 lg:min-h-[32rem] lg:flex-row">
+            {/* Fill leftover viewport only — panels scroll internally; no giant min-heights */}
+            <div className="flex min-h-0 flex-1 flex-col gap-2 lg:flex-row">
               <AnalysisConsole lines={logLines} live={live} />
               <ChartPrepPanel state={status?.state} />
             </div>

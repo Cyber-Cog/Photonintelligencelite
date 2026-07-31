@@ -45,12 +45,12 @@ function SkeletonPlot({
   return (
     <div
       className={clsx(
-        "proc-chart-card flex min-h-0 flex-1 flex-col rounded-md border border-stone-200/80 bg-white/70 p-2 dark:border-stone-700/70 dark:bg-stone-950/40",
+        "proc-chart-card flex h-[4.75rem] shrink-0 flex-col rounded-md border border-stone-200/80 bg-white/70 p-1.5 dark:border-stone-700/70 dark:bg-stone-950/40",
         phase === "loading" && "proc-chart-shimmer",
       )}
       style={{ animationDelay: `${index * 100}ms` }}
     >
-      <div className="mb-1 flex shrink-0 items-center justify-between gap-2">
+      <div className="mb-0.5 flex shrink-0 items-center justify-between gap-2">
         <p className="truncate text-[10px] font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-400">
           {label}
         </p>
@@ -72,7 +72,7 @@ function SkeletonPlot({
 
       <svg
         viewBox={`0 0 ${w} ${h}`}
-        className="min-h-[3.25rem] w-full flex-1 text-brand-600 dark:text-brand-400"
+        className="h-[2.75rem] w-full shrink-0 text-brand-600 dark:text-brand-400"
         preserveAspectRatio="none"
         aria-hidden
       >
@@ -152,17 +152,17 @@ export function ChartPrepPanel({ state }: { state: string | null | undefined }) 
 
   return (
     <section
-      className="proc-panel flex min-h-0 flex-col overflow-hidden lg:w-[min(100%,24rem)] lg:shrink-0"
+      className="proc-panel flex max-h-[40%] min-h-0 flex-col overflow-hidden lg:max-h-none lg:w-[min(100%,22rem)] lg:shrink-0"
       aria-label="Chart preparation"
     >
-      <header className="flex shrink-0 items-center justify-between gap-2 border-b border-stone-200/80 px-3 py-2 dark:border-stone-700/80">
+      <header className="flex shrink-0 items-center justify-between gap-2 border-b border-stone-200/80 px-3 py-1.5 dark:border-stone-700/80">
         <span className="font-display text-[11px] font-semibold uppercase leading-normal tracking-[0.14em] text-stone-600 dark:text-stone-300">
           Chart prep
         </span>
         <span className="min-w-0 truncate text-[10px] leading-normal text-stone-400 dark:text-stone-500">{statusCopy}</span>
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto p-2">
+      <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto overscroll-contain p-1.5">
         {CHART_PREP_LABELS.map((label, i) => (
           <SkeletonPlot key={label} label={label} phase={phase} index={i} />
         ))}
