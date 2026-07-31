@@ -56,6 +56,13 @@ services:
       # Long random string (e.g. openssl rand -hex 32)
       - key: SESSION_SECRET
         sync: false
+      # ZenMux — PIC Analyst (chat API key, not management key)
+      - key: ZENMUX_API_KEY
+        sync: false
+      - key: ZENMUX_BASE_URL
+        value: "https://zenmux.ai/api/v1"
+      - key: ZENMUX_MODEL
+        value: "google/gemini-2.5-flash"
       # First superadmin account (created/repaired on API startup)
       - key: PIC_SUPERADMIN_EMAIL
         sync: false

@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.app.auth.seed import seed_superadmin
 from backend.app.config import get_settings
 from backend.app.database import SessionLocal, init_db
-from backend.app.routers import admin, auth, demo, explorer, intake, jobs, reports, results, templates, upload
+from backend.app.routers import admin, agent, auth, demo, explorer, intake, jobs, reports, results, templates, upload
 from backend.app.services.cleanup_service import (
     align_account_job_report_ttl,
     periodic_cleanup_loop,
@@ -84,6 +84,7 @@ app.include_router(jobs.router)
 app.include_router(results.router)
 app.include_router(reports.router)
 app.include_router(demo.router)
+app.include_router(agent.router)
 
 
 @app.get("/api/health")
