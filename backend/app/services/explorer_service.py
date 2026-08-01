@@ -1,4 +1,5 @@
 """Job-scoped data preview, architecture readout, and Analytics Lab timeseries."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -135,7 +136,9 @@ def _detect_ts_column(columns: list[str]) -> str | None:
     return None
 
 
-def _apply_time_mask(df: pd.DataFrame, ts_col: str, start: pd.Timestamp | None, end: pd.Timestamp | None) -> pd.DataFrame:
+def _apply_time_mask(
+    df: pd.DataFrame, ts_col: str, start: pd.Timestamp | None, end: pd.Timestamp | None
+) -> pd.DataFrame:
     if ts_col not in df.columns:
         return df.iloc[0:0]
     ts = pd.to_datetime(df[ts_col], utc=True, errors="coerce")
@@ -602,6 +605,7 @@ def get_architecture_view(
 def list_equipment(canonical_dir: Path, raw_csv: Path, level: str) -> list[str]:
     if _has_canonical(canonical_dir):
         access = CanonicalDataAccess.from_partitions(canonical_dir)
+        present = {c for c in access.columns() if c}
         if level == "wms":
             try:
                 wms_ids = access.equipment_ids("wms")
@@ -610,7 +614,10 @@ def list_equipment(canonical_dir: Path, raw_csv: Path, level: str) -> list[str]:
             if wms_ids:
                 return wms_ids[:500]
             # Joined weather path: no WMS device rows, but POA may exist on inverter rows.
-            df = access.frame(columns=["poa_w_m2", "ghi_w_m2"])
+            meteo_cols = [c for c in ("poa_w_m2", "ghi_w_m2") if c in present]
+            if not meteo_cols:
+                return []
+            df = access.frame(columns=meteo_cols)
             if "poa_w_m2" in df.columns and df["poa_w_m2"].notna().any():
                 return ["POA (joined)"]
             if "ghi_w_m2" in df.columns and df["ghi_w_m2"].notna().any():
@@ -619,7 +626,9 @@ def list_equipment(canonical_dir: Path, raw_csv: Path, level: str) -> list[str]:
 
         dtype = LEVEL_DEVICE_TYPE.get(level)
         col = LEVEL_ID_COL.get(level, "inverter_id")
-        cols = list({col, "device_id", "device_type"})
+        cols = [c for c in (col, "device_id", "device_type") if c == "device_type" or c in present]
+        if not cols:
+            return []
         df = access.frame(columns=cols, device_types=[dtype] if dtype else None)
         if df.empty:
             return []
@@ -642,31 +651,27 @@ def list_equipment(canonical_dir: Path, raw_csv: Path, level: str) -> list[str]:
 def list_signals(canonical_dir: Path, raw_csv: Path, level: str) -> list[dict[str, str]]:
     if _has_canonical(canonical_dir):
         access = CanonicalDataAccess.from_partitions(canonical_dir)
-        # Only pull signal columns (+ ids) — not the full wide frame repeatedly.
-        probe_cols = [c for c in CANONICAL_COLUMNS if c not in ("timestamp_utc",)]
+        # Only request columns that exist in the job parquet schema — never icr_id unless present.
+        present = {c for c in access.columns() if c}
+        identity = {
+            "timestamp_utc",
+            "device_id",
+            "device_type",
+            "inverter_id",
+            "scb_id",
+            "string_id",
+            "icr_id",
+        }
+        probe_cols = [c for c in CANONICAL_COLUMNS if c in present and c not in identity]
+        if not probe_cols:
+            return []
         dtype = None if level == "wms" else LEVEL_DEVICE_TYPE.get(level)
-        # For WMS / meteo, check weather columns on any partition (often joined onto inverter).
         df = access.frame(columns=probe_cols, device_types=[dtype] if dtype else None)
         if df.empty and level == "wms":
             df = access.frame(columns=probe_cols)
         if df.empty:
             return []
-        available = [
-            c
-            for c in CANONICAL_COLUMNS
-            if c in df.columns
-            and c
-            not in (
-                "timestamp_utc",
-                "device_id",
-                "device_type",
-                "inverter_id",
-                "scb_id",
-                "string_id",
-                "icr_id",
-            )
-            and df[c].notna().any()
-        ]
+        available = [c for c in probe_cols if c in df.columns and df[c].notna().any()]
         if level == "wms":
             available = [c for c in available if c in METEO_SIGNALS]
         else:
@@ -705,18 +710,22 @@ def query_timeseries(
             "note": "Timeseries explorer requires completed analysis (canonical data). Finish setup and run analysis first.",
         }
 
-    # Load only the columns needed for the plot.
-    id_cols = ["inverter_id", "scb_id", "string_id", "device_id", "device_type"]
-    need = ["timestamp_utc", *id_cols, *[s for s in signals if s in SIGNAL_MAP or s in CANONICAL_COLUMNS]]
+    # Load only columns present in this job's parquet schema (never require icr_id).
+    access = CanonicalDataAccess.from_partitions(canonical_dir)
+    present = {c for c in access.columns() if c}
+    if "timestamp_utc" not in present:
+        return {"series": [], "point_count": 0}
+    id_cols = [c for c in ("inverter_id", "scb_id", "string_id", "device_id") if c in present]
+    signal_cols = [s for s in signals if s in present and (s in SIGNAL_MAP or s in CANONICAL_COLUMNS)]
+    cols = ["timestamp_utc", "device_type", *id_cols, *signal_cols]
     seen: set[str] = set()
-    cols: list[str] = []
-    for c in need:
+    deduped: list[str] = []
+    for c in cols:
         if c not in seen:
             seen.add(c)
-            cols.append(c)
+            deduped.append(c)
 
-    access = CanonicalDataAccess.from_partitions(canonical_dir)
-    df = access.frame(columns=cols)
+    df = access.frame(columns=deduped)
     if df.empty:
         return {"series": [], "point_count": 0}
 

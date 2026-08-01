@@ -2,6 +2,7 @@
 
 See docs/architecture_decisions.md §1-2 for the canonical schema and context contract.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -88,16 +89,30 @@ class CanonicalDataAccess:
             device_type_value = d.name.split("=", 1)[1] if "=" in d.name else None
             for f in d.rglob("*.parquet"):
                 # Never request device_type from the file schema — it was stripped on write.
-                # Also never ask pyarrow for columns absent from this partition (older jobs /
-                # interval-normalize historically omitted icr_id → FieldRef.Name crash).
-                if cols is None:
-                    read_cols = None
-                else:
-                    import pyarrow.parquet as pq
+                # Never ask pyarrow for columns absent from this partition (icr_id and other
+                # optional fields are often omitted → FieldRef.Name crash).
+                import pyarrow.parquet as pq
 
-                    schema_names = set(pq.ParquetFile(f).schema_arrow.names)
+                pf = pq.ParquetFile(f)
+                schema_names = set(pf.schema_arrow.names)
+                if cols is None:
+                    part = pd.read_parquet(f)
+                else:
                     read_cols = [c for c in cols if c != "device_type" and c in schema_names]
-                part = pd.read_parquet(f, columns=read_cols or None)
+                    if read_cols:
+                        try:
+                            part = pd.read_parquet(f, columns=read_cols)
+                        except Exception as exc:  # noqa: BLE001
+                            # Last-resort: older engines / schema drift — read all, then project.
+                            if "FieldRef" in type(exc).__name__ or "FieldRef" in str(exc) or "No match" in str(exc):
+                                part = pd.read_parquet(f)
+                                keep_existing = [c for c in read_cols if c in part.columns]
+                                part = part[keep_existing] if keep_existing else part.iloc[:, 0:0]
+                            else:
+                                raise
+                    else:
+                        # Requested columns are all absent — synthesize empty placeholders.
+                        part = pd.DataFrame(index=range(pf.metadata.num_rows))
                 if device_type_value is not None:
                     part["device_type"] = device_type_value
                 if cols is not None:
@@ -167,9 +182,7 @@ class CanonicalDataAccess:
         else:
             assert self._partition_dir is not None
             types = [
-                d.name.split("=", 1)[1]
-                for d in sorted(self._partition_dir.glob("device_type=*"))
-                if "=" in d.name
+                d.name.split("=", 1)[1] for d in sorted(self._partition_dir.glob("device_type=*")) if "=" in d.name
             ]
 
         cols = [c for c in self.columns() if c and c != "device_type"]
