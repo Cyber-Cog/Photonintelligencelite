@@ -13,6 +13,9 @@ export const JOB_VIEWPORT_SHELL = "h-full min-h-0 flex-1";
  *
  * `documentScroll`: Results mode — page scrolls as one document (no nested scroll prison).
  * Omit for locked tool panes (Explorer / Raw data) that fill the viewport.
+ *
+ * `railLayout`: Results analytics shell — left sidebar spans full height beside
+ * chrome + main (Lighthouse-style), instead of chrome spanning above the rail.
  */
 export function JobWorkspace({
   title,
@@ -26,6 +29,7 @@ export function JobWorkspace({
   flushMain = false,
   documentScroll = false,
   hideJobNav = false,
+  railLayout = false,
   footer,
   className = "",
   titleTour,
@@ -47,6 +51,8 @@ export function JobWorkspace({
   documentScroll?: boolean;
   /** Hide top Results/Raw data/Architecture/Explorer tabs (Results uses sidebar Tools). */
   hideJobNav?: boolean;
+  /** Full-height left rail with chrome inside the main column (Results Overview). */
+  railLayout?: boolean;
   footer?: ReactNode;
   className?: string;
   titleTour?: string;
@@ -54,65 +60,78 @@ export function JobWorkspace({
 }) {
   const shell = documentScroll ? "min-h-0 w-full flex-1" : JOB_VIEWPORT_SHELL;
   const rootOverflow = documentScroll ? "" : "overflow-hidden";
+  const useRail = Boolean(aside) && railLayout;
+
+  const chrome = (
+    <header className="job-workspace-chrome">
+      {!hideJobNav ? (
+        <div className="job-workspace-nav">
+          <JobNav />
+        </div>
+      ) : null}
+      <div className="job-workspace-titlebar">
+        <div className="min-w-0" {...(titleTour ? { "data-tour": titleTour } : {})}>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="job-workspace-title">{title}</h2>
+            {status}
+          </div>
+          {subtitle ? <div className="job-workspace-subtitle">{subtitle}</div> : null}
+        </div>
+        {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
+      </div>
+      {chromeExtra}
+    </header>
+  );
+
+  const mainPaneClass = `job-workspace-main ${
+    documentScroll
+      ? "job-workspace-main-document"
+      : flushMain
+        ? "job-workspace-main-flush"
+        : ""
+  } ${mainClassName}`;
 
   return (
     <div className={`tool-enter flex ${shell} flex-col ${rootOverflow} ${className}`}>
       <div
         className={`job-workspace flex min-h-0 flex-1 flex-col ${
           documentScroll ? "job-workspace-document" : ""
-        }`}
+        } ${useRail ? "job-workspace-rail" : ""}`}
       >
-        <header className="job-workspace-chrome">
-          {!hideJobNav ? (
-            <div className="job-workspace-nav">
-              <JobNav />
-            </div>
-          ) : null}
-          <div className="job-workspace-titlebar">
-            <div className="min-w-0" {...(titleTour ? { "data-tour": titleTour } : {})}>
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="job-workspace-title">{title}</h2>
-                {status}
-              </div>
-              {subtitle ? <div className="job-workspace-subtitle">{subtitle}</div> : null}
-            </div>
-            {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
-          </div>
-          {chromeExtra}
-        </header>
-
-        {aside ? (
-          <div className={`job-workspace-body ${documentScroll ? "job-workspace-body-document" : ""}`}>
-            <aside className="job-workspace-aside" aria-label="Section navigation">
+        {useRail ? (
+          <div
+            className={`job-workspace-body job-workspace-body-rail ${
+              documentScroll ? "job-workspace-body-document" : ""
+            }`}
+          >
+            <aside className="job-workspace-aside job-workspace-aside-rail" aria-label="Results navigation">
               {aside}
             </aside>
-            <div
-              ref={mainRef}
-              className={`job-workspace-main ${
-                documentScroll
-                  ? "job-workspace-main-document"
-                  : flushMain
-                    ? "job-workspace-main-flush"
-                    : ""
-              } ${mainClassName}`}
-              data-tour="results-main"
-            >
-              {children}
+            <div className="job-workspace-rail-column">
+              {chrome}
+              <div ref={mainRef} className={mainPaneClass} data-tour="results-main">
+                {children}
+              </div>
             </div>
           </div>
         ) : (
-          <div
-            ref={mainRef}
-            className={`job-workspace-main min-h-0 flex-1 ${
-              documentScroll
-                ? "job-workspace-main-document"
-                : flushMain
-                  ? "job-workspace-main-flush"
-                  : ""
-            } ${mainClassName}`}
-          >
-            {children}
-          </div>
+          <>
+            {chrome}
+            {aside ? (
+              <div className={`job-workspace-body ${documentScroll ? "job-workspace-body-document" : ""}`}>
+                <aside className="job-workspace-aside" aria-label="Section navigation">
+                  {aside}
+                </aside>
+                <div ref={mainRef} className={mainPaneClass} data-tour="results-main">
+                  {children}
+                </div>
+              </div>
+            ) : (
+              <div ref={mainRef} className={`${mainPaneClass} min-h-0 flex-1`}>
+                {children}
+              </div>
+            )}
+          </>
         )}
 
         {footer ? (
