@@ -1,4 +1,4 @@
-import type { ReactNode, RefObject } from "react";
+import { useEffect, useId, useState, type ReactNode, type RefObject } from "react";
 import { JobNav } from "@/components/JobNav";
 
 /**
@@ -7,15 +7,31 @@ import { JobNav } from "@/components/JobNav";
  */
 export const JOB_VIEWPORT_SHELL = "h-full min-h-0 flex-1";
 
+function MenuIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5" aria-hidden>
+      <path strokeLinecap="round" d="M4 7h16M4 12h16M4 17h16" />
+    </svg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5" aria-hidden>
+      <path strokeLinecap="round" d="M6 6l12 12M18 6L6 18" />
+    </svg>
+  );
+}
+
 /**
  * One composition shell for Results / Raw data / Explorer / Architecture.
- * Nav + titlebar live in chrome; body is aside + main (or full-bleed children).
+ * Edge-to-edge under the app navbar — no outer rounded page card.
  *
  * `documentScroll`: Results mode — page scrolls as one document (no nested scroll prison).
  * Omit for locked tool panes (Explorer / Raw data) that fill the viewport.
  *
  * `railLayout`: Results analytics shell — left sidebar spans full height beside
- * chrome + main (Lighthouse-style), instead of chrome spanning above the rail.
+ * chrome + main, independent of any shared card wrapper.
  */
 export function JobWorkspace({
   title,
@@ -61,6 +77,26 @@ export function JobWorkspace({
   const shell = documentScroll ? "min-h-0 w-full flex-1" : JOB_VIEWPORT_SHELL;
   const rootOverflow = documentScroll ? "" : "overflow-hidden";
   const useRail = Boolean(aside) && railLayout;
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const sidebarId = useId();
+
+  useEffect(() => {
+    if (!mobileNavOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMobileNavOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [mobileNavOpen]);
+
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [title]);
 
   const chrome = (
     <header className="job-workspace-chrome">
@@ -70,12 +106,26 @@ export function JobWorkspace({
         </div>
       ) : null}
       <div className="job-workspace-titlebar">
-        <div className="min-w-0" {...(titleTour ? { "data-tour": titleTour } : {})}>
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="job-workspace-title">{title}</h2>
-            {status}
+        <div className="flex min-w-0 items-start gap-2">
+          {useRail ? (
+            <button
+              type="button"
+              className="app-nav-menu-btn mt-0.5 shrink-0 lg:hidden"
+              aria-label={mobileNavOpen ? "Close results navigation" : "Open results navigation"}
+              aria-expanded={mobileNavOpen}
+              aria-controls={sidebarId}
+              onClick={() => setMobileNavOpen((o) => !o)}
+            >
+              {mobileNavOpen ? <CloseIcon /> : <MenuIcon />}
+            </button>
+          ) : null}
+          <div className="min-w-0" {...(titleTour ? { "data-tour": titleTour } : {})}>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="job-workspace-title">{title}</h2>
+              {status}
+            </div>
+            {subtitle ? <div className="job-workspace-subtitle">{subtitle}</div> : null}
           </div>
-          {subtitle ? <div className="job-workspace-subtitle">{subtitle}</div> : null}
         </div>
         {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
       </div>
@@ -91,10 +141,16 @@ export function JobWorkspace({
         : ""
   } ${mainClassName}`;
 
+  const footerEl = footer ? (
+    <div className="job-workspace-footer flex shrink-0 items-center justify-center border-t border-[color:var(--pic-border-subtle)] px-3 py-1.5">
+      {footer}
+    </div>
+  ) : null;
+
   return (
     <div className={`tool-enter flex ${shell} flex-col ${rootOverflow} ${className}`}>
       <div
-        className={`job-workspace flex min-h-0 flex-1 flex-col ${
+        className={`job-workspace job-workspace-edge flex min-h-0 flex-1 flex-col ${
           documentScroll ? "job-workspace-document" : ""
         } ${useRail ? "job-workspace-rail" : ""}`}
       >
@@ -104,7 +160,27 @@ export function JobWorkspace({
               documentScroll ? "job-workspace-body-document" : ""
             }`}
           >
-            <aside className="job-workspace-aside job-workspace-aside-rail" aria-label="Results navigation">
+            {mobileNavOpen ? (
+              <button
+                type="button"
+                className="job-workspace-sidebar-backdrop lg:hidden"
+                aria-label="Close navigation"
+                onClick={() => setMobileNavOpen(false)}
+              />
+            ) : null}
+            <aside
+              id={sidebarId}
+              className={`job-workspace-aside job-workspace-aside-rail ${
+                mobileNavOpen ? "job-workspace-aside-open" : ""
+              }`}
+              aria-label="Results navigation"
+              onClick={(e) => {
+                const el = e.target as HTMLElement;
+                if (el.closest("a, button[data-results-section], button[data-tour^='nav-']")) {
+                  setMobileNavOpen(false);
+                }
+              }}
+            >
               {aside}
             </aside>
             <div className="job-workspace-rail-column">
@@ -112,6 +188,7 @@ export function JobWorkspace({
               <div ref={mainRef} className={mainPaneClass} data-tour="results-main">
                 {children}
               </div>
+              {footerEl}
             </div>
           </div>
         ) : (
@@ -131,14 +208,9 @@ export function JobWorkspace({
                 {children}
               </div>
             )}
+            {footerEl}
           </>
         )}
-
-        {footer ? (
-          <div className="flex shrink-0 items-center justify-center border-t border-[color:var(--pic-border-subtle)] px-3 py-1.5">
-            {footer}
-          </div>
-        ) : null}
       </div>
     </div>
   );

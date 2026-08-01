@@ -456,13 +456,17 @@ export function DashboardPage() {
       aside={
         <ResultsSidebar
           activeSection={activeSection}
-          onSelectSection={selectSection}
+          onSelectSection={(id) => {
+            selectSection(id);
+          }}
           faultCount={data.kpis.fault_count}
           issueCount={ownerActions?.issueCount ?? 0}
           faultModules={faultModules}
           analysisModules={analysisModules}
           activeModuleId={activeModuleId}
-          onSelectModule={selectModule}
+          onSelectModule={(algorithmId) => {
+            selectModule(algorithmId);
+          }}
           devicesOpen={devicesOpen}
           onToggleDevices={() => setDevicesOpen((o) => !o)}
           integrityFlagCount={integrityFlagCount}
