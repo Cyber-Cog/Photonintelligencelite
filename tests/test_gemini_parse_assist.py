@@ -97,7 +97,7 @@ def test_call_gemini_json_mocked(monkeypatch):
     data, model, err = call_gemini_json(settings, system="sys", user="user")
     assert err is None
     assert data == {"ok": True, "n": 1}
-    assert model == "gemini-2.0-flash"
+    assert model == "gemini-flash-latest"
 
 
 def test_run_parse_assist_merges(monkeypatch):

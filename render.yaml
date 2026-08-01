@@ -72,7 +72,7 @@ services:
       # - key: GEMINI_API_KEY
       #   sync: false
       # - key: GEMINI_MODEL
-      #   value: gemini-2.0-flash
+      #   value: gemini-flash-latest
       # ZenMux chat key fallback (sk-ai-v1-… or sk-ss-v1-…; NOT sk-mg-v1-…).
       # Paste in Render dashboard — see docs/ZENMUX-API-SETUP.md
       # - key: ZENMUX_API_KEY

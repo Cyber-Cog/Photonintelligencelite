@@ -16,7 +16,7 @@ from backend.app.config import Settings
 
 logger = logging.getLogger("pic_lite.gemini_client")
 
-DEFAULT_MODEL = "gemini-2.0-flash"
+DEFAULT_MODEL = "gemini-flash-latest"
 _BASE = "https://generativelanguage.googleapis.com/v1beta"
 
 
