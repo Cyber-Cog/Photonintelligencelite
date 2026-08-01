@@ -46,10 +46,33 @@ def parse_excel_to_csv(
     max_rows: int,
     report_path: Path | None = None,
 ) -> tuple[int, ParseReport]:
-    """Convert Excel → pipeline CSV via strategy chain. Returns (rows, report)."""
+    """Convert Excel → pipeline CSV via onboard pipeline then legacy strategies."""
     suffix = excel_path.suffix.lower()
     if suffix not in {".xlsx", ".xlsm", ".xls"}:
         raise ExcelConversionError(f"Unsupported Excel type: {suffix}")
+
+    # Production path: phased analyzer → normalize → headers → local bulk melt (no AI).
+    if suffix in {".xlsx", ".xlsm"}:
+        try:
+            from backend.app.services.excel_onboard import run_excel_onboard
+
+            onboard = run_excel_onboard(
+                excel_path,
+                csv_path,
+                max_rows=max_rows,
+                max_decompressed_bytes=max_decompressed_bytes,
+                report_path=report_path,
+                run_ai=False,  # never block CSV on Gemini; header AI is optional elsewhere
+            )
+            if onboard.rows_written > 0 and onboard.report.confidence >= MIN_USABLE_CONFIDENCE:
+                return onboard.rows_written, onboard.report
+        except Exception as exc:  # noqa: BLE001
+            # Fall through to legacy strategy chain
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "excel_onboard failed, falling back to legacy parser: %s", exc
+            )
 
     try:
         probes = probe_workbook(excel_path)
