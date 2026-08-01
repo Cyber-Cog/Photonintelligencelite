@@ -71,7 +71,21 @@ class Settings(BaseSettings):
     smtp_from: str | None = Field(default=None, validation_alias="SMTP_FROM")
     smtp_use_tls: bool = Field(default=True, validation_alias="SMTP_USE_TLS")
 
-    # ZenMux / OpenAI-compatible API for fault-run integrity checks (server-side only).
+    # Google AI Studio / Gemini (preferred for parse-assist + integrity; server-side only).
+    gemini_api_key: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("GEMINI_API_KEY", "gemini_api_key"),
+    )
+    gemini_model: str = Field(
+        default="gemini-2.0-flash",
+        validation_alias=AliasChoices("GEMINI_MODEL", "gemini_model"),
+    )
+    gemini_timeout_sec: float = Field(
+        default=45.0,
+        validation_alias=AliasChoices("GEMINI_TIMEOUT_SEC", "gemini_timeout_sec"),
+    )
+
+    # ZenMux / OpenAI-compatible API — optional fallback when Gemini is unset.
     # Use a chat key (sk-ai-v1-…). Management keys (sk-mg-v1-…) are often rejected for completions.
     zenmux_api_key: str | None = Field(
         default=None,

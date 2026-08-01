@@ -47,6 +47,7 @@ from backend.app.services.pack_architecture_import import (
     merge_architecture_into_job_plant,
     plant_config_from_architecture_file,
 )
+from backend.app.services.ai_parse_assist import run_parse_assist
 from backend.app.services.upload_ai_check import run_upload_integrity_check
 from backend.app.services.upload_intelligence import build_upload_intelligence
 from backend.app.services.upload_inventory import (
@@ -613,12 +614,21 @@ def _build_upload_response(
     if prior_mapping:
         suggestions = overlay_prior_mapping(suggestions, prior_mapping)
 
+    settings = get_settings()
+    # After heuristics / templates: Gemini may propose mappings for thin/ambiguous headers.
+    suggestions, parse_assist_meta = run_parse_assist(
+        settings,
+        suggestions=suggestions,
+        columns=columns,
+        original_filename=job.original_filename,
+    )
+
     needs_manual = requires_manual_mapping(suggestions)
     # Non-pack files always surface Setup mapping (map-later), even if every column scored.
     if not pack_match:
         needs_manual = True
 
-    paths = job_paths(get_settings().job_root_path, job.id)
+    paths = job_paths(settings.job_root_path, job.id)
     file_inv, total_rows = inventory_from_job(paths, job.original_filename)
     if not total_rows and csv_path.exists():
         try:
@@ -646,7 +656,15 @@ def _build_upload_response(
         except Exception:  # noqa: BLE001
             reshape_report = None
 
-    settings = get_settings()
+    assist_hints = [
+        {
+            "column_name": p["column_name"],
+            "canonical_field": p["canonical_field"],
+            "confidence": p.get("confidence"),
+        }
+        for p in (parse_assist_meta.get("proposals") or [])
+        if p.get("column_name") and p.get("canonical_field")
+    ]
     upload_check = run_upload_integrity_check(
         settings,
         columns=columns,
@@ -657,6 +675,11 @@ def _build_upload_response(
         parse_report=parse_report_out.model_dump() if parse_report_out else None,
         reshape_report=reshape_report,
         use_ai=True,
+        extra_mapping_hints=assist_hints,
+        parse_assist_meta={
+            k: parse_assist_meta.get(k)
+            for k in ("attempted", "applied", "model", "error", "provider")
+        },
     )
     job.upload_integrity_json = upload_check
     db.add(job)

@@ -1,4 +1,4 @@
-"""Upload/parse-time integrity check (rules always; ZenMux when configured).
+"""Upload/parse-time integrity check (rules always; Gemini preferred, ZenMux fallback).
 
 Runs after column detection / upload intelligence — visible on Upload review
 without completing Analyze. Not a chatbot.
@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
@@ -20,6 +21,7 @@ from backend.app.services.fault_run_ai_check import (
     ai_check_configured,
     merge_findings,
 )
+from backend.app.services.gemini_client import call_gemini_json, gemini_configured
 
 logger = logging.getLogger("pic_lite.upload_ai_check")
 
@@ -99,7 +101,6 @@ def build_upload_evidence(
 def run_upload_deterministic_checks(evidence: dict[str, Any]) -> list[dict[str, Any]]:
     findings: list[dict[str, Any]] = []
     fields = set(evidence.get("mapped_fields") or [])
-    cols = list(evidence.get("columns_sample") or [])
     mapped_count = int(evidence.get("mapped_count") or 0)
     wide_n = int(evidence.get("wide_device_columns") or 0)
 
@@ -133,7 +134,12 @@ def run_upload_deterministic_checks(evidence: dict[str, Any]) -> list[dict[str, 
         )
 
     reshape = evidence.get("reshape_report") or {}
-    if wide_n >= 4 and not reshape.get("reshaped") and "device_id" not in fields and "inverter_id" not in fields:
+    if (
+        wide_n >= 4
+        and not reshape.get("reshaped")
+        and "device_id" not in fields
+        and "inverter_id" not in fields
+    ):
         findings.append(
             _finding(
                 "fail",
@@ -142,7 +148,6 @@ def run_upload_deterministic_checks(evidence: dict[str, Any]) -> list[dict[str, 
             )
         )
 
-    # Obvious wide headers still unmapped (pre-melt path / reshape skipped)
     obvious_unmapped = 0
     for c in evidence.get("unmapped_sample") or []:
         if parse_wide_device_column(str(c)) is not None:
@@ -170,7 +175,6 @@ def run_upload_deterministic_checks(evidence: dict[str, Any]) -> list[dict[str, 
     if evidence.get("architecture_detected") is False and (
         "device_id" in fields or "inverter_id" in fields
     ):
-        # Soft note only when IDs mapped but arch still missing (rare after melt)
         inv_n = evidence.get("architecture_inverters") or 0
         if not inv_n:
             findings.append(
@@ -181,7 +185,6 @@ def run_upload_deterministic_checks(evidence: dict[str, Any]) -> list[dict[str, 
                 )
             )
 
-    # Healthy inverter AC/DC tidy outcome
     if (
         "timestamp" in fields
         and ("device_id" in fields or "inverter_id" in fields)
@@ -199,6 +202,63 @@ def run_upload_deterministic_checks(evidence: dict[str, Any]) -> list[dict[str, 
     return [f for f in findings if f.get("severity") != "pass"] + [
         f for f in findings if f.get("severity") == "pass"
     ]
+
+
+def _normalize_upload_ai(
+    data: dict[str, Any],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], str]:
+    findings_in = data.get("findings") or []
+    findings: list[dict[str, Any]] = []
+    if isinstance(findings_in, list):
+        for item in findings_in:
+            if not isinstance(item, dict):
+                continue
+            sev = str(item.get("severity") or "warn").lower()
+            if sev not in {"pass", "warn", "fail"}:
+                sev = "warn"
+            msg = str(item.get("message") or "").strip()[:400]
+            if not msg:
+                continue
+            findings.append(
+                _finding(sev, str(item.get("code") or "ai_upload_note")[:64], msg, None)
+            )
+    hints: list[dict[str, Any]] = []
+    for h in data.get("mapping_hints") or []:
+        if not isinstance(h, dict):
+            continue
+        col = h.get("column_name")
+        field = h.get("canonical_field")
+        if col and field:
+            hints.append(
+                {
+                    "column_name": str(col)[:200],
+                    "canonical_field": str(field)[:64],
+                    "confidence": float(h.get("confidence") or 0.0),
+                }
+            )
+    overall = str(data.get("overall") or _overall_from_findings(findings)).lower()
+    if overall not in {"pass", "warn", "fail"}:
+        overall = _overall_from_findings(findings)
+    return findings, hints, overall
+
+
+def _call_gemini_upload(
+    settings: Settings,
+    evidence: dict[str, Any],
+    rule_findings: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], str, str | None, str | None]:
+    parsed, model, err = call_gemini_json(
+        settings,
+        system=_UPLOAD_SYSTEM_PROMPT,
+        user=json.dumps(
+            {"evidence": evidence, "rule_findings": rule_findings},
+            default=str,
+        )[:12000],
+    )
+    if err or not parsed:
+        return [], [], "pass", model, err or "Gemini returned empty JSON"
+    findings, hints, overall = _normalize_upload_ai(parsed)
+    return findings, hints, overall, model, None
 
 
 def _call_zenmux_upload(
@@ -246,46 +306,48 @@ def _call_zenmux_upload(
         return [], [], "pass", model, str(exc)[:240]
 
     try:
-        import re
-
         match = re.search(r"\{.*\}", content, re.DOTALL)
         data = json.loads(match.group(0) if match else content)
     except Exception:  # noqa: BLE001
         return [], [], "pass", model, "AI returned non-JSON"
 
-    findings_in = data.get("findings") or []
-    findings: list[dict[str, Any]] = []
-    if isinstance(findings_in, list):
-        for item in findings_in:
-            if not isinstance(item, dict):
-                continue
-            sev = str(item.get("severity") or "warn").lower()
-            if sev not in {"pass", "warn", "fail"}:
-                sev = "warn"
-            msg = str(item.get("message") or "").strip()[:400]
-            if not msg:
-                continue
-            findings.append(
-                _finding(sev, str(item.get("code") or "ai_upload_note")[:64], msg, None)
-            )
-    hints: list[dict[str, Any]] = []
-    for h in data.get("mapping_hints") or []:
-        if not isinstance(h, dict):
-            continue
-        col = h.get("column_name")
-        field = h.get("canonical_field")
-        if col and field:
-            hints.append(
-                {
-                    "column_name": str(col)[:200],
-                    "canonical_field": str(field)[:64],
-                    "confidence": float(h.get("confidence") or 0.0),
-                }
-            )
-    overall = str(data.get("overall") or _overall_from_findings(findings)).lower()
-    if overall not in {"pass", "warn", "fail"}:
-        overall = _overall_from_findings(findings)
+    findings, hints, overall = _normalize_upload_ai(data if isinstance(data, dict) else {})
     return findings, hints, overall, model, None
+
+
+def _call_upload_ai(
+    settings: Settings,
+    evidence: dict[str, Any],
+    rule_findings: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], str, str | None, str | None, str]:
+    """Prefer Gemini; ZenMux optional fallback. Returns (…, provider)."""
+    if gemini_configured(settings):
+        findings, hints, overall, model, err = _call_gemini_upload(
+            settings, evidence, rule_findings
+        )
+        if not err:
+            return findings, hints, overall, model, None, "gemini"
+        zkey = (settings.zenmux_api_key or "").strip()
+        if zkey and not zkey.startswith("sk-mg-"):
+            zf, zh, zo, zm, ze = _call_zenmux_upload(settings, evidence, rule_findings)
+            if not ze:
+                return zf, zh, zo, zm, None, "zenmux"
+        return findings, hints, overall, model, err, "gemini"
+
+    findings, hints, overall, model, err = _call_zenmux_upload(settings, evidence, rule_findings)
+    return findings, hints, overall, model, err, "zenmux"
+
+
+def _dedupe_hints(hints: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    seen: set[tuple[str, str]] = set()
+    out: list[dict[str, Any]] = []
+    for h in hints:
+        key = (str(h.get("column_name")), str(h.get("canonical_field")))
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(h)
+    return out
 
 
 def run_upload_integrity_check(
@@ -299,6 +361,8 @@ def run_upload_integrity_check(
     parse_report: dict[str, Any] | None = None,
     reshape_report: dict[str, Any] | None = None,
     use_ai: bool = True,
+    extra_mapping_hints: list[dict[str, Any]] | None = None,
+    parse_assist_meta: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     evidence = build_upload_evidence(
         columns=columns,
@@ -309,23 +373,45 @@ def run_upload_integrity_check(
         parse_report=parse_report,
         reshape_report=reshape_report,
     )
-    # Drop pass-only noise from rules for merge; keep failures/warns
     all_rules = run_upload_deterministic_checks(evidence)
     rule_findings = [f for f in all_rules if f.get("severity") != "pass"]
     checked_at = datetime.now(timezone.utc).isoformat()
     configured = ai_check_configured(settings)
+    assist_ok = bool(
+        parse_assist_meta
+        and parse_assist_meta.get("attempted")
+        and not parse_assist_meta.get("error")
+    )
 
-    base = {
+    base: dict[str, Any] = {
         "phase": "upload",
         "configured": configured,
         "checked_at": checked_at,
-        "mapping_hints": [],
+        "mapping_hints": _dedupe_hints(list(extra_mapping_hints or []))[:12],
         "model": None,
         "error": None,
+        "provider": None,
+        "parse_assist": parse_assist_meta or None,
     }
 
     if not use_ai or not configured:
         overall = _overall_from_findings(rule_findings) if rule_findings else "pass"
+        if assist_ok:
+            return {
+                **base,
+                "status": overall,
+                "source": "rules+ai",
+                "ai_layer": "ok",
+                "rules_finding_count": len(rule_findings),
+                "summary": {
+                    "pass": "Upload parse check OK (rules + Gemini parse-assist).",
+                    "warn": "Upload parse check found warnings (rules + Gemini parse-assist).",
+                    "fail": "Upload parse check found failures (rules + Gemini parse-assist).",
+                }[overall],
+                "findings": rule_findings,
+                "provider": "gemini",
+                "model": (parse_assist_meta or {}).get("model"),
+            }
         ai_layer = "not_configured" if not configured else "skipped"
         summary = {
             "pass": (
@@ -354,10 +440,27 @@ def run_upload_integrity_check(
             "findings": rule_findings,
         }
 
-    ai_findings, hints, ai_overall, model, error = _call_zenmux_upload(
+    ai_findings, hints, ai_overall, model, error, provider = _call_upload_ai(
         settings, evidence, rule_findings
     )
+    deduped = _dedupe_hints(list(extra_mapping_hints or []) + list(hints or []))
+
     if error:
+        if assist_ok:
+            overall = _overall_from_findings(rule_findings) if rule_findings else "pass"
+            return {
+                **base,
+                "status": overall,
+                "source": "rules+ai",
+                "ai_layer": "ok",
+                "rules_finding_count": len(rule_findings),
+                "summary": "Rules + Gemini parse-assist applied; integrity LLM failed.",
+                "findings": rule_findings,
+                "mapping_hints": deduped[:12],
+                "model": (parse_assist_meta or {}).get("model") or model,
+                "error": error,
+                "provider": "gemini",
+            }
         overall = _overall_from_findings(rule_findings) if rule_findings else "error"
         return {
             **base,
@@ -371,8 +474,10 @@ def run_upload_integrity_check(
                 else "AI upload check failed."
             ),
             "findings": rule_findings,
+            "mapping_hints": deduped[:12],
             "model": model,
             "error": error,
+            "provider": provider,
         }
 
     merged = merge_findings(rule_findings, [f for f in ai_findings if f.get("severity") != "pass"])
@@ -386,11 +491,12 @@ def run_upload_integrity_check(
         "ai_layer": "ok",
         "rules_finding_count": len(rule_findings),
         "summary": {
-            "pass": "Upload parse check passed (rules + AI).",
+            "pass": f"Upload parse check passed (rules + {provider or 'AI'}).",
             "warn": "Upload parse check found warnings.",
             "fail": "Upload parse check found failures.",
         }[overall],
         "findings": merged,
-        "mapping_hints": hints[:12],
+        "mapping_hints": deduped[:12],
         "model": model,
+        "provider": provider,
     }

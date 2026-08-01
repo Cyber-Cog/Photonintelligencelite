@@ -425,6 +425,15 @@ export interface AiIntegrityCheck {
     canonical_field: string;
     confidence?: number;
   }>;
+  /** gemini | zenmux */
+  provider?: string | null;
+  parse_assist?: {
+    attempted?: boolean;
+    applied?: number;
+    model?: string | null;
+    error?: string | null;
+    provider?: string | null;
+  } | null;
 }
 
 export interface AdminUser {

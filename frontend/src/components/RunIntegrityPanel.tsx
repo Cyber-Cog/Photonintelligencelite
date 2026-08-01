@@ -16,17 +16,32 @@ const PANEL_TONE: Record<string, string> = {
   skipped: "border-stone-200 bg-stone-50/80 dark:border-stone-700 dark:bg-stone-900",
 };
 
+function isRulesPlusAi(source: string | null | undefined): boolean {
+  return Boolean(source && (source === "rules+ai" || source.startsWith("rules+")));
+}
+
 /** Honest one-line AI layer status for Results / Upload (not a chatbot). */
 export function aiLayerStatusLabel(check: AiIntegrityCheck): string {
   const layer = check.ai_layer;
   const err = (check.error || "").toLowerCase();
-  if (layer === "ok") return "AI: ok";
+  const provider =
+    check.provider === "gemini"
+      ? "Gemini"
+      : check.provider === "zenmux"
+        ? "ZenMux"
+        : check.source?.includes("gemini")
+          ? "Gemini"
+          : check.source?.includes("zenmux")
+            ? "ZenMux"
+            : "AI";
+  if (layer === "ok") return `${provider}: ok`;
   if (layer === "not_configured" || (!check.configured && (layer == null || layer === "skipped"))) {
     return "AI not configured";
   }
   if (layer === "failed" || check.status === "error" || check.error) {
+    if (err.includes("gemini")) return "Gemini check failed";
     if (err.includes("sk-mg") || err.includes("management") || err.includes("sk-ai")) {
-      return "AI key rejected — use sk-ai-v1";
+      return "AI key rejected — use GEMINI_API_KEY or sk-ai-v1";
     }
     if (err.includes("403") || err.includes("401")) {
       return "AI key rejected";
@@ -34,7 +49,7 @@ export function aiLayerStatusLabel(check: AiIntegrityCheck): string {
     return "AI check failed";
   }
   if (layer === "skipped") return "AI skipped (rules only)";
-  if (check.source === "rules+ai") return "AI: ok";
+  if (check.source === "rules+ai" || check.source?.startsWith("rules+")) return `${provider}: ok`;
   if (check.source === "rules" && !check.configured) return "AI not configured";
   if (check.source === "rules") return "AI skipped (rules only)";
   return "AI status unknown";
@@ -105,7 +120,7 @@ export function RunIntegrityPanel({
           </h3>
       <p className="mt-0.5 text-[11px] text-[color:var(--pic-text-muted)]" data-testid="ai-layer-status">
             {quiet && check.summary ? `${check.summary} · ` : ""}
-            {check.source === "rules+ai"
+            {isRulesPlusAi(check.source)
               ? "Rules + AI"
               : check.source === "rules"
                 ? "Rules"
@@ -114,6 +129,7 @@ export function RunIntegrityPanel({
                   : "System"}
             {` · ${rulesCount} finding(s)`}
             {` · ${aiLabel}`}
+            {check.model ? ` · ${check.model}` : ""}
             {check.checked_at
               ? ` · ${new Date(check.checked_at).toLocaleString(undefined, {
                   dateStyle: "short",

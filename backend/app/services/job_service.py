@@ -301,7 +301,7 @@ def process_job(job_id: str, settings: Settings) -> None:
             job.completed_at = datetime.now(timezone.utc)
             job.report_expires_at = datetime.now(timezone.utc) + timedelta(minutes=settings.limits.report_ttl_minutes)
 
-            ai_line = "AI integrity · rules: 0 finding(s) · ZenMux: skipped"
+            ai_line = "AI integrity · rules: 0 finding(s) · AI: skipped"
             try:
                 from backend.app.services.fault_run_ai_check import (
                     format_integrity_progress,
@@ -326,9 +326,18 @@ def process_job(job_id: str, settings: Settings) -> None:
                 db.commit()
             except Exception:  # noqa: BLE001 — never fail the job on integrity check
                 logger.exception("ai integrity check failed for job=%s", job_id)
+                try:
+                    from backend.app.services.fault_run_ai_check import ai_check_configured as _ai_cfg
+
+                    configured = _ai_cfg(settings)
+                except Exception:  # noqa: BLE001
+                    configured = bool(
+                        (settings.gemini_api_key or "").strip()
+                        or (settings.zenmux_api_key or "").strip()
+                    )
                 job.ai_integrity_json = {
                     "status": "error",
-                    "configured": bool((settings.zenmux_api_key or "").strip()),
+                    "configured": configured,
                     "source": "none",
                     "ai_layer": "failed",
                     "rules_finding_count": 0,
@@ -339,7 +348,7 @@ def process_job(job_id: str, settings: Settings) -> None:
                     "error": "Integrity check internal error",
                     "phase": "results",
                 }
-                ai_line = "AI integrity · rules: 0 finding(s) · ZenMux: failed (internal error)"
+                ai_line = "AI integrity · rules: 0 finding(s) · AI: failed (internal error)"
                 job.progress_message = ai_line
                 db.add(job)
                 db.commit()

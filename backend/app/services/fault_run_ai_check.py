@@ -16,6 +16,7 @@ from typing import Any
 import httpx
 
 from backend.app.config import Settings
+from backend.app.services.gemini_client import call_gemini_json, gemini_configured
 
 logger = logging.getLogger("pic_lite.fault_run_ai_check")
 
@@ -49,7 +50,8 @@ Prefer few high-signal findings. If nothing looks wrong, overall=pass and findin
 
 
 def ai_check_configured(settings: Settings) -> bool:
-    return bool((settings.zenmux_api_key or "").strip())
+    """True when Gemini (preferred) or ZenMux chat key is set."""
+    return gemini_configured(settings) or bool((settings.zenmux_api_key or "").strip())
 
 
 def build_integrity_evidence(
@@ -285,6 +287,35 @@ def _normalize_ai_findings(raw: dict[str, Any]) -> tuple[str, str, list[dict[str
     return overall, summary, findings
 
 
+def call_gemini_integrity(
+    settings: Settings,
+    evidence: dict[str, Any],
+    rule_findings: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], str, str | None, str | None]:
+    """Returns (ai_findings, overall_hint, model, error_message)."""
+    if not gemini_configured(settings):
+        return [], "pass", None, None
+
+    user_payload = {
+        "evidence": evidence,
+        "deterministic_findings": rule_findings,
+    }
+    parsed, model, err = call_gemini_json(
+        settings,
+        system=_SYSTEM_PROMPT,
+        user=(
+            "Check this PIC Lite fault run for integrity issues.\n\n"
+            + json.dumps(user_payload, default=str)[:48_000]
+        ),
+    )
+    if err:
+        return [], "error", model, err
+    if not parsed:
+        return [], "error", model, "Gemini response did not contain valid JSON."
+    overall, _summary, findings = _normalize_ai_findings(parsed)
+    return findings, overall, model, None
+
+
 def call_zenmux_integrity(
     settings: Settings,
     evidence: dict[str, Any],
@@ -360,6 +391,28 @@ def call_zenmux_integrity(
     return findings, overall, model, None
 
 
+def call_ai_integrity(
+    settings: Settings,
+    evidence: dict[str, Any],
+    rule_findings: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], str, str | None, str | None, str]:
+    """Prefer Gemini; ZenMux optional fallback. Returns (…, provider)."""
+    if gemini_configured(settings):
+        findings, overall, model, err = call_gemini_integrity(settings, evidence, rule_findings)
+        if not err:
+            return findings, overall, model, None, "gemini"
+        # If ZenMux chat key exists, try as fallback; otherwise surface Gemini error.
+        if (settings.zenmux_api_key or "").strip() and not (settings.zenmux_api_key or "").startswith("sk-mg-"):
+            zf, zo, zm, ze = call_zenmux_integrity(settings, evidence, rule_findings)
+            if not ze:
+                return zf, zo, zm, None, "zenmux"
+            return findings, overall, model, err or ze, "gemini"
+        return findings, overall, model, err, "gemini"
+
+    findings, overall, model, err = call_zenmux_integrity(settings, evidence, rule_findings)
+    return findings, overall, model, err, "zenmux"
+
+
 def merge_findings(*groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
     seen: set[tuple[Any, ...]] = set()
     out: list[dict[str, Any]] = []
@@ -403,6 +456,21 @@ def _short_ai_failure_reason(error: str | None) -> str:
     return err[:72].rstrip(" .") or "failed"
 
 
+def _ai_provider_label(check: dict[str, Any]) -> str:
+    src = str(check.get("source") or "")
+    provider = str(check.get("provider") or "")
+    model = str(check.get("model") or "")
+    if provider == "gemini" or "gemini" in src or (
+        model and not model.startswith("google/") and "gemini" in model.lower()
+    ):
+        return "Gemini"
+    if provider == "zenmux" or model.startswith("google/"):
+        return "ZenMux"
+    if "gemini" in model.lower():
+        return "Gemini"
+    return "AI"
+
+
 def format_integrity_progress(check: dict[str, Any]) -> str:
     """One-line LIVE console / progress_message for Analyze."""
     rules_n = int(check.get("rules_finding_count") or 0)
@@ -410,17 +478,18 @@ def format_integrity_progress(check: dict[str, Any]) -> str:
         rules_n = sum(
             1 for f in (check.get("findings") or []) if (f.get("severity") or "") != "pass"
         )
+    label = _ai_provider_label(check)
     ai_layer = str(check.get("ai_layer") or "unknown")
     if ai_layer == "ok":
-        zen = "ZenMux: ok"
+        zen = f"{label}: ok"
     elif ai_layer == "not_configured":
-        zen = "ZenMux: skipped (AI not configured)"
+        zen = f"{label}: skipped (AI not configured)"
     elif ai_layer == "skipped":
-        zen = "ZenMux: skipped"
+        zen = f"{label}: skipped"
     elif ai_layer == "failed":
-        zen = f"ZenMux: failed ({_short_ai_failure_reason(check.get('error'))})"
+        zen = f"{label}: failed ({_short_ai_failure_reason(check.get('error'))})"
     else:
-        zen = f"ZenMux: {ai_layer}"
+        zen = f"{label}: {ai_layer}"
     return f"AI integrity · rules: {rules_n} finding(s) · {zen}"
 
 
@@ -436,6 +505,7 @@ def _pack_result(
     checked_at: str,
     model: str | None = None,
     error: str | None = None,
+    provider: str | None = None,
 ) -> dict[str, Any]:
     return {
         "status": status,
@@ -448,6 +518,7 @@ def _pack_result(
         "checked_at": checked_at,
         "model": model,
         "error": error,
+        "provider": provider,
         "phase": "results",
     }
 
@@ -498,7 +569,10 @@ def run_fault_run_integrity_check(
             checked_at=checked_at,
         )
 
-    ai_findings, ai_overall, model, error = call_zenmux_integrity(settings, evidence, rule_findings)
+    ai_findings, ai_overall, model, error, provider = call_ai_integrity(
+        settings, evidence, rule_findings
+    )
+    source_ok = f"rules+{provider}" if provider in {"gemini", "zenmux"} else "rules+ai"
     if error:
         # Keep rule findings even when AI fails.
         overall = _overall_from_findings(rule_findings) if rule_findings else "error"
@@ -517,6 +591,7 @@ def run_fault_run_integrity_check(
             checked_at=checked_at,
             model=model,
             error=error,
+            provider=provider,
         )
 
     merged = merge_findings(rule_findings, [f for f in ai_findings if f.get("severity") != "pass"])
@@ -528,15 +603,16 @@ def run_fault_run_integrity_check(
     return _pack_result(
         status=overall,
         configured=True,
-        source="rules+ai",
+        source=source_ok,
         ai_layer="ok",
         rules_finding_count=rules_n,
         summary={
-            "pass": "Run integrity check passed (rules + AI).",
+            "pass": f"Run integrity check passed (rules + {provider or 'AI'}).",
             "warn": "Run integrity check found warnings.",
             "fail": "Run integrity check found failures.",
         }[overall],
         findings=merged,
         checked_at=checked_at,
         model=model,
+        provider=provider,
     )

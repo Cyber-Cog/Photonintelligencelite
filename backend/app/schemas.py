@@ -116,7 +116,7 @@ class UploadResponse(BaseModel):
     module_impact_preview: Optional[UploadModuleImpactPreview] = None
     original_filename: Optional[str] = None
     upload_integrity: Optional["AiIntegrityCheck"] = None
-    """Parse-time integrity checklist (rules always; AI when ZenMux configured)."""
+    """Parse-time integrity checklist (rules always; Gemini/ZenMux when configured)."""
 
 
 class ColumnMappingSuggestion(BaseModel):
@@ -362,7 +362,7 @@ class IntegrityFinding(BaseModel):
 class AiIntegrityCheck(BaseModel):
     status: str  # pass | warn | fail | skipped | error
     configured: bool = False
-    source: str = "none"  # none | rules | ai | rules+ai
+    source: str = "none"  # none | rules | ai | rules+ai | rules+gemini | rules+zenmux
     summary: str = ""
     findings: list[IntegrityFinding] = Field(default_factory=list)
     checked_at: Optional[str] = None
@@ -372,6 +372,8 @@ class AiIntegrityCheck(BaseModel):
     ai_layer: Optional[str] = None  # ok | failed | skipped | not_configured
     rules_finding_count: Optional[int] = None
     mapping_hints: list[dict[str, Any]] = Field(default_factory=list)
+    provider: Optional[str] = None  # gemini | zenmux
+    parse_assist: Optional[dict[str, Any]] = None
 
 
 class ResultsResponse(BaseModel):

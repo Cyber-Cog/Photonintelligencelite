@@ -1,0 +1,17 @@
+{
+  "feature": "gemini-ai-parsing",
+  "date": "2026-08-01",
+  "status": "implemented",
+  "key_status": "needs_paste",
+  "key_note": "AI Studio screenshot shows truncated key AQ.Ab8RN6Jf_Q4YoWWS8Bz81XygKFXG5N... (name Parsing, project 957997785847). Full key not recoverable from crops — paste into gitignored .env as GEMINI_API_KEY.",
+  "live_probe": "skipped_no_key",
+  "unit_tests": "37 passed (test_gemini_parse_assist + test_fault_run_ai_check + test_wide_csv_icr_detection)",
+  "wiring": {
+    "gemini_client": "backend/app/services/gemini_client.py",
+    "parse_assist": "after heuristics on upload via run_parse_assist",
+    "upload_integrity": "rules always; Gemini preferred; ZenMux fallback",
+    "fault_run_integrity": "rules always; Gemini preferred; ZenMux fallback",
+    "console": "format_integrity_progress labels Gemini/ZenMux/AI",
+    "ui": "RunIntegrityPanel shows provider + model"
+  }
+}

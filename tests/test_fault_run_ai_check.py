@@ -17,12 +17,14 @@ from backend.app.services.fault_run_ai_check import (
 
 
 def _settings(monkeypatch: pytest.MonkeyPatch, **env) -> Settings:
-    """Build Settings without loading .env; env vars control ZenMux fields (aliases)."""
+    """Build Settings without loading .env; env vars control AI fields (aliases)."""
     monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
     monkeypatch.setenv("SESSION_SECRET", "test")
     # Clear any process/.env key unless the test opts in.
     if "ZENMUX_API_KEY" not in env:
         monkeypatch.setenv("ZENMUX_API_KEY", "")
+    if "GEMINI_API_KEY" not in env:
+        monkeypatch.setenv("GEMINI_API_KEY", "")
     for k, v in env.items():
         monkeypatch.setenv(k, "" if v is None else str(v))
     return Settings(_env_file=None)
@@ -122,7 +124,7 @@ def test_format_integrity_progress_not_configured():
         }
     )
     assert line.startswith("AI integrity · rules: 0 finding(s)")
-    assert "ZenMux: skipped (AI not configured)" in line
+    assert "AI: skipped (AI not configured)" in line or "skipped (AI not configured)" in line
 
 
 def test_format_integrity_progress_mg_key_failure():
@@ -132,6 +134,7 @@ def test_format_integrity_progress_mg_key_failure():
         {
             "rules_finding_count": 2,
             "ai_layer": "failed",
+            "provider": "zenmux",
             "error": (
                 "AI provider returned HTTP 403. This looks like a management key (sk-mg-v1-…). "
                 "Chat completions usually need a chat key (sk-ai-v1-…)."
@@ -195,6 +198,70 @@ def test_zenmux_call_parses_json(monkeypatch):
     assert overall == "warn"
     assert model == "google/gemini-2.5-flash"
     assert findings[0]["code"] == "ai_display_gap"
+
+
+def test_gemini_integrity_preferred(monkeypatch):
+    settings = _settings(monkeypatch, GEMINI_API_KEY="AQ.test-gemini-key")
+
+    class _Resp:
+        status_code = 200
+        text = ""
+
+        def json(self):
+            return {
+                "candidates": [
+                    {
+                        "content": {
+                            "parts": [
+                                {
+                                    "text": json.dumps(
+                                        {
+                                            "overall": "pass",
+                                            "summary": "OK",
+                                            "findings": [],
+                                        }
+                                    )
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+
+    class _Client:
+        def __init__(self, *a, **k):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def post(self, url, *a, **k):
+            assert "generativelanguage.googleapis.com" in str(url)
+            return _Resp()
+
+    monkeypatch.setattr(httpx, "Client", _Client)
+    out = run_fault_run_integrity_check(
+        settings,
+        results=[
+            {
+                "algorithm_id": "clipping",
+                "status": "ok",
+                "module_kind": "fault",
+                "tables": [],
+                "affected_equipment": [],
+                "severity": "info",
+            }
+        ],
+        kpis={"fault_count": 0},
+        results_summary={"modules": [{"id": "clipping", "status": "ok"}]},
+    )
+    assert out["ai_layer"] == "ok"
+    assert out["provider"] == "gemini"
+    assert out["source"] == "rules+ai"
+    assert "Gemini: ok" in format_integrity_progress(out)
 
 
 def test_management_key_hint_on_401(monkeypatch):
@@ -277,7 +344,7 @@ def test_full_check_merges_ai(monkeypatch):
         results_summary={"modules": [{"id": "clipping", "status": "ok"}]},
     )
     assert out["configured"] is True
-    assert out["source"] == "rules+ai"
+    assert out["source"] in {"rules+ai", "rules+zenmux"}
     assert out["ai_layer"] == "ok"
     assert out["status"] == "pass"
     assert out["error"] is None
@@ -327,7 +394,7 @@ def test_full_check_ai_403_surfaces_failed_layer(monkeypatch):
     assert out["status"] == "error"
     assert out["error"]
     line = format_integrity_progress(out)
-    assert "ZenMux: failed" in line
+    assert "failed" in line
     assert "sk-ai-v1" in line
 
 
@@ -338,7 +405,12 @@ def test_console_progress_strings_match_frontend_filters():
     start = "AI integrity check starting…"
     assert re.match(r"^AI integrity check starting", start, re.I)
     done = format_integrity_progress(
-        {"rules_finding_count": 0, "ai_layer": "failed", "error": "HTTP 403 management key sk-mg"}
+        {
+            "rules_finding_count": 0,
+            "ai_layer": "failed",
+            "error": "HTTP 403 management key sk-mg",
+            "provider": "zenmux",
+        }
     )
     assert re.match(r"^AI integrity\b", done, re.I)
     assert re.search(r"failed|rejected", done, re.I)

@@ -40,7 +40,8 @@ has `render.yaml`, `vercel.json`, and Dockerfiles.
    | `SESSION_SECRET` | Long random string (`openssl rand -hex 32`) |
    | `PIC_SUPERADMIN_EMAIL` | Your admin email |
    | `PIC_SUPERADMIN_PASSWORD` | Strong password (min 8 chars) |
-   | `ZENMUX_API_KEY` | Optional — chat key (`sk-ai-v1-…` or `sk-ss-v1-…`) for AI integrity. **Not** `sk-mg-v1-…`. See [ZENMUX-API-SETUP.md](./ZENMUX-API-SETUP.md). |
+   | `ZENMUX_API_KEY` | Optional fallback — chat key (`sk-ai-v1-…` or `sk-ss-v1-…`) for AI integrity. **Not** `sk-mg-v1-…`. Prefer `GEMINI_API_KEY` (AI Studio). See [ZENMUX-API-SETUP.md](./ZENMUX-API-SETUP.md) and [GEMINI-API-SETUP.md](./GEMINI-API-SETUP.md). |
+   | `GEMINI_API_KEY` | Optional preferred — Google AI Studio key for parse-assist + integrity. See [GEMINI-API-SETUP.md](./GEMINI-API-SETUP.md). |
 
    Already set by the blueprint (do not override unless you know why):
 
