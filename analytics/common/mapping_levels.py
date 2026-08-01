@@ -33,7 +33,7 @@ _LEVEL_LABELS: dict[str, str] = {
     "multi": "Multi-level",
 }
 
-# Measurements that are valid at multiple hierarchy levels
+# Measurements that are valid at multiple hierarchy levels when that level is in play
 _MULTI_LEVEL_METRICS = frozenset(
     {"ac_power_kw", "dc_power_kw", "dc_current_a", "dc_voltage_v", "energy_kwh"}
 )
@@ -91,7 +91,8 @@ def infer_hierarchy_level(
     if "icr_id" in companions and canonical_field == "ac_power_kw":
         return "inverter", level_label("inverter")
 
-    return "multi", level_label("multi")
+    # No companion identity — do not claim multi-level; leave badge unset until evidence exists.
+    return None, None
 
 
 def annotate_mapping_levels(

@@ -106,3 +106,12 @@ def test_annotate_mapping_levels_on_suggestions():
         {"ICR ID": "icr_id", "DC Power (kW)": "dc_power_kw", "Equipment ID": "device_id"}
     )
     assert levels["ICR ID"] == "icr"
+
+
+def test_mapping_metric_without_companion_has_no_multi_badge():
+    """Do not claim Multi-level when no equipment identity is mapped."""
+    level, label = infer_hierarchy_level("dc_current_a", companion_fields={"timestamp", "dc_current_a"})
+    assert level is None
+    assert label is None
+    levels = column_hierarchy_from_mapping({"Timestamp": "timestamp", "DC Current": "dc_current_a"})
+    assert "DC Current" not in levels

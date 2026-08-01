@@ -14,7 +14,7 @@ function signalTooltip(sig: UploadHierarchyLevel["signals"][number]): string {
       ? ` via ${sig.detected_via.replace(/_/g, " ")}`
       : "";
   if (sig.evidence === "mapped_level_tbd") {
-    return `Mapped in job (level TBD)${via} — valid at this level; Validate confirms device type`;
+    return `Mapped at this level (type TBD)${via} — level ID present; Validate confirms device type`;
   }
   if (sig.evidence === "confirmed") {
     return `Confirmed at this level${via}`;
@@ -204,7 +204,7 @@ export function UploadIntelligencePanel({
       <div className="rounded-xl border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] p-4">
         <p className="font-display text-sm font-semibold text-[color:var(--pic-text)]">After upload you will see</p>
         <ul className="mt-3 space-y-2 text-sm text-[color:var(--pic-text-muted)]">
-          <li>Signals at plant, ICR (if present), inverter, SCB, and string — measurements can appear at multiple levels</li>
+          <li>Signals only at hierarchy levels that are in play (companion ID or confirmed device type)</li>
           <li>Inverter, SCB, and string counts</li>
           <li>Parse integrity checklist (rules always; AI when configured)</li>
           <li>Which analyses may not run until Setup is complete</li>
@@ -229,8 +229,8 @@ export function UploadIntelligencePanel({
           <div className="rounded-xl border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] p-3.5 lg:col-span-2 lg:p-4">
             <p className="font-display text-sm font-semibold text-[color:var(--pic-text)]">Signals by hierarchy (job total)</p>
             <p className="mt-1 text-xs text-[color:var(--pic-text-muted)]">
-              Measurements (DC I/V/P, etc.) can appear at inverter, SCB, and string — not uniquely locked to one level.
-              Green = confirmed; blue ≈ mapped in job (level TBD). Expand a file row for per-file detail.
+              A metric lights a level only when that level is in play (level ID or confirmed device type) —
+              inverter DC does not mark SCB/string. Green = confirmed; blue ≈ mapped at this level (type TBD).
             </p>
             <div className="mt-3">
               <SignalChips levels={hierarchy} />
@@ -256,7 +256,7 @@ export function UploadIntelligencePanel({
       <div className="rounded-xl border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] p-4">
         <p className="font-display text-sm font-semibold text-[color:var(--pic-text)]">Signals by hierarchy</p>
         <p className="mt-1 text-xs text-[color:var(--pic-text-muted)]">
-          Multi-level measurements: same metric may be valid at inverter, SCB, and string.
+          Metrics appear under a level only when that level has ID or device-type evidence.
         </p>
         <div className="mt-3">
           <SignalChips levels={hierarchy} />

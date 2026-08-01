@@ -37,9 +37,9 @@ export interface UploadHierarchySignalItem {
   label: string;
   present: boolean;
   detected_via?: string | null;
-  /** confirmed | mapped_level_tbd — measurements can appear at multiple levels */
+  /** confirmed | mapped_level_tbd — TBD only when level ID exists but type unconfirmed */
   evidence?: string | null;
-  /** identity (level-specific) | measurement (multi-level) */
+  /** identity (level-specific) | measurement (credited only when that level is in play) */
   kind?: string | null;
 }
 

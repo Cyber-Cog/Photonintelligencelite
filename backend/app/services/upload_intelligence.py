@@ -5,10 +5,11 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, Optional
 
 from analytics.common.plant_structure import DetectedStructure, infer_from_csv
-from analytics.common.prerequisites import evaluate_prerequisites
+from analytics.common.prerequisites import ALGORITHM_PREREQUISITES, evaluate_prerequisites
 
-# Professional SCADA model: identity fields stay level-specific; measurement fields
-# may appear at every level where real plants measure them (not a unique partition).
+# Identity fields stay level-specific. Measurements may exist at multiple SCADA levels
+# in real plants, but the upload matrix only lights a level when that level is in play
+# (companion ID or confirmed device_type) — never because the same column exists elsewhere.
 # SCB/string IDs must not inherit device_id (false greens). ICR is optional.
 _OPTIONAL_LEVEL_IDS = frozenset({"icr"})
 
@@ -25,8 +26,22 @@ _LEVEL_DEVICE_TYPES: dict[str, tuple[str, ...]] = {
     "string": ("string",),
 }
 
+# Companion identity fields that put a hierarchy level "in play" for measurements.
+_LEVEL_COMPANION_IDS: dict[str, tuple[str, ...]] = {
+    "icr": ("icr_id",),
+    "inverter": ("inverter_id", "device_id"),
+    "scb": ("scb_id",),
+    "string": ("string_id",),
+}
+
+_EQUIPMENT_IDENTITY_FIELDS = frozenset({"device_id", "inverter_id", "scb_id", "string_id", "icr_id"})
+
+# Plant-native measurements (not shared AC/DC power columns)
+_PLANT_NATIVE_MEASUREMENTS = frozenset({"irradiance", "module_temp_c", "ambient_temp_c"})
+_PLANT_POWER_MEASUREMENTS = frozenset({"ac_power_kw", "dc_power_kw"})
+
 # (field_id, label, alternate_canonicals, kind)
-# kind: "identity" = level-specific; "measurement" = valid at this level (may repeat elsewhere)
+# kind: "identity" = level-specific; "measurement" = electrical / weather signal
 _SignalDef = tuple[str, str, tuple[str, ...], str]
 
 _HIERARCHY_LEVELS: tuple[tuple[str, str, tuple[_SignalDef, ...]], ...] = (
@@ -122,6 +137,45 @@ def _normalize_by_device_type(
     return {str(k): {str(f) for f in fields if f} for k, fields in by_device_type.items()}
 
 
+def _level_has_companion_id(level_id: str, fields: set[str]) -> bool:
+    companions = _LEVEL_COMPANION_IDS.get(level_id, ())
+    return any(c in fields for c in companions)
+
+
+def _has_equipment_identity(fields: set[str]) -> bool:
+    return bool(fields & _EQUIPMENT_IDENTITY_FIELDS)
+
+
+def _measurement_in_play_at_level(
+    field_id: str,
+    level_id: str,
+    fields: set[str],
+    typed: Mapping[str, set[str]] | None,
+) -> bool:
+    """Whether a measurement may be credited at this hierarchy level.
+
+    Evidence ladder (without claiming cross-level presence):
+    - confirmed device_type rows (handled by caller), or
+    - companion level ID present (mapped_level_tbd until Validate), or
+    - plant-native weather fields, or
+    - plant AC/DC only when plant/WMS typed OR no equipment IDs (aggregate file).
+    """
+    if level_id == "plant_wms":
+        if field_id in _PLANT_NATIVE_MEASUREMENTS:
+            return True
+        if field_id in _PLANT_POWER_MEASUREMENTS:
+            if typed and any(typed.get(dt) for dt in _LEVEL_DEVICE_TYPES["plant_wms"]):
+                return True
+            # Aggregate plant file: power columns with no equipment identity
+            return not _has_equipment_identity(fields)
+        return False
+
+    if level_id in _LEVEL_COMPANION_IDS:
+        return _level_has_companion_id(level_id, fields)
+
+    return False
+
+
 def build_hierarchy_levels(
     present: Iterable[str],
     *,
@@ -130,10 +184,10 @@ def build_hierarchy_levels(
 ) -> list[dict[str, Any]]:
     """Per-hierarchy signal matrix from detected canonical fields.
 
-    Measurements that are valid at multiple levels are listed under each such level
-    when present in the job mapping (not uniquely bucketed). When ``by_device_type``
-    is provided, chips distinguish confirmed device_type evidence from
-    column-only ``mapped_level_tbd``.
+    A measurement is present at a level only when that level is in play
+    (companion ID or confirmed ``device_type``), not merely because the same
+    canonical column exists on another level. ``mapped_level_tbd`` is used only
+    when a level ID companion exists but device_type is not yet confirmed.
 
     Optional levels (ICR) are omitted when none of their signals are present.
     """
@@ -149,11 +203,14 @@ def build_hierarchy_levels(
                 evidence = _EVIDENCE_CONFIRMED
                 present_flag = True
                 via = confirmed_via
-            elif ok:
-                # Column/job mapping present — credit every level where the metric is valid.
-                # Identities are level-specific; column match is enough. Measurements stay
-                # mapped_level_tbd until device_type evidence confirms them.
-                evidence = _EVIDENCE_CONFIRMED if kind == "identity" else _EVIDENCE_MAPPED_TBD
+            elif kind == "identity" and ok:
+                evidence = _EVIDENCE_CONFIRMED
+                present_flag = True
+            elif kind == "measurement" and ok and _measurement_in_play_at_level(
+                field_id, level_id, fields, typed
+            ):
+                # Level companion / plant-native evidence without device_type yet
+                evidence = _EVIDENCE_MAPPED_TBD
                 present_flag = True
             else:
                 evidence = None
@@ -282,6 +339,82 @@ def build_architecture_summary(
     }
 
 
+def _level_in_play_for_preview(
+    device_type: str,
+    present: set[str],
+    architecture_summary: Mapping[str, Any],
+) -> bool:
+    """Whether upload evidence suggests a device level could exist for this job."""
+    if device_type == "scb":
+        if "scb_id" in present:
+            return True
+        return int(architecture_summary.get("scb_count") or 0) > 0
+    if device_type == "string":
+        if "string_id" in present:
+            return True
+        return int(architecture_summary.get("string_count") or 0) > 0
+    if device_type == "inverter":
+        return "device_id" in present or "inverter_id" in present or int(
+            architecture_summary.get("inverter_count") or 0
+        ) > 0
+    return True
+
+
+def _downgrade_preliminary_without_level(
+    row: dict[str, Any],
+    *,
+    present: set[str],
+    architecture_summary: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Block SCB/string modules when that level is clearly not in play (no false may-run)."""
+    if not row.get("preliminary"):
+        return row
+    spec = ALGORITHM_PREREQUISITES.get(row["algorithm_id"])
+    if spec is None:
+        return row
+
+    if spec.required_at_any_device_type:
+        any_types = {dtype for dtype, _fields in spec.required_at_any_device_type}
+        if any(_level_in_play_for_preview(t, present, architecture_summary) for t in any_types):
+            return row
+        gap_token = " or ".join(
+            f"{dtype}:{f}"
+            for dtype, fields in spec.required_at_any_device_type
+            for f in fields
+        )
+        level_names = " / ".join(sorted(any_types))
+    elif spec.required_at_device_type:
+        needed = set(spec.required_at_device_type.keys())
+        if all(_level_in_play_for_preview(t, present, architecture_summary) for t in needed):
+            return row
+        gap_token = None
+        level_names = ", ".join(sorted(needed))
+    else:
+        return row
+
+    missing = list(row.get("missing_fields") or [])
+    if spec.required_at_any_device_type:
+        if gap_token and gap_token not in missing:
+            missing.append(gap_token)
+    else:
+        for dtype, fields in spec.required_at_device_type.items():
+            for f in fields:
+                token = f"{dtype}:{f}"
+                if token not in missing:
+                    missing.append(token)
+
+    return {
+        **row,
+        "preliminary": False,
+        "will_run": False,
+        "missing_fields": missing,
+        "message": (
+            f"Needs {level_names}-level telemetry — not detected in this upload "
+            f"(inverter-only columns are not enough). {spec.how_to_fix}".strip()
+        ),
+    }
+
+
 def build_module_impact_preview(
     *,
     suggestions: Iterable[Any],
@@ -292,6 +425,8 @@ def build_module_impact_preview(
 
     Column-only preview cannot confirm hierarchy levels — level-sensitive modules
     (Module Damage, clipping by current, …) are never counted as confirmed ready here.
+    When SCB/string is clearly absent (0 count, no level ID), those modules are blocked
+    rather than shown as “may run”.
     """
     present = _present_from_suggestions(suggestions)
     plant = plant_config or {}
@@ -301,20 +436,25 @@ def build_module_impact_preview(
         or plant.get("inverter_capacity_kw")
         or plant.get("imported_inverter_capacity_kw")
     )
-    rows = evaluate_prerequisites(
-        available_fields=present,
-        has_architecture=has_arch,
-        has_equipment_ratings=has_ratings,
-        level_evidence=False,
-    )
+    rows = [
+        _downgrade_preliminary_without_level(
+            r, present=present, architecture_summary=architecture_summary
+        )
+        for r in evaluate_prerequisites(
+            available_fields=present,
+            has_architecture=has_arch,
+            has_equipment_ratings=has_ratings,
+            level_evidence=False,
+        )
+    ]
     blocked = [r for r in rows if not r["will_run"] and not r.get("preliminary")]
     may_run = [r for r in rows if r.get("preliminary")]
     ready = [r for r in rows if r["will_run"]]
     return {
         "preview_note": (
-            "Preliminary — based on detected column names only. "
-            "Validate confirms hierarchy levels (e.g. SCB vs inverter voltage) before Results. "
-            "Measurements may appear at multiple levels; algorithms still require the correct device_type."
+            "Preliminary — based on detected columns and which hierarchy levels are in play. "
+            "Validate confirms device_type (e.g. SCB vs inverter voltage) before Results. "
+            "Algorithms still require the correct level — inverter DC does not satisfy SCB modules."
         ),
         "ready_count": len(ready),
         "may_run_count": len(may_run),
@@ -395,7 +535,7 @@ def hierarchy_missing_labels(levels: list[dict[str, Any]]) -> list[str]:
             if sig.get("present"):
                 continue
             sid = str(sig.get("id") or "")
-            # Measurements listed at multiple levels — report once
+            # Same measurement id can appear under several levels — report once
             if sid and sid in seen_ids and sig.get("kind") == "measurement":
                 continue
             if sid:

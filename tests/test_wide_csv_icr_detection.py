@@ -106,15 +106,28 @@ def test_reshape_fixture_maps_signals(tmp_path: Path):
     scb = next(h for h in intel["hierarchy_overview"] if h["level_id"] == "scb")
     inv_by_id = {s["id"]: s for s in inv["signals"]}
     scb_by_id = {s["id"]: s for s in scb["signals"]}
-    # Wide inverter melt: DC power / current / voltage credited at inverter (and valid at SCB)
+    # Wide inverter melt: DC power / current / voltage at inverter only (no SCB IDs)
     assert inv_by_id["dc_power_kw"]["present"] is True
     if "dc_current_a" in fields:
         assert inv_by_id["dc_current_a"]["present"] is True
-        assert scb_by_id["dc_current_a"]["present"] is True
+        assert scb_by_id["dc_current_a"]["present"] is False
     if "dc_voltage_v" in fields:
         assert inv_by_id["dc_voltage_v"]["present"] is True
-    assert scb_by_id["dc_power_kw"]["present"] is True  # multi-level, not inverter-only
+        assert scb_by_id["dc_voltage_v"]["present"] is False
+    assert scb_by_id["scb_id"]["present"] is False
+    assert scb_by_id["dc_power_kw"]["present"] is False
     assert intel["architecture_summary"]["inverter_count"] == 12
+    assert intel["architecture_summary"]["scb_count"] == 0
+    string = next(h for h in intel["hierarchy_overview"] if h["level_id"] == "string")
+    string_by_id = {s["id"]: s for s in string["signals"]}
+    assert string_by_id["string_id"]["present"] is False
+    assert string_by_id["dc_current_a"]["present"] is False
+    # Analysis impact: SCB modules blocked, not may-run from inverter DC
+    impact = intel["module_impact_preview"]
+    blocked_ids = {m["algorithm_id"] for m in impact["blocked_modules"]}
+    may_ids = {m["algorithm_id"] for m in (impact.get("may_run_modules") or [])}
+    assert "module_damage" in blocked_ids
+    assert "module_damage" not in may_ids
     check = run_upload_integrity_check(
         get_settings(),
         columns=cols,

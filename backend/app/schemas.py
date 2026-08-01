@@ -36,9 +36,9 @@ class UploadHierarchySignalItem(BaseModel):
     detected_via: Optional[str] = None
     """Canonical field that satisfied detection (may differ from id for alts)."""
     evidence: Optional[str] = None
-    """confirmed | mapped_level_tbd — measurements may be present at multiple levels."""
+    """confirmed | mapped_level_tbd — TBD only when level ID exists but device_type is unconfirmed."""
     kind: Optional[str] = None
-    """identity (level-specific) | measurement (valid at this level, not uniquely partitioned)."""
+    """identity (level-specific) | measurement (credited only when that level is in play)."""
 
 
 class UploadHierarchyLevel(BaseModel):

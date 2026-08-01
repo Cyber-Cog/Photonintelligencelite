@@ -56,7 +56,8 @@ signal does not apply at that level (e.g. AC power only on inverter rows).
 
 The same measurement name may appear on multiple equipment levels when the plant
 records it there (e.g. inverter DC current/power **and** SCB DC current/power).
-Do not treat metrics as uniquely owned by one hierarchy bucket.
+Upload review only credits a level when that level is in play (level ID or
+confirmed device type) — inverter-only columns do not imply SCB/string coverage.
 
 ### Required / recommended columns
 

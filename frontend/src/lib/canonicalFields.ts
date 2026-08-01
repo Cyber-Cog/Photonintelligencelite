@@ -61,8 +61,10 @@ export function inferMappingHierarchyLevel(
   if (companionFields.has("string_id")) return "string";
   if (companionFields.has("scb_id")) return "scb";
   if (companionFields.has("inverter_id")) return "inverter";
-  if (companionFields.has("device_id")) return "equipment";
-  return "multi";
+  if companionFields.has("device_id")) return "equipment";
+  if (companionFields.has("icr_id") && canonicalField === "ac_power_kw") return "inverter";
+  // No companion identity — do not claim multi-level without evidence
+  return null;
 }
 
 export const PLANT_TYPE_OPTIONS = [
