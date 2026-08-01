@@ -166,12 +166,29 @@ def _column_names_from_suggestions(suggestions: Iterable[Any] | None) -> list[st
     return cols
 
 
+def companion_boosts_from_reshape(reshape_report: Mapping[str, Any] | None) -> set[str]:
+    """After a successful wide melt, tidy Equipment ID rows imply level companions."""
+    if not reshape_report or not reshape_report.get("reshaped"):
+        return set()
+    boosts: set[str] = set()
+    if int(reshape_report.get("scb_count") or 0) > 0 or reshape_report.get("scb_ids"):
+        boosts.add("scb_id")
+        boosts.add("device_id")
+    if int(reshape_report.get("string_count") or 0) > 0:
+        boosts.add("string_id")
+    if int(reshape_report.get("inverter_count") or 0) > 0 or reshape_report.get("inverters_found"):
+        boosts.add("device_id")
+    if reshape_report.get("icr_ids"):
+        boosts.add("icr_id")
+    return boosts
+
+
 def companion_boosts_from_wide_columns(column_names: Iterable[str] | None) -> set[str]:
     """Synthetic identity companions implied by wide device×metric headers (pre-melt).
 
     Example: ``ESSP_20MW ICR1 Inverter 1 DC Current (A)`` → boosts ``device_id`` + ``icr_id``
     so inverter measurements light at upload suggestion time without waiting for melt.
-    Does **not** boost SCB/string from inverter-only headers.
+    SCB-tagged headers (``… INV1 SCB1 O/P Current``) boost ``scb_id``.
     """
     boosts: set[str] = set()
     for col in column_names or []:
@@ -184,6 +201,9 @@ def companion_boosts_from_wide_columns(column_names: Iterable[str] | None) -> se
             boosts.add(companion)
         if parsed.icr_id:
             boosts.add("icr_id")
+        # Parent inverter is implied when SCB/string columns carry INV tokens.
+        if level in {"scb", "string"} and parsed.inverter_num:
+            boosts.add("device_id")
     return boosts
 
 
@@ -209,12 +229,17 @@ def architecture_counts_from_wide_columns(
         if parsed.icr_id:
             icrs.add(parsed.icr_id)
     notes: list[str] = []
-    if invs:
-        notes.append(
-            f"From wide column headers: {len(invs)} inverter(s)"
-            + (f", {len(icrs)} ICR(s)" if icrs else "")
-            + "."
-        )
+    if invs or scbs or strings:
+        parts = []
+        if invs:
+            parts.append(f"{len(invs)} inverter(s)")
+        if scbs:
+            parts.append(f"{len(scbs)} SCB(s)")
+        if strings:
+            parts.append(f"{len(strings)} string(s)")
+        if icrs:
+            parts.append(f"{len(icrs)} ICR(s)")
+        notes.append("From wide column headers: " + ", ".join(parts) + ".")
     return len(invs), len(scbs), len(strings), notes
 
 
@@ -232,6 +257,16 @@ def _measurement_in_play_at_level(
     - plant-native weather fields, or
     - plant AC/DC only when plant/WMS typed OR no equipment IDs (aggregate file).
     """
+    # When device_type partitions are known (e.g. post-SCB melt), do not light
+    # inverter metrics from a shared device_id companion alone.
+    if typed:
+        dtypes = _LEVEL_DEVICE_TYPES.get(level_id, ())
+        if dtypes and not any(typed.get(d) for d in dtypes):
+            if level_id == "plant_wms":
+                pass  # plant rules below
+            else:
+                return False
+
     if level_id == "plant_wms":
         if field_id in _PLANT_NATIVE_MEASUREMENTS:
             return True
@@ -254,6 +289,7 @@ def build_hierarchy_levels(
     show_empty_optional: bool = False,
     by_device_type: Mapping[str, Iterable[str]] | None = None,
     column_names: Iterable[str] | None = None,
+    reshape_report: Mapping[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Per-hierarchy signal matrix from detected canonical fields.
 
@@ -266,8 +302,13 @@ def build_hierarchy_levels(
     """
     fields = {str(f) for f in present if f}
     wide_boosts = companion_boosts_from_wide_columns(column_names)
-    play_fields = fields | wide_boosts
+    reshape_boosts = companion_boosts_from_reshape(reshape_report)
+    play_fields = fields | wide_boosts | reshape_boosts
     typed = _normalize_by_device_type(by_device_type)
+    # After SCB melt without typed partitions, credit measurements on SCB from reshape.
+    if not typed and reshape_report and int(reshape_report.get("scb_count") or 0) > 0:
+        if "device_id" in play_fields or "scb_id" in play_fields:
+            typed = {"scb": set(fields)}
     levels: list[dict[str, Any]] = []
     for level_id, title, signals in _HIERARCHY_LEVELS:
         items: list[dict[str, Any]] = []
@@ -283,7 +324,7 @@ def build_hierarchy_levels(
                 evidence = _EVIDENCE_CONFIRMED
                 present_flag = True
             elif kind == "identity" and ok_play and not ok:
-                # Wide-header implied identity (e.g. INV tokens before melt → device_id)
+                # Wide-header / reshape implied identity (e.g. SCB melt → scb_id)
                 evidence = _EVIDENCE_MAPPED_TBD
                 present_flag = True
                 via = via_play or "wide_header"
@@ -406,15 +447,33 @@ def build_architecture_summary(
         )
     elif reshape_report and reshape_report.get("reshaped"):
         invs = list(reshape_report.get("inverters_found") or [])
-        inv_n = len(invs)
-        scb_n = 0
-        str_n = 0
-        if inv_n > 0:
+        scbs_from_report = list(reshape_report.get("scb_ids") or [])
+        inv_n = int(reshape_report.get("inverter_count") or 0) or len(invs)
+        scb_n = int(reshape_report.get("scb_count") or 0) or len(scbs_from_report)
+        str_n = int(reshape_report.get("string_count") or 0)
+        # Classify equipment ids when older reshape reports lack scb_count.
+        if scb_n == 0 and invs:
+            from analytics.common.equipment_ids import derive_level as _derive
+
+            scb_ids = [e for e in invs if _derive(e) == "scb"]
+            inv_ids = [e for e in invs if _derive(e) == "inverter"]
+            if scb_ids:
+                scb_n = len(scb_ids)
+                if not inv_ids:
+                    # Parent inverters implied by SCB ids
+                    from analytics.common.equipment_ids import extract_parent_inverter as _parent
+
+                    parents = {p for e in scb_ids if (p := _parent(e))}
+                    inv_n = len(parents) or inv_n
+                else:
+                    inv_n = len(inv_ids)
+        if inv_n > 0 or scb_n > 0:
             detected = True
             source = "wide_reshape"
             icr_n = len(reshape_report.get("icr_ids") or [])
             notes.append(
                 f"From wide reshape: {inv_n} inverter(s)"
+                + (f", {scb_n} SCB(s)" if scb_n else "")
                 + (f", {icr_n} ICR(s)" if icr_n else "")
                 + "."
             )
@@ -630,11 +689,17 @@ def build_upload_intelligence(
         architecture_summary=arch,
     )
     inventory = [
-        enrich_file_inventory_item(dict(f), by_device_type=by_device_type) for f in (file_inventory or [])
+        enrich_file_inventory_item(
+            dict(f), by_device_type=by_device_type, column_names=f.get("column_names")
+        )
+        for f in (file_inventory or [])
     ]
     return {
         "hierarchy_overview": build_hierarchy_levels(
-            present, by_device_type=by_device_type, column_names=cols
+            present,
+            by_device_type=by_device_type,
+            column_names=cols,
+            reshape_report=reshape_report,
         ),
         "architecture_summary": arch,
         "module_impact_preview": impact,

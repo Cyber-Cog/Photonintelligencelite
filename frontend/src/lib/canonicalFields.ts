@@ -55,12 +55,16 @@ function levelFromWideColumnName(columnName: string | null | undefined): string 
   if (!columnName) return null;
   const n = columnName.trim();
   if (!n) return null;
+  const hasScb = /(?:SCB|SMB)[\s_\-]?\d+/i.test(n);
+  const hasStr = /(?:STR(?:ING)?|CH(?:ANNEL)?)[\s_\-]?\d+/i.test(n);
+  // String under SCB
+  if (hasScb && hasStr) return "string";
+  if (hasScb) return "scb";
   // ICR + Inverter → inverter
   if (/ICR[\s_\-]?\d+[\s_\-]+(?:INV(?:ERTER)?[\s_\-\.]*)\d+/i.test(n)) return "inverter";
-  if (/(?:INV(?:ERTER)?[\s_\-\.]*)\d+/i.test(n) && !/(?:SCB|SMB|STR(?:ING)?)/i.test(n)) return "inverter";
-  if (/(?:SCB|SMB)[\s_\-]?\d+/i.test(n) && /STR(?:ING)?/i.test(n)) return "string";
-  if (/(?:SCB|SMB)[\s_\-]?\d+/i.test(n)) return "scb";
+  if (/(?:INV(?:ERTER)?[\s_\-\.]*)\d+/i.test(n)) return "inverter";
   if (/^ICR[\s_\-]?\d+$/i.test(n)) return "icr";
+  if (/\b(?:wms|poa|ghi|irradiance)\b/i.test(n)) return "plant";
   return null;
 }
 
@@ -72,9 +76,10 @@ export function inferMappingHierarchyLevel(
 ): string | null {
   if (!canonicalField || canonicalField === "ignore") return null;
   if (IDENTITY_LEVEL[canonicalField]) return IDENTITY_LEVEL[canonicalField];
-  if (!MULTI_METRICS.has(canonicalField)) return null;
+  // Header tokens beat companions — never claim multi when SCB/INV/etc. is present.
   const fromHeader = levelFromWideColumnName(columnName);
   if (fromHeader) return fromHeader;
+  if (!MULTI_METRICS.has(canonicalField)) return null;
   if (companionFields.has("string_id")) return "string";
   if (companionFields.has("scb_id")) return "scb";
   if (companionFields.has("inverter_id")) return "inverter";

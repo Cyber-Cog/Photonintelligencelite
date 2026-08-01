@@ -48,6 +48,16 @@ timestamp, ac_power_kw, dc_power_kw, dc_current_a, dc_voltage_v, poa_w_m2, ghi_w
 module_temp_c, ambient_temp_c, energy_kwh, device_id, inverter_id, scb_id, string_id,
 icr_id, ignore
 
+CRITICAL:
+- If headers contain many nearly-identical wide device tags (ICR/INV/SCB + metric),
+  do NOT propose mapping each one to dc_current_a / dc_voltage_v. Those require a
+  reshape/melt to tidy long form first. Return an empty mappings list and mention
+  reshape in notes instead.
+- After a successful melt, headers look like Timestamp, Equipment ID, ICR ID,
+  DC Current (A) — map those tidy names only.
+- Prefer ignore for secondary timestamps like planttimestamp when Timestamp exists.
+- Return few high-confidence proposals (≤15), never spam 50+ identical mappings.
+
 Return ONLY valid JSON:
 {
   "mappings": [
@@ -64,7 +74,19 @@ APPLY_CONFIDENCE = 0.85
 
 def needs_parse_assist(suggestions: Iterable[Any], columns: list[str] | None = None) -> bool:
     """True when heuristics look thin or many headers are ambiguous/manual."""
+    from analytics.common.wide_headers import count_wide_device_columns
+
     sug = list(suggestions)
+    cols = columns or [
+        (getattr(s, "column_name", None) or (s.get("column_name") if isinstance(s, dict) else None) or "")
+        for s in sug
+    ]
+    cols = [str(c) for c in cols if c]
+    # Wide ICR/INV/SCB×metric sheets need melt, not per-column Gemini spam.
+    wide_n, _ = count_wide_device_columns(cols)
+    if wide_n >= 8:
+        return False
+
     if not sug and columns:
         return len(columns) >= 2
 

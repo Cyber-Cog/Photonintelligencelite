@@ -195,7 +195,23 @@ def score_columns(column_names: list[str]) -> list[ColumnCandidate]:
     compare INV AC against plant-wide DC and look like ~20% conversion.
     """
     scored = [score_column(name) for name in column_names]
-    norms = {_normalize(c.column_name): c for c in scored}
+
+    # Prefer a primary timestamp; demote planttimestamp / secondary stamps so Setup
+    # does not show two "Timestamp: confirm" competitors.
+    primary_ts = None
+    for c in scored:
+        if c.canonical_field != "timestamp":
+            continue
+        n = _normalize(c.column_name)
+        compact = n.replace(" ", "")
+        if n in {"timestamp", "date time", "datetime", "date"} or compact == "timestamp":
+            primary_ts = c.column_name
+            break
+    if primary_ts is None:
+        for c in scored:
+            if c.canonical_field == "timestamp" and c.confidence >= 0.9:
+                primary_ts = c.column_name
+                break
 
     has_inverter_ac = any(
         c.canonical_field == "ac_power_kw"
@@ -213,6 +229,15 @@ def score_columns(column_names: list[str]) -> list[ColumnCandidate]:
     out: list[ColumnCandidate] = []
     for c in scored:
         n = _normalize(c.column_name)
+        compact = n.replace(" ", "")
+        if (
+            primary_ts
+            and c.column_name != primary_ts
+            and c.canonical_field == "timestamp"
+            and ("planttimestamp" in compact or compact != "timestamp")
+        ):
+            out.append(ColumnCandidate(c.column_name, None, 0.0, None))
+            continue
         if "plant" in n and c.canonical_field == "ac_power_kw" and has_inverter_ac:
             out.append(ColumnCandidate(c.column_name, None, 0.0, None))
             continue

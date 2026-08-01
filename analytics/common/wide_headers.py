@@ -1,7 +1,8 @@
-"""Parse wide SCADA column names: plant/ICR/inverter prefixes + metric leaf.
+"""Parse wide SCADA column names: plant/ICR/inverter/SCB prefixes + metric leaf.
 
 Handles historian / trend-report exports such as:
   ESSP_20MW ICR1 Inverter 1 Active Power (kW)
+  ESSP_20MW ICR1 INV1 SCB1 O/P Current (A)
   INV1_Pac
   Inverter_02_DC Current (A)
   PlantA ICR-2 INV3 Active Power (kW)
@@ -44,8 +45,45 @@ _COMPACT_INV_METRIC_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Standalone SCB/SMB wide columns (no INV prefix): SCB1 O/P Current (A)
+_WIDE_SCB_ONLY_RE = re.compile(
+    r"""^
+    (?:(?P<plant>.+?)[\s_\-]+)?
+    (?:SCB|SMB)[\s_\-]?(?P<scb>\d+)
+    [\s_\-\.]*
+    (?P<rest>.*)$
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+# SCB/SMB + optional String/channel embedded in the metric rest after INV.
+_REST_SCB_RE = re.compile(
+    r"""^
+    (?:SCB|SMB)[\s_\-]?(?P<scb>\d+)
+    (?:[\s_\-\.]+(?:STR(?:ING)?|CH(?:ANNEL)?)[\s_\-]?(?P<strn>\d+))?
+    [\s_\-\.]*
+    (?P<metric>.*)$
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+_REST_STRING_ONLY_RE = re.compile(
+    r"""^
+    (?:STR(?:ING)?|CH(?:ANNEL)?)[\s_\-]?(?P<strn>\d+)
+    [\s_\-\.]*
+    (?P<metric>.*)$
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
 _TIMESTAMP_RE = re.compile(
     r"^(?:time\s*stamp|timestamp|date\s*(?:and|&)?\s*time|date_time|datetime|plant\s*time\s*stamp|planttimestamp)$",
+    re.IGNORECASE,
+)
+
+# Strip leading device tokens left in a metric leaf (SCB1 / String 3 / …).
+_LEADING_DEVICE_LEAF_RE = re.compile(
+    r"^(?:(?:scb|smb|str(?:ing)?|ch(?:annel)?|inv(?:erter)?|icr)\s*\d+\s*)+",
     re.IGNORECASE,
 )
 
@@ -59,6 +97,8 @@ class WideColumnParse:
     icr_id: str | None = None
     plant_id: str | None = None
     inverter_num: int = 0
+    scb_num: int | None = None
+    string_num: int | None = None
 
 
 def normalize_header(value: str) -> str:
@@ -83,25 +123,56 @@ def leaf_to_metric(leaf: str) -> str | None:
     n = n.strip(" _-.")
     # Drop trailing unit-only noise already in parens via normalize; keep tokens.
     n = re.sub(r"[()\[\]{}]", " ", n)
+    n = re.sub(r"[/\._]+", " ", n)
     n = re.sub(r"\s+", " ", n).strip()
+    # Drop residual device tags so "scb1 o p current a" → "o p current a"
+    n = _LEADING_DEVICE_LEAF_RE.sub("", n).strip()
     if not n:
         return "AC Power (kW)"
 
-    if any(tok in n for tok in ("dc bus voltage", "dc voltage", "vdc", "v dc")) or n in {
+    if any(
+        tok in n
+        for tok in (
+            "dc bus voltage",
+            "dc voltage",
+            "vdc",
+            "v dc",
+            "bus voltage",
+            "o p voltage",
+            "op voltage",
+            "output voltage",
+        )
+    ) or n in {
         "voltage",
         "v",
         "v_dc",
     }:
-        if "ac" in n and "dc" not in n:
+        if "ac" in n and "dc" not in n and "bus" not in n and "o p" not in n and "output" not in n:
             return None
         return "DC Voltage (V)"
-    if any(tok in n for tok in ("dc current", "idc", "i dc")) or n in {
+
+    # O/P Current, Output Current, DC Current, bare Current (A)
+    if any(
+        tok in n
+        for tok in (
+            "dc current",
+            "idc",
+            "i dc",
+            "o p current",
+            "op current",
+            "output current",
+            "scb current",
+            "smb current",
+        )
+    ) or n in {
         "current",
         "i",
         "i_dc",
         "amps",
-    }:
+        "current a",
+    } or (re.search(r"\bcurrent\b", n) and "ac" not in n and "power" not in n):
         return "DC Current (A)"
+
     if "dc power" in n or n in {"pdc", "p_dc", "p dc"}:
         return "DC Power (kW)"
     if any(
@@ -132,6 +203,69 @@ def leaf_to_metric(leaf: str) -> str | None:
     return None
 
 
+def _split_rest_devices(rest: str) -> tuple[int | None, int | None, str]:
+    """Pull SCB / string numbers out of the post-INV rest; return (scb, string, metric_leaf)."""
+    raw = (rest or "").strip(" _-.")
+    if not raw:
+        return None, None, ""
+    m = _REST_SCB_RE.match(raw)
+    if m:
+        scb = int(m.group("scb"))
+        strn = int(m.group("strn")) if m.group("strn") else None
+        return scb, strn, (m.group("metric") or "").strip(" _-.")
+    m2 = _REST_STRING_ONLY_RE.match(raw)
+    if m2:
+        return None, int(m2.group("strn")), (m2.group("metric") or "").strip(" _-.")
+    return None, None, raw
+
+
+def _build_equipment_id(
+    *,
+    icr_id: str | None,
+    inv: int,
+    scb: int | None = None,
+    string_num: int | None = None,
+) -> str:
+    if icr_id:
+        base = f"{icr_id}-INV-{inv:02d}"
+    else:
+        base = f"INV-{inv:02d}"
+    if scb is not None:
+        base = f"{base}-SCB-{scb:02d}"
+    if string_num is not None:
+        if scb is None:
+            base = f"{base}-SCB-00-STR-{string_num:02d}"
+        else:
+            base = f"{base}-STR-{string_num:02d}"
+    return base
+
+
+def infer_level_from_column_name(column_name: str) -> str | None:
+    """Token-based hierarchy level from a wide header (never returns multi)."""
+    n = column_name or ""
+    if not n.strip():
+        return None
+    # Specificity: string > scb > inverter > icr > plant/WMS
+    has_scb = bool(re.search(r"(?:SCB|SMB)[\s_\-]?\d+", n, re.I))
+    has_str = bool(re.search(r"(?:STR(?:ING)?|CH(?:ANNEL)?)[\s_\-]?\d+", n, re.I))
+    has_inv = bool(re.search(r"(?:INV(?:ERTER)?)[\s_\-]?\d+", n, re.I))
+    has_icr = bool(re.search(r"ICR[\s_\-]?\d+", n, re.I))
+    if has_scb and has_str:
+        return "string"
+    if has_scb:
+        return "scb"
+    if has_str and not has_inv:
+        return "string"
+    if has_inv:
+        return "inverter"
+    if has_icr:
+        return "icr"
+    nl = n.lower()
+    if any(tok in nl for tok in ("wms", "poa", "ghi", "irradiance", "plant")) and not has_inv:
+        return "plant"
+    return None
+
+
 def parse_wide_device_column(header: str) -> WideColumnParse | None:
     """Parse a wide device+metric header, or None if not that shape."""
     raw = (header or "").strip()
@@ -143,22 +277,42 @@ def parse_wide_device_column(header: str) -> WideColumnParse | None:
         m = _WIDE_INV_ONLY_RE.match(raw)
     if m is None:
         m = _COMPACT_INV_METRIC_RE.match(raw)
-        if not m:
+        if m is not None:
+            inv = int(m.group("inv"))
+            rest = m.group("rest") or ""
+            scb, strn, metric_leaf = _split_rest_devices(rest)
+            metric = leaf_to_metric(metric_leaf if metric_leaf or scb or strn else rest)
+            if not metric:
+                return None
+            return WideColumnParse(
+                equipment_id=_build_equipment_id(icr_id=None, inv=inv, scb=scb, string_num=strn),
+                metric=metric,
+                inverter_num=inv,
+                scb_num=scb,
+                string_num=strn,
+            )
+        # Standalone SCB/SMB (no INV)
+        m_scb = _WIDE_SCB_ONLY_RE.match(raw)
+        if not m_scb:
             return None
-        inv = int(m.group("inv"))
-        rest = m.group("rest") or ""
-        metric = leaf_to_metric(rest)
+        scb = int(m_scb.group("scb"))
+        plant = m_scb.groupdict().get("plant")
+        if plant and re.search(r"(?:icr|inv(?:erter)?)\s*\d+", plant, re.I):
+            return None
+        metric = leaf_to_metric(m_scb.group("rest") or "")
         if not metric:
             return None
         return WideColumnParse(
-            equipment_id=f"INV-{inv:02d}",
+            equipment_id=f"SCB-{scb:02d}",
             metric=metric,
-            inverter_num=inv,
+            plant_id=plant.strip() if plant else None,
+            scb_num=scb,
         )
 
     inv = int(m.group("inv"))
     rest = m.group("rest") or ""
-    metric = leaf_to_metric(rest)
+    scb, strn, metric_leaf = _split_rest_devices(rest)
+    metric = leaf_to_metric(metric_leaf if (metric_leaf or scb is not None or strn is not None) else rest)
     if not metric:
         return None
 
@@ -169,10 +323,7 @@ def parse_wide_device_column(header: str) -> WideColumnParse | None:
     if plant and re.search(r"inv(?:erter)?\s*\d+", plant, re.I):
         return None
     icr_id = f"ICR{int(icr_raw)}" if icr_raw else None
-    if icr_id:
-        equipment_id = f"{icr_id}-INV-{inv:02d}"
-    else:
-        equipment_id = f"INV-{inv:02d}"
+    equipment_id = _build_equipment_id(icr_id=icr_id, inv=inv, scb=scb, string_num=strn)
 
     return WideColumnParse(
         equipment_id=equipment_id,
@@ -180,6 +331,8 @@ def parse_wide_device_column(header: str) -> WideColumnParse | None:
         icr_id=icr_id,
         plant_id=plant.strip() if plant else None,
         inverter_num=inv,
+        scb_num=scb,
+        string_num=strn,
     )
 
 

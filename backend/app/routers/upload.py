@@ -294,7 +294,8 @@ async def _ingest_uploads(
             report_path.write_text(json.dumps(reshape.to_dict(), indent=2), encoding="utf-8")
             progress = (
                 f"Reshaped wide SCADA ({reshape.strategy}): {reshape.row_count:,} rows, "
-                f"{len(reshape.inverters_found)} inverter(s)"
+                f"{reshape.inverter_count or len(reshape.inverters_found)} inverter(s)"
+                + (f", {reshape.scb_count} SCB(s)" if reshape.scb_count else "")
                 + (f", {len(reshape.icr_ids)} ICR(s)" if reshape.icr_ids else "")
                 + "."
             )
@@ -473,7 +474,9 @@ def _convert_deferred_excels(
             )
             progress = (
                 f"Reshaped wide SCADA ({reshape.strategy}): {reshape.row_count:,} rows, "
-                f"{len(reshape.inverters_found)} inverter(s)."
+                f"{reshape.inverter_count or len(reshape.inverters_found)} inverter(s)"
+                + (f", {reshape.scb_count} SCB(s)" if reshape.scb_count else "")
+                + "."
             )
             if parse_report_out is None:
                 parse_report_out = ExcelParseReportOut(

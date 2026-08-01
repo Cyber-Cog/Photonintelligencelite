@@ -7,7 +7,7 @@ Equipment ID) so DC power at inverter is not confused with SCB/string DC power.
 from __future__ import annotations
 
 from analytics.common.equipment_ids import derive_level
-from analytics.common.wide_headers import parse_wide_device_column
+from analytics.common.wide_headers import infer_level_from_column_name, parse_wide_device_column
 
 # Canonical identity / weather fields → fixed hierarchy level
 _IDENTITY_LEVEL: dict[str, tuple[str, str]] = {
@@ -55,7 +55,11 @@ def infer_hierarchy_level(
     column_name: str = "",
     companion_fields: set[str] | None = None,
 ) -> tuple[str | None, str | None]:
-    """Return (hierarchy_level, hierarchy_level_label) for a mapped column."""
+    """Return (hierarchy_level, hierarchy_level_label) for a mapped column.
+
+    Prefer a specific level from header tokens (SCB/INV/…) — never default to
+    Multi-level when a concrete token is present.
+    """
     if not canonical_field or canonical_field == "ignore":
         return None, None
 
@@ -63,8 +67,11 @@ def infer_hierarchy_level(
         level, label = _IDENTITY_LEVEL[canonical_field]
         return level, label
 
-    # Wide plant/ICR/INV-prefixed headers carry level in the column name (pre-melt).
+    # Header tokens first (works even when full wide parse fails on exotic metrics).
     if column_name:
+        from_tokens = infer_level_from_column_name(column_name)
+        if from_tokens:
+            return from_tokens, level_label(from_tokens)
         parsed = parse_wide_device_column(column_name)
         if parsed is not None and parsed.equipment_id:
             derived = derive_level(parsed.equipment_id)

@@ -17,6 +17,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from analytics.common.equipment_ids import derive_level, extract_parent_inverter
 from analytics.common.wide_headers import (
     leaf_to_metric,
     looks_like_timestamp_header,
@@ -35,11 +36,16 @@ class WideReshapeReport:
     strategy: str = "none"
     confidence: float = 0.0
     inverters_found: list[str] = field(default_factory=list)
+    """Unique equipment ids after melt (may be inverter- or SCB-level)."""
     icr_ids: list[str] = field(default_factory=list)
+    scb_ids: list[str] = field(default_factory=list)
     columns_mapped: list[str] = field(default_factory=list)
     row_count: int = 0
     warnings: list[str] = field(default_factory=list)
     delimiter: str = ","
+    inverter_count: int = 0
+    scb_count: int = 0
+    string_count: int = 0
 
     def to_dict(self) -> dict:
         return {
@@ -48,11 +54,53 @@ class WideReshapeReport:
             "confidence": self.confidence,
             "inverters_found": self.inverters_found,
             "icr_ids": self.icr_ids,
+            "scb_ids": self.scb_ids,
             "columns_mapped": self.columns_mapped,
             "row_count": self.row_count,
             "warnings": self.warnings,
             "delimiter": self.delimiter,
+            "inverter_count": self.inverter_count,
+            "scb_count": self.scb_count,
+            "string_count": self.string_count,
         }
+
+
+def _parent_inverter_id(equipment_id: str) -> str | None:
+    """ICR1-INV-01-SCB-01 → ICR1-INV-01 (keeps ICR prefix; avoids collapsing INV-01 across ICRs)."""
+    eid = (equipment_id or "").strip()
+    if not eid:
+        return None
+    parts = re.split(r"-(?:SCB|SMB|MPPT)-", eid, maxsplit=1, flags=re.IGNORECASE)
+    if len(parts) == 2 and parts[0]:
+        return parts[0]
+    return extract_parent_inverter(eid)
+
+
+def _classify_melted_devices(devices: list[str]) -> tuple[list[str], list[str], list[str], list[str]]:
+    """Split melted equipment ids into (inverters, scbs, strings, parent_inverters)."""
+    invs: set[str] = set()
+    scbs: set[str] = set()
+    strings: set[str] = set()
+    parent_invs: set[str] = set()
+    for eid in devices:
+        level = derive_level(eid)
+        if level == "string":
+            strings.add(eid)
+            parent = _parent_inverter_id(eid)
+            if parent:
+                parent_invs.add(parent)
+        elif level == "scb":
+            scbs.add(eid)
+            parent = _parent_inverter_id(eid)
+            if parent:
+                parent_invs.add(parent)
+        elif level == "inverter":
+            invs.add(eid)
+        else:
+            invs.add(eid)
+    if not invs and parent_invs:
+        invs = parent_invs
+    return sorted(invs), sorted(scbs), sorted(strings), sorted(parent_invs)
 
 
 def sniff_delimiter(sample: str) -> str:
@@ -258,18 +306,30 @@ def reshape_wide_csv(csv_path: Path, *, max_rows: int | None = None) -> WideResh
         writer.writerows(out_rows)
     tmp.replace(csv_path)
 
+    invs, scbs, strings, _parents = _classify_melted_devices(devices)
     report.reshaped = True
     report.strategy = "wide_prefixed_device_melt"
     report.confidence = 0.92
-    report.inverters_found = devices
+    # Keep equipment ids for downstream; prefer parent inverters when melt was SCB-only.
+    report.inverters_found = invs or devices
     report.icr_ids = icr_ids
+    report.scb_ids = scbs
+    report.inverter_count = len(invs)
+    report.scb_count = len(scbs)
+    report.string_count = len(strings)
     report.columns_mapped = out_header
     report.row_count = len(out_rows) - 1
+    if scbs and not any(derive_level(d) == "inverter" for d in devices):
+        report.warnings.append(
+            f"Melted {len(scbs)} SCB-level column(s) (e.g. O/P Current) into Equipment ID + metrics."
+        )
     logger.info(
-        "Reshaped wide CSV %s → %d rows, %d inverters, icrs=%s",
+        "Reshaped wide CSV %s → %d rows, %d equipment, %d inv, %d scb, icrs=%s",
         csv_path.name,
         report.row_count,
         len(devices),
+        report.inverter_count,
+        report.scb_count,
         icr_ids,
     )
     return report

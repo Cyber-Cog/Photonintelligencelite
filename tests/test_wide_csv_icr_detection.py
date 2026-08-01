@@ -289,3 +289,128 @@ def test_wide_column_mapping_badge_is_inverter():
     assert by[col].canonical_field == "dc_current_a"
     assert by[col].hierarchy_level == "inverter"
     assert by[col].hierarchy_level_label == "Inverter"
+@pytest.mark.parametrize(
+    "header,equip,metric",
+    [
+        ("ESSP_20MW ICR1 INV1 SCB1 O/P Current (A)", "ICR1-INV-01-SCB-01", "DC Current (A)"),
+        ("ESSP_20MW ICR2 INV3 SCB12 O/P Current (A)", "ICR2-INV-03-SCB-12", "DC Current (A)"),
+        ("ICR1 INV1 SCB2 Output Current (A)", "ICR1-INV-01-SCB-02", "DC Current (A)"),
+        ("INV1 SCB3 Current (A)", "INV-01-SCB-03", "DC Current (A)"),
+        ("ESSP_20MW ICR1 INV1 SCB1 O/P Voltage (V)", "ICR1-INV-01-SCB-01", "DC Voltage (V)"),
+    ],
+)
+def test_parse_scb_op_current_wide_headers(header, equip, metric):
+    p = parse_wide_device_column(header)
+    assert p is not None, header
+    assert p.equipment_id == equip
+    assert p.metric == metric
+    assert derive_level(p.equipment_id) == "scb"
+
+
+def test_scb_op_current_badge_is_scb_not_multi():
+    col = "ESSP_20MW ICR1 INV1 SCB1 O/P Current (A)"
+    sug = suggest_mapping([col, "timestamp"], pack_match=False)
+    by = {s.column_name: s for s in sug}
+    assert by[col].canonical_field == "dc_current_a"
+    assert by[col].hierarchy_level == "scb"
+
+
+def test_reshape_scb_op_current_synthetic(tmp_path: Path):
+    """Historian SCB O/P Current wide sheet melts to tidy SCB rows."""
+    header = [
+        "timestamp",
+        "planttimestamp",
+        "ESSP_20MW ICR1 INV1 SCB1 O/P Current (A)",
+        "ESSP_20MW ICR1 INV1 SCB2 O/P Current (A)",
+        "ESSP_20MW ICR1 INV2 SCB1 O/P Current (A)",
+        "ESSP_20MW ICR2 INV1 SCB1 O/P Current (A)",
+    ]
+    rows = [
+        "30-06-2026 18:30,01-07-2026 00:00,1.1,2.2,3.3,4.4",
+        "30-06-2026 18:35,01-07-2026 00:05,1.2,2.3,3.4,4.5",
+    ]
+    path = tmp_path / "scb_op_wide.csv"
+    path.write_text(",".join(header) + "\n" + "\n".join(rows) + "\n", encoding="utf-8")
+    rep = maybe_reshape_wide_csv(path)
+    assert rep.reshaped
+    assert rep.scb_count == 4
+    assert rep.inverter_count == 3  # ICR1-INV-01, ICR1-INV-02, ICR2-INV-01
+    assert set(rep.icr_ids) == {"ICR1", "ICR2"}
+    cols = read_header(path)
+    assert cols == ["Timestamp", "Equipment ID", "ICR ID", "DC Current (A)"]
+    sug = suggest_mapping(cols)
+    fields = {s.canonical_field for s in sug if s.canonical_field}
+    assert {"timestamp", "device_id", "icr_id", "dc_current_a"} <= fields
+    assert "planttimestamp" not in {c.lower() for c in cols}
+    intel = build_upload_intelligence(
+        suggestions=sug,
+        plant_config=None,
+        csv_path=path,
+        reshape_report=rep.to_dict(),
+        column_names=cols,
+    )
+    arch = intel["architecture_summary"]
+    assert arch["detected"] is True
+    assert arch["scb_count"] == 4
+    assert arch["inverter_count"] == 3
+    scb = next(h for h in intel["hierarchy_overview"] if h["level_id"] == "scb")
+    assert next(s for s in scb["signals"] if s["id"] == "dc_current_a")["present"] is True
+    inv = next(h for h in intel["hierarchy_overview"] if h["level_id"] == "inverter")
+    assert next(s for s in inv["signals"] if s["id"] == "dc_current_a")["present"] is False
+    unmapped = [s for s in sug if not s.canonical_field]
+    assert unmapped == []
+
+
+@pytest.mark.skipif(
+    not Path(r"c:\Users\ayush.r\Downloads\trendreport_1784811991384_1752.csv").exists(),
+    reason="Live Downloads trendreport not present",
+)
+def test_reshape_live_trendreport_scb_op_current(tmp_path: Path):
+    from analytics.common.wide_headers import count_wide_device_columns
+
+    src = Path(r"c:\Users\ayush.r\Downloads\trendreport_1784811991384_1752.csv")
+    dst = tmp_path / "live_scb.csv"
+    dst.write_bytes(src.read_bytes())
+    pre_cols = read_header(dst)
+    wide_n, _ = count_wide_device_columns(pre_cols)
+    assert wide_n >= 100
+    rep = maybe_reshape_wide_csv(dst)
+    assert rep.reshaped
+    assert rep.scb_count == 142
+    assert rep.inverter_count == 12
+    assert set(rep.icr_ids) == {"ICR1", "ICR2", "ICR3"}
+    cols = read_header(dst)
+    assert len(cols) <= 6
+    assert "DC Current (A)" in cols
+    sug = suggest_mapping(cols)
+    fields = {s.canonical_field for s in sug if s.canonical_field}
+    assert "dc_current_a" in fields and "device_id" in fields
+    assert sum(1 for s in sug if not s.canonical_field) == 0
+    intel = build_upload_intelligence(
+        suggestions=sug,
+        plant_config=None,
+        csv_path=dst,
+        reshape_report=rep.to_dict(),
+        column_names=cols,
+    )
+    assert intel["architecture_summary"]["scb_count"] == 142
+    scb = next(h for h in intel["hierarchy_overview"] if h["level_id"] == "scb")
+    assert next(s for s in scb["signals"] if s["id"] == "dc_current_a")["present"] is True
+
+def test_reshape_scb_op_current_fixture(tmp_path: Path):
+    fix = Path(__file__).parent / "fixtures" / "trendreport_essp_scb_op_current_wide.csv"
+    assert fix.exists()
+    dst = tmp_path / "scb_fix.csv"
+    dst.write_bytes(fix.read_bytes())
+    rep = maybe_reshape_wide_csv(dst)
+    assert rep.reshaped
+    assert rep.scb_count >= 10
+    assert rep.inverter_count >= 1
+    cols = read_header(dst)
+    assert "DC Current (A)" in cols and "Equipment ID" in cols
+    sug = suggest_mapping(cols)
+    assert {s.canonical_field for s in sug if s.canonical_field} >= {
+        "timestamp",
+        "device_id",
+        "dc_current_a",
+    }

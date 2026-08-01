@@ -134,7 +134,21 @@ def run_upload_deterministic_checks(evidence: dict[str, Any]) -> list[dict[str, 
         )
 
     reshape = evidence.get("reshape_report") or {}
-    if (
+    if reshape.get("reshaped"):
+        wide_melted = int(reshape.get("scb_count") or 0) + int(reshape.get("inverter_count") or 0)
+        n_rows = int(reshape.get("row_count") or 0)
+        findings.append(
+            _finding(
+                "pass",
+                "wide_layout_reshaped",
+                f"Reshaped wide device×metric columns into tidy long form"
+                + (f" ({n_rows:,} rows" if n_rows else "")
+                + (f", {reshape.get('scb_count')} SCB(s)" if reshape.get("scb_count") else "")
+                + (f", {reshape.get('inverter_count')} inverter(s)" if reshape.get("inverter_count") else "")
+                + (")." if n_rows or wide_melted else "."),
+            )
+        )
+    elif (
         wide_n >= 4
         and not reshape.get("reshaped")
         and "device_id" not in fields
@@ -144,22 +158,26 @@ def run_upload_deterministic_checks(evidence: dict[str, Any]) -> list[dict[str, 
             _finding(
                 "fail",
                 "wide_layout_unmelted",
-                f"Detected {wide_n} wide device×metric columns but file was not reshaped to tidy long form.",
+                f"Detected {wide_n} wide device×metric columns (ICR/INV/SCB tags) that require "
+                f"reshaping before hierarchy mapping — file was not melted to tidy long form.",
             )
         )
 
     obvious_unmapped = 0
-    for c in evidence.get("unmapped_sample") or []:
-        if parse_wide_device_column(str(c)) is not None:
-            obvious_unmapped += 1
-    if obvious_unmapped >= 3 and "ac_power_kw" not in fields:
-        findings.append(
-            _finding(
-                "warn",
-                "obvious_wide_headers_unmapped",
-                f"{obvious_unmapped}+ headers look like inverter power/current but were not mapped.",
+    # After a successful melt, remaining columns are tidy — do not warn on wide leftovers.
+    if not reshape.get("reshaped"):
+        for c in evidence.get("unmapped_sample") or []:
+            if parse_wide_device_column(str(c)) is not None:
+                obvious_unmapped += 1
+        if obvious_unmapped >= 3 and "ac_power_kw" not in fields and "dc_current_a" not in fields:
+            findings.append(
+                _finding(
+                    "warn",
+                    "obvious_wide_headers_unmapped",
+                    f"{obvious_unmapped}+ headers look like device power/current but were not mapped "
+                    f"(reshape may be required).",
+                )
             )
-        )
 
     fname = (evidence.get("original_filename") or "").lower()
     if any(tok in fname for tok in ("inverter", "ac/dc", "acdc", "inv")):
