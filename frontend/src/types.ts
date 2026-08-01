@@ -3,6 +3,8 @@ export interface ColumnMappingSuggestion {
   canonical_field: string | null;
   confidence: number;
   band: "auto" | "confirm" | "manual";
+  hierarchy_level?: string | null;
+  hierarchy_level_label?: string | null;
 }
 
 export interface ExcelParseReport {

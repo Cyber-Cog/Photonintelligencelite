@@ -128,6 +128,10 @@ class ColumnMappingSuggestion(BaseModel):
     """e.g. string_current_channel when detected from multi-row stitch."""
     channel_index: Optional[int] = None
     group_label: Optional[str] = None
+    hierarchy_level: Optional[str] = None
+    """plant | icr | inverter | scb | string | equipment | multi — UI level badge."""
+    hierarchy_level_label: Optional[str] = None
+    """Human label e.g. Inverter, SCB / SMB, Equipment (row)."""
 
 
 class MappingSubmission(BaseModel):

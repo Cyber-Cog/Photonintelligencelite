@@ -55,6 +55,7 @@ from backend.app.services.upload_intelligence import build_upload_intelligence
 from backend.app.services.upload_inventory import inventory_from_job, signal_checklist
 from backend.app.services.mapping_service import (
     detect_pack_match,
+    mapping_payload,
     read_header,
     requires_manual_mapping,
     save_template,
@@ -228,12 +229,7 @@ def submit_mapping(
     columns = list(payload.column_to_canonical.keys())
     save_template(db, columns, payload.column_to_canonical)
 
-    job.mapping_json = {
-        "column_to_canonical": {c: f for c, f in payload.column_to_canonical.items() if f != "ignore"},
-        "confidence_by_column": {},
-        "timestamp_column": ts_col,
-        "detected_oem_signature": None,
-    }
+    job.mapping_json = mapping_payload(payload.column_to_canonical, timestamp_col=ts_col)
     job.state = JobState.MAPPING.value
     job.error_summary = None
     if not revised:

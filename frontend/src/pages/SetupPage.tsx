@@ -19,7 +19,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { SubnavTabs } from "@/components/ui/SubnavTabs";
 import { useJob } from "@/context/JobContext";
 import { useWorkflowTransition } from "@/context/WorkflowTransitionContext";
-import { CANONICAL_FIELD_OPTIONS, MODULE_TECHNOLOGY_OPTIONS, PLANT_TYPE_OPTIONS } from "@/lib/canonicalFields";
+import { CANONICAL_FIELD_OPTIONS, HIERARCHY_LEVEL_BADGE, inferMappingHierarchyLevel, MODULE_TECHNOLOGY_OPTIONS, PLANT_TYPE_OPTIONS } from "@/lib/canonicalFields";
 import { checkSetupCapacityConsistency } from "@/lib/capacityConsistency";
 import {
   buildRatingsAndArchitecture,
@@ -384,6 +384,14 @@ export function SetupPage() {
     const reviewKeys = new Set(needsReview.map((s) => s.column_name));
     return [...needsReview, ...autoMapped.filter((s) => !reviewKeys.has(s.column_name))];
   }, [needsReview, autoMapped]);
+
+  const companionCanonicalFields = useMemo(() => {
+    const fields = new Set<string>();
+    for (const v of Object.values(mapping)) {
+      if (v && v !== "ignore") fields.add(v);
+    }
+    return fields;
+  }, [mapping]);
 
   const choseTemplatePath = jobId ? readUploadPath(jobId) === "template" : false;
 
@@ -812,6 +820,12 @@ export function SetupPage() {
                     const isTs = mappedAs === "timestamp" || s.canonical_field === "timestamp";
                     const isAuto =
                       s.band === "auto" && !isGarbageHeader(s.column_name) && s.canonical_field !== "timestamp";
+                    const levelId =
+                      inferMappingHierarchyLevel(mappedAs, companionCanonicalFields) ||
+                      s.hierarchy_level ||
+                      null;
+                    const levelBadge =
+                      (levelId && HIERARCHY_LEVEL_BADGE[levelId]) || s.hierarchy_level_label || null;
                     const rowId = isTs
                       ? setupFieldDomId("timestamp")
                       : mappedAs && mappedAs !== "ignore"
@@ -846,6 +860,7 @@ export function SetupPage() {
                                     : "Needs mapping"}
                               </Badge>
                             )}
+                            {levelBadge && <Badge tone="neutral">{levelBadge}</Badge>}
                             {isGarbageHeader(s.column_name) && <Badge tone="danger">Broken header</Badge>}
                           </div>
                         </div>

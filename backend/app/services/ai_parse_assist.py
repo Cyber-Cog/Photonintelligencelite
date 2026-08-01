@@ -10,6 +10,7 @@ import logging
 from typing import Any, Iterable
 
 from analytics.common.aliasing import HIGH_CONFIDENCE, MEDIUM_CONFIDENCE, confidence_band
+from analytics.common.mapping_levels import annotate_mapping_levels
 from backend.app.config import Settings
 from backend.app.schemas import ColumnMappingSuggestion
 from backend.app.services.gemini_client import call_gemini_json, gemini_configured
@@ -261,6 +262,7 @@ def merge_ai_mappings_into_suggestions(
             )
         )
         applied += 1
+    annotate_mapping_levels(out)
     return out, applied
 
 

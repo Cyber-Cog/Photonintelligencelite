@@ -15,10 +15,11 @@ fixed canonical schema. Algorithms never see vendor column names.
 |---|---|---|
 | `timestamp_utc` | datetime64[ns, UTC] | Converted from the plant's declared timezone |
 | `device_id` | string | Generic equipment identifier (whatever level the row is at) |
-| `device_type` | enum | `inverter` \| `scb` \| `string` \| `plant` \| `wms` |
+| `device_type` | enum | `inverter` \| `scb` \| `string` \| `plant` \| `wms` \| `icr` |
 | `inverter_id` | string \| null | Resolved parent inverter, when derivable |
 | `scb_id` | string \| null | Resolved parent SCB/MPPT, when derivable |
 | `string_id` | string \| null | Resolved string identifier, when present |
+| `icr_id` | string \| null | Inverter control room / PCS room id when present or derivable from equipment ids |
 | `ac_power_kw` | float \| null | Measured at inverter and/or plant when present |
 | `dc_power_kw` | float \| null | Valid at inverter, SCB/SMB, string, and plant — not uniquely partitioned |
 | `dc_current_a` | float \| null | Valid at inverter, SCB/SMB, and string |

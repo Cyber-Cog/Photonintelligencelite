@@ -102,8 +102,9 @@ def _pattern_canonical(normalized: str) -> tuple[str, str] | None:
     if _PATTERN_DC_VOLTAGE.match(normalized):
         return "dc_voltage_v", "pattern:smb/scb/string voltage"
     if _PATTERN_ICR_ID.match(normalized) and not normalized.endswith(("current", "voltage", "power")):
-        if re.search(r"\d", normalized):
-            return "icr_id", "pattern:icr id"
+        # Exact aliases cover "ICR ID"; numbered labels (ICR1 / ICR 02) land here.
+        # Never require a digit when the token is clearly an ICR identity header.
+        return "icr_id", "pattern:icr id"
     if _PATTERN_SCB_ID.match(normalized) and not normalized.endswith(("current", "voltage", "power")):
         # Bare "smb" / "scb" are exact aliases; numbered ids like "smb 01" land here.
         if re.search(r"\d", normalized):
@@ -173,6 +174,13 @@ def score_column(column_name: str) -> ColumnCandidate:
 
     if best_field is None or best_ratio < 0.55:
         return ColumnCandidate(column_name, None, 0.0, None)
+
+    # Guard: never fuzzy-map ICR / equipment-id style headers onto timestamp (alias collisions).
+    if best_field == "timestamp":
+        if "icr" in normalized or normalized.endswith(" id") or normalized in {"id", "equipment id"}:
+            return ColumnCandidate(column_name, None, 0.0, None)
+        if not any(tok in normalized for tok in ("time", "date", "stamp")):
+            return ColumnCandidate(column_name, None, 0.0, None)
 
     # Map [0.55, 1.0) similarity -> [0.55, 0.98) confidence, leaving 1.0 reserved for exact matches.
     confidence = 0.55 + (best_ratio - 0.55) * (0.43 / 0.45)

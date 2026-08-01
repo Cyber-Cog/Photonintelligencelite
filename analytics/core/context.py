@@ -17,6 +17,7 @@ CANONICAL_COLUMNS: list[str] = [
     "inverter_id",
     "scb_id",
     "string_id",
+    "icr_id",
     "ac_power_kw",
     "dc_power_kw",
     "dc_current_a",

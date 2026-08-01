@@ -79,6 +79,23 @@ def main() -> int:
             _fail(f"alias score {col!r} -> {hit.canonical_field!r} (want {field!r})")
             errors += 1
 
+    # Frontend mapping dropdown must include every aliases.yaml key (esp. icr_id).
+    from analytics.common.config_loader import load_aliases
+
+    fe_fields = (ROOT / "frontend" / "src" / "lib" / "canonicalFields.ts").read_text(encoding="utf-8")
+    for field in load_aliases().keys():
+        needle = f'value: "{field}"'
+        if needle not in fe_fields:
+            _fail(f"frontend CANONICAL_FIELD_OPTIONS missing {field!r} ({needle})")
+            errors += 1
+
+    # Canonical parquet schema must include icr_id so mapped ICR columns are not dropped.
+    from analytics.core.context import CANONICAL_COLUMNS
+
+    if "icr_id" not in CANONICAL_COLUMNS:
+        _fail("CANONICAL_COLUMNS missing icr_id")
+        errors += 1
+
     # Report builder public names used by job_service must exist.
     from analytics.reports.excel_builder import build_excel_report
     from analytics.reports.pdf_builder import build_pdf_report

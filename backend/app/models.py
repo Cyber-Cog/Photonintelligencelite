@@ -107,6 +107,7 @@ class Job(Base):
 
     plant_config_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     mapping_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    """column_to_canonical (+ optional column_hierarchy_levels). No time-series rows."""
     validation_summary_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     results_summary_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     """Small summary only (titles/severities/loss totals) — full result objects live on disk

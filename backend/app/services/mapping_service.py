@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from analytics.common.aliasing import HIGH_CONFIDENCE, confidence_band, score_columns
 from analytics.common.complete_analysis_pack import looks_like_complete_pack, pack_header_overlap
+from analytics.common.mapping_levels import annotate_mapping_levels, column_hierarchy_from_mapping
 from analytics.core.context import ResolvedMapping
 from backend.app.models import MappingTemplate
 from backend.app.schemas import ColumnMappingSuggestion
@@ -64,6 +65,7 @@ def suggest_mapping(columns: list[str], *, pack_match: bool | None = None) -> li
                 band=band,
             )
         )
+    annotate_mapping_levels(out)
     return out
 
 
@@ -141,4 +143,17 @@ def overlay_prior_mapping(
                 s.canonical_field = None
                 s.confidence = 0.0
                 s.band = "manual"
+    annotate_mapping_levels(suggestions)
     return suggestions
+
+
+def mapping_payload(column_to_canonical: dict[str, str], *, timestamp_col: str | None = None) -> dict:
+    """Build jobs.mapping_json body including optional hierarchy provenance (non-breaking)."""
+    cleaned = {c: f for c, f in column_to_canonical.items() if f and f != "ignore"}
+    return {
+        "column_to_canonical": cleaned,
+        "column_hierarchy_levels": column_hierarchy_from_mapping(cleaned),
+        "confidence_by_column": {},
+        "timestamp_column": timestamp_col or timestamp_column(cleaned),
+        "detected_oem_signature": None,
+    }

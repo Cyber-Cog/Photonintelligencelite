@@ -9,6 +9,7 @@ import pandas as pd
 
 from analytics.common.equipment_ids import (
     derive_level,
+    extract_parent_icr,
     extract_parent_inverter,
     extract_parent_scb,
     resolve_inverter_from_architecture,
@@ -145,5 +146,18 @@ def standardize(
     is_inverter_row = df["device_type"] == "inverter"
     if is_inverter_row.any() and df.loc[is_inverter_row, "inverter_id"].isna().all():
         df.loc[is_inverter_row, "inverter_id"] = df.loc[is_inverter_row, "device_id"]
+
+    # Backfill ICR from explicit column or from ICR-prefixed equipment ids (ICR1-INV-01).
+    if "icr_id" not in df.columns:
+        df["icr_id"] = pd.NA
+    df["icr_id"] = df["icr_id"].astype("string")
+    needs_icr = df["icr_id"].isna()
+    if needs_icr.any():
+        for src in ("device_id", "inverter_id", "scb_id", "string_id"):
+            still = needs_icr & df["icr_id"].isna()
+            if not still.any():
+                break
+            if src in df.columns:
+                df.loc[still, "icr_id"] = df.loc[still, src].map(extract_parent_icr)
 
     return df[CANONICAL_COLUMNS].reset_index(drop=True)
