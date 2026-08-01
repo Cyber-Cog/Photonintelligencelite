@@ -31,7 +31,7 @@ Set `GEMINI_API_KEY` (and optionally `GEMINI_MODEL`) on **pic-lite-api**. Do not
 python -c "from backend.app.config import Settings; from backend.app.services.gemini_client import call_gemini_generate; s=Settings(); t,m,e=call_gemini_generate(s, system='Reply JSON', user='{\"ping\":true}', json_mode=True); print(m, e or 'ok', (t or '')[:80])"
 ```
 
-Expect HTTP 200 / no error. Integrity / parse-assist responses should show `ai_layer=ok`, `provider=gemini`, and `source=rules+ai`.
+Expect HTTP 200 / no error. Integrity / parse-assist responses should show `ai_layer=ok`, `provider=gemini`, and `source=rules+gemini` (or `rules+ai` / `rules+zenmux` depending on provider).
 
 ## Security
 

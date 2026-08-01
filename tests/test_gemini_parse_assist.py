@@ -234,4 +234,4 @@ def test_upload_integrity_gemini_source(monkeypatch):
     )
     assert out["ai_layer"] == "ok"
     assert out["provider"] == "gemini"
-    assert out["source"] == "rules+ai"
+    assert out["source"] == "rules+gemini"

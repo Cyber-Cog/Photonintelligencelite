@@ -400,7 +400,7 @@ def run_upload_integrity_check(
             return {
                 **base,
                 "status": overall,
-                "source": "rules+ai",
+                "source": "rules+gemini",
                 "ai_layer": "ok",
                 "rules_finding_count": len(rule_findings),
                 "summary": {
@@ -451,7 +451,7 @@ def run_upload_integrity_check(
             return {
                 **base,
                 "status": overall,
-                "source": "rules+ai",
+                "source": "rules+gemini",
                 "ai_layer": "ok",
                 "rules_finding_count": len(rule_findings),
                 "summary": "Rules + Gemini parse-assist applied; integrity LLM failed.",
@@ -484,10 +484,11 @@ def run_upload_integrity_check(
     overall = _overall_from_findings(merged)
     if ai_overall == "fail" or (ai_overall == "warn" and overall == "pass"):
         overall = ai_overall
+    source = f"rules+{provider}" if provider in {"gemini", "zenmux"} else "rules+ai"
     return {
         **base,
         "status": overall,
-        "source": "rules+ai",
+        "source": source,
         "ai_layer": "ok",
         "rules_finding_count": len(rule_findings),
         "summary": {
