@@ -556,6 +556,7 @@ def _finish_excel_parse(
             csv_path=csv_path,
             parse_report_out=parse_report_out,
             prior_mapping=prior_mapping,
+            skip_ai=True,
         )
 
         job.state = JobState.MAPPING.value
@@ -601,6 +602,7 @@ def _build_upload_response(
     csv_path: Path,
     parse_report_out: ExcelParseReportOut | None,
     prior_mapping: dict[str, str] | None = None,
+    skip_ai: bool = False,
 ) -> UploadResponse:
     columns = read_header(csv_path)
     pack_match, pack_ratio = detect_pack_match(columns)
@@ -618,13 +620,17 @@ def _build_upload_response(
         suggestions = overlay_prior_mapping(suggestions, prior_mapping)
 
     settings = get_settings()
+    parse_assist_meta: dict = {"proposals": []}
     # After heuristics / templates: Gemini may propose mappings for thin/ambiguous headers.
-    suggestions, parse_assist_meta = run_parse_assist(
-        settings,
-        suggestions=suggestions,
-        columns=columns,
-        original_filename=job.original_filename,
-    )
+    # Skip AI on the Excel background-finish path so wide INV reports are not stuck in
+    # "parsing" for minutes waiting on Gemini (client then shows "taking too long").
+    if not skip_ai:
+        suggestions, parse_assist_meta = run_parse_assist(
+            settings,
+            suggestions=suggestions,
+            columns=columns,
+            original_filename=job.original_filename,
+        )
 
     needs_manual = requires_manual_mapping(suggestions)
     # Non-pack files always surface Setup mapping (map-later), even if every column scored.
@@ -696,7 +702,7 @@ def _build_upload_response(
         original_filename=job.original_filename,
         parse_report=parse_report_out.model_dump() if parse_report_out else None,
         reshape_report=reshape_report,
-        use_ai=True,
+        use_ai=not skip_ai,
         extra_mapping_hints=assist_hints,
         parse_assist_meta={
             k: parse_assist_meta.get(k)

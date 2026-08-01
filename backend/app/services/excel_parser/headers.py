@@ -106,6 +106,22 @@ def map_metric(category: str, leaf: str) -> str | None:
         if "power" in leaf_n:
             return "AC Power (kW)"
 
+    # Leaf carries AC/DC explicitly (NTPC ICR/INV reports: AC_ACTIVE_POWER_kW, DC_POWER).
+    if "power" in leaf_n:
+        if (
+            leaf_n.startswith("ac")
+            or "ac_active" in leaf_n
+            or "ac active" in leaf_n
+            or ("active_power" in leaf_n and "dc" not in leaf_n)
+        ):
+            return "AC Power (kW)"
+        if (
+            leaf_n.startswith("dc")
+            or leaf_n in {"dc_power", "dcpower", "pdc", "p_dc"}
+            or re.match(r"dc[_\s\-]?power", leaf_n)
+        ):
+            return "DC Power (kW)"
+
     if "power" in leaf_n and ("kw" in leaf_n or leaf_n == "power"):
         # SMB/SCB parameter blocks are DC-side; only treat as AC when category says so.
         if any(tok in cat for tok in ("smb", "scb", "combiner", "string", "dc")):

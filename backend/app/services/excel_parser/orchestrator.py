@@ -183,14 +183,48 @@ def _run_strategies(matrix: list[list[str]], *, sheet_name: str) -> StrategyResu
                 ]
         if best is None or result.report.confidence > best.report.confidence:
             best = result
+        # Prefer true multi-row inverter reports over flat single-header guesses.
+        if (
+            result.report.strategy == "wide_multi_header"
+            and result.report.confidence >= 0.75
+            and "AC Power (kW)" in (result.report.columns_mapped or [])
+        ):
+            return result
         # Early accept high-confidence structured layouts (true inverter reports / channel melts)
         if result.report.confidence >= 0.85 and result.report.strategy in {
             "wide_multi_header",
             "wide_single_header",
             "wide_channel_melt",
         }:
+            # Avoid early-accepting single-header garbage (metric leaf mistaken as headers).
+            if result.report.strategy == "wide_single_header" and _looks_like_metric_leaf_header(
+                padded, result
+            ):
+                result.report.confidence = min(result.report.confidence, 0.7)
+                if best is None or result.report.confidence > best.report.confidence:
+                    best = result
+                continue
             return result
     return best
+
+
+def _looks_like_metric_leaf_header(rows: list[list[str]], result: StrategyResult) -> bool:
+    """True when the chosen 'header' is mostly AC_ACTIVE_POWER / DC_POWER leaves."""
+    hdr_rows = result.report.header_rows or []
+    if not hdr_rows or not rows:
+        return False
+    idx = hdr_rows[0]
+    if idx < 0 or idx >= len(rows):
+        return False
+    row = rows[idx]
+    leaves = 0
+    for c in row:
+        n = (c or "").strip().lower().replace(" ", "_")
+        if not n:
+            continue
+        if "ac_active_power" in n or n in {"dc_power", "dcpower"} or n.endswith("_power_kw"):
+            leaves += 1
+    return leaves >= 8
 
 
 def _looks_like_per_device_metric_sheet(rows: list[list[str]]) -> bool:

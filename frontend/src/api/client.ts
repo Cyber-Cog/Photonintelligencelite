@@ -291,7 +291,7 @@ export async function waitForUploadReady(
     if (Date.now() - started >= maxMs) {
       throw new ApiError(
         0,
-        "Excel parsing is taking too long. Keep this tab open and retry in a minute, or upload a CSV export.",
+        "Excel is still processing on the server. Wait a bit and open this job from Home, or re-upload. Large inverter reports usually finish within a minute after deploy.",
       );
     }
     await sleep(delay);

@@ -6,6 +6,8 @@ Handles both:
 """
 from __future__ import annotations
 
+import re
+
 from analytics.preprocessing.timestamps import normalise_timestamp, parse_timestamp
 from backend.app.services.excel_parser.headers import (
     TIDY_FIELDS,
@@ -40,15 +42,18 @@ def try_wide_multi_header(matrix: list[list[str]], *, sheet_name: str) -> Strate
     if leaf_idx - device_idx >= 2:
         category_idx = leaf_idx - 1
 
+    icr_idx = _find_icr_row(rows, device_idx)
+
     device_row = ffill_row(rows[device_idx])
     category_row = ffill_row(rows[category_idx]) if category_idx is not None else [""] * width
+    icr_row = ffill_row(rows[icr_idx]) if icr_idx is not None else [""] * width
     leaf_row = [c.strip() for c in rows[leaf_idx]]
 
     ts_col = _find_timestamp_column(rows, device_idx, leaf_idx, leaf_row, device_row)
     if ts_col is None:
         return None
 
-    col_map: dict[int, tuple[str, str]] = {}
+    col_map: dict[int, tuple[str, str, str | None]] = {}
     for j in range(width):
         if j == ts_col:
             continue
@@ -57,14 +62,22 @@ def try_wide_multi_header(matrix: list[list[str]], *, sheet_name: str) -> Strate
             continue
         metric = map_metric(category_row[j], leaf_row[j])
         if metric is None:
+            # Leaf-only AC/DC tokens when category row is the INV row (NTPC layout).
+            metric = map_metric("", leaf_row[j])
+        if metric is None:
             continue
-        col_map[j] = (device_id, metric)
+        icr_raw = icr_row[j].strip() if j < len(icr_row) else ""
+        icr_id = _normalize_icr_id(icr_raw)
+        if icr_id:
+            device_id = f"{icr_id}-{device_id}"
+        col_map[j] = (device_id, metric, icr_id)
 
     if not col_map:
         return None
 
-    devices = sorted({d for d, _ in col_map.values()})
-    used_metrics = {m for _, m in col_map.values()}
+    devices = sorted({d for d, _, _ in col_map.values()})
+    icr_ids = sorted({icr for _, _, icr in col_map.values() if icr})
+    used_metrics = {m for _, m, _ in col_map.values()}
     can_derive_dc = (
         "DC Power (kW)" not in used_metrics
         and "DC Voltage (V)" in used_metrics
@@ -74,10 +87,17 @@ def try_wide_multi_header(matrix: list[list[str]], *, sheet_name: str) -> Strate
         used_metrics.add("DC Power (kW)")
 
     header = [f for f in TIDY_FIELDS if f in {"Timestamp", "Equipment ID"} or f in used_metrics]
+    if icr_ids and "ICR ID" not in header:
+        if "Equipment ID" in header:
+            ei = header.index("Equipment ID")
+            header.insert(ei + 1, "ICR ID")
+        else:
+            header.insert(1, "ICR ID")
     out: list[list[str]] = [header]
     warnings: list[str] = []
     parse_ok = 0
     parse_fail = 0
+    icr_for = {d: next((icr for dd, _, icr in col_map.values() if dd == d and icr), None) for d in devices}
 
     for row in rows[leaf_idx + 1 :]:
         raw_ts = row[ts_col].strip() if ts_col < len(row) else ""
@@ -85,7 +105,6 @@ def try_wide_multi_header(matrix: list[list[str]], *, sheet_name: str) -> Strate
             continue
         norm = normalise_timestamp(raw_ts)
         if norm is None:
-            # Keep raw if unparseable — validation will flag; don't invent
             parse_fail += 1
             if parse_fail <= 3:
                 warnings.append(f"Unparseable timestamp sample: {raw_ts[:60]}")
@@ -95,7 +114,7 @@ def try_wide_multi_header(matrix: list[list[str]], *, sheet_name: str) -> Strate
             ts = norm
 
         per_device: dict[str, dict[str, str]] = {d: {} for d in devices}
-        for j, (device_id, metric) in col_map.items():
+        for j, (device_id, metric, _icr) in col_map.items():
             val = row[j].strip() if j < len(row) else ""
             if val:
                 per_device[device_id][metric] = val
@@ -113,7 +132,13 @@ def try_wide_multi_header(matrix: list[list[str]], *, sheet_name: str) -> Strate
                     pass
             out.append(
                 [
-                    ts if f == "Timestamp" else device_id if f == "Equipment ID" else metrics.get(f, "")
+                    ts
+                    if f == "Timestamp"
+                    else device_id
+                    if f == "Equipment ID"
+                    else (icr_for.get(device_id) or "")
+                    if f == "ICR ID"
+                    else metrics.get(f, "")
                     for f in header
                 ]
             )
@@ -133,6 +158,8 @@ def try_wide_multi_header(matrix: list[list[str]], *, sheet_name: str) -> Strate
         warnings.append("DC Power (kW) derived from DC Voltage × DC Current / 1000.")
 
     header_rows = [device_idx]
+    if icr_idx is not None:
+        header_rows.insert(0, icr_idx)
     if category_idx is not None:
         header_rows.append(category_idx)
     header_rows.append(leaf_idx)
@@ -178,6 +205,29 @@ def _find_device_row(rows: list[list[str]]) -> int | None:
         n = sum(1 for h in hits if h)
         if n > best_hits:
             best_hits = n
+            best_idx = i
+    return best_idx if best_hits >= 1 else None
+
+
+_ICR_RE = re.compile(r"^\s*ICR\s*[-_]?\s*(\d+)\s*$", re.IGNORECASE)
+
+
+def _normalize_icr_id(label: str) -> str | None:
+    m = _ICR_RE.match((label or "").strip())
+    if not m:
+        return None
+    return f"ICR{int(m.group(1))}"
+
+
+def _find_icr_row(rows: list[list[str]], device_idx: int) -> int | None:
+    """Row above INV labels carrying ICR01 / ICR02 banners (NTPC-style reports)."""
+    start = max(0, device_idx - 3)
+    best_idx: int | None = None
+    best_hits = 0
+    for i in range(start, device_idx):
+        hits = sum(1 for c in rows[i] if c.strip() and _normalize_icr_id(c))
+        if hits > best_hits:
+            best_hits = hits
             best_idx = i
     return best_idx if best_hits >= 1 else None
 
