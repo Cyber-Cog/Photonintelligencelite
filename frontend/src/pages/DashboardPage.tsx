@@ -9,8 +9,10 @@ import { JobStatusChip, JobWorkspace } from "@/components/JobWorkspace";
 import { KpiStrip, type KpiStripItem } from "@/components/KpiStrip";
 import { LossWaterfallBridge } from "@/components/LossWaterfallBridge";
 import { OverviewDashboard } from "@/components/OverviewDashboard";
+import { OwnerActionCenter } from "@/components/OwnerActionCenter";
 import { ResultCard } from "@/components/ResultCard";
 import { ResultsSidebar } from "@/components/ResultsSidebar";
+import { RunIntegrityPanel } from "@/components/RunIntegrityPanel";
 import { SummaryInsightPanels } from "@/components/SummaryInsightPanels";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { InfoBanner } from "@/components/ui/InfoBanner";
@@ -35,6 +37,7 @@ import {
   RESULTS_SECTIONS,
   RESULTS_TOOL_LINKS,
   resolveResultsSectionId,
+  resultsSectionTitle,
   type ResultsSectionId,
 } from "@/lib/resultsNav";
 import type { ResultObject, ResultsResponse, AiIntegrityCheck } from "@/types";
@@ -399,15 +402,25 @@ export function DashboardPage() {
   if (!data) return null;
 
   const statusTone = blockedCount > 0 && okCount > 0 ? "warn" : okCount > 0 ? "ok" : "warn";
+  const integrityFlagCount =
+    integrity?.findings?.filter((f) => f.severity !== "pass" && f.severity !== "info").length ?? 0;
+  const sectionTitle =
+    activeSection === "overview" ? "Plant overview" : resultsSectionTitle(activeSection);
+
+  const handleOwnerSection = (id: "faults" | "bridge" | "losses" | "diagnostics") => {
+    const resolved = resolveResultsSectionId(id) ?? (id as ResultsSectionId);
+    selectSection(resolved);
+  };
 
   return (
     <JobWorkspace
-      title="Plant overview"
+      title={sectionTitle}
       titleTour="results-welcome"
       subtitle={`${okCount} modules ready · ${blockedCount} need data · ${data.kpis.fault_count} faults`}
       documentScroll
       hideJobNav
-      className="results-shell results-shell-v2"
+      railLayout
+      className="results-shell results-shell-rail"
       status={
         <JobStatusChip tone={statusTone}>
           {thinResults ? "Limited coverage" : blockedCount > 0 ? "Partial mapping" : "Analysis ready"}
@@ -424,44 +437,21 @@ export function DashboardPage() {
         </div>
       }
       chromeExtra={
-        <>
-          <div className="tool-sticky-bar lg:hidden">
-            <SubnavTabs
-              items={mobileTabs}
-              activeId={activeSection}
-              onSelect={(id) => {
-                if (id.startsWith("tool:")) {
-                  navigate(`/jobs/${jobId}/${id.slice(5)}`);
-                  return;
-                }
-                selectSection(id as ResultsSectionId);
-              }}
-              ariaLabel="Results sections"
-              inset
-            />
-          </div>
-          <KpiStrip items={kpiItems} flush />
-          {thinResults ? (
-            <div className="border-t border-[color:var(--pic-border-subtle)] px-3 py-2 sm:px-4">
-              <InfoBanner
-                tone="warning"
-                title="Limited module coverage"
-                className="!rounded-pic-lg !px-3 !py-2 !shadow-none"
-                actions={
-                  <Link
-                    to={`/jobs/${jobId}/setup#mapping&field=ac_power_kw`}
-                    className="text-xs font-semibold text-amber-900 underline dark:text-amber-200"
-                  >
-                    Open Setup: AC power mapping
-                  </Link>
-                }
-              >
-                With AC and weather signals only, plant KPIs and clipping-by-power can run once AC power and POA are
-                mapped. String-level faults and inverter efficiency require additional DC and architecture inputs.
-              </InfoBanner>
-            </div>
-          ) : null}
-        </>
+        <div className="tool-sticky-bar lg:hidden">
+          <SubnavTabs
+            items={mobileTabs}
+            activeId={activeSection}
+            onSelect={(id) => {
+              if (id.startsWith("tool:")) {
+                navigate(`/jobs/${jobId}/${id.slice(5)}`);
+                return;
+              }
+              selectSection(id as ResultsSectionId);
+            }}
+            ariaLabel="Results sections"
+            inset
+          />
+        </div>
       }
       aside={
         <ResultsSidebar
@@ -475,6 +465,7 @@ export function DashboardPage() {
           onSelectModule={selectModule}
           devicesOpen={devicesOpen}
           onToggleDevices={() => setDevicesOpen((o) => !o)}
+          integrityFlagCount={integrityFlagCount}
         />
       }
       mainRef={mainPaneRef}
@@ -484,114 +475,170 @@ export function DashboardPage() {
         </button>
       }
     >
-      {activeSection === "overview" && (
-        <OverviewDashboard
-          jobId={jobId}
-          kpis={data.kpis}
-          results={data.results}
-          ownerActions={ownerActions}
-          integrity={integrity}
-          canRerunIntegrity={isSuperadmin}
-          onIntegrityUpdated={setIntegrity}
-          onInvestigate={investigateFinding}
-          onModule={jumpToModule}
-          onSection={selectSection}
-        />
-      )}
-
-      {activeSection === "performance" && (
-        <div data-results-pane="performance" className="job-pane-tight flex flex-col gap-4 pb-6">
-          <div className="overview-panel !shadow-none">
-            <p className="overview-eyebrow">Performance</p>
-            <h3 className="overview-panel-title mt-1">Inverter &amp; string performance</h3>
-            <p className="overview-panel-sub">Unit-level PR and string health for this run.</p>
+      <div className="results-main-stack">
+        <KpiStrip items={kpiItems} flush />
+        {thinResults ? (
+          <div className="border-b border-[color:var(--pic-border-subtle)] px-3 py-2 sm:px-4">
+            <InfoBanner
+              tone="warning"
+              title="Limited module coverage"
+              className="!rounded-pic-lg !px-3 !py-2 !shadow-none"
+              actions={
+                <Link
+                  to={`/jobs/${jobId}/setup#mapping&field=ac_power_kw`}
+                  className="text-xs font-semibold text-amber-900 underline dark:text-amber-200"
+                >
+                  Open Setup: AC power mapping
+                </Link>
+              }
+            >
+              With AC and weather signals only, plant KPIs and clipping-by-power can run once AC power and POA are
+              mapped. String-level faults and inverter efficiency require additional DC and architecture inputs.
+            </InfoBanner>
           </div>
-          <InverterComparisonPanel rows={data.kpis.inverter_pr ?? []} />
-          <SummaryInsightPanels
-            worstInverters={worstInverters}
-            stringHealth={stringHealth.rows}
-            stringHealthyNote={stringHealth.healthyNote}
+        ) : null}
+
+        {activeSection === "overview" && (
+          <OverviewDashboard
+            jobId={jobId}
+            kpis={data.kpis}
+            results={data.results}
+            ownerActions={ownerActions}
+            integrity={integrity}
+            canRerunIntegrity={isSuperadmin}
+            onIntegrityUpdated={setIntegrity}
+            onInvestigate={investigateFinding}
             onModule={jumpToModule}
+            onSection={selectSection}
           />
-        </div>
-      )}
+        )}
 
-      {activeSection === "losses" && (
-        <div
-          id="results-bridge"
-          data-tour="loss-bridge"
-          data-results-pane="losses"
-          data-results-pane-alias="bridge"
-          className="job-pane-tight pb-6"
-        >
-          <LossWaterfallBridge kpis={data.kpis} results={data.results} jobId={jobId} />
-        </div>
-      )}
-
-      {activeSection === "faults" && (
-        <div id="results-faults" data-tour="faults-table" data-results-pane="faults" className="job-pane-tight pb-6">
-          <FaultsTable results={data.results} categories={faultCategories} />
-        </div>
-      )}
-
-      {activeSection === "diagnostics" && (
-        <div
-          className="flex flex-col pb-6"
-          data-tour="diagnostics"
-          data-results-pane="diagnostics"
-        >
-          <MobileDevicesPicker
-            faultModules={faultModules}
-            analysisModules={analysisModules}
-            activeModuleId={activeModuleId}
-            onSelectModule={selectModule}
-          />
-          <div className="job-pane-tight min-w-0 flex-1">
-            {!activeModule ? (
-              <div
-                className="flex min-h-[12rem] flex-col items-center justify-center rounded-pic-lg border border-dashed border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] px-4 py-8 text-center"
-                data-tour="diagnostics-empty"
-              >
-                <p className="font-display text-sm font-semibold text-[color:var(--pic-text)]">
-                  Select a device module
-                </p>
-                <p className="mt-1 max-w-sm text-xs leading-relaxed text-[color:var(--pic-text-muted)]">
-                  {diagModules.length === 0
-                    ? "No diagnostic modules available for this run."
-                    : "Choose a fault check or box plot analysis from Devices in the sidebar."}
-                </p>
-              </div>
-            ) : (
-              <div
-                id={`module-${activeModule.algorithm_id}`}
-                className={`transition ${
-                  highlightId === activeModule.algorithm_id
-                    ? "rounded-pic-lg ring-2 ring-brand-500 ring-offset-1 dark:ring-offset-stone-950"
-                    : ""
-                }`}
-              >
-                {activeModule.algorithm_id === "box_plot" &&
-                activeModule.status === "ok" &&
-                isAnalysisModule(activeModule.algorithm_id, activeModule) ? (
-                  <BoxPlotAnalysisPanel result={activeModule} />
-                ) : (
-                  <ResultCard key={activeModule.algorithm_id} result={activeModule} standalone />
-                )}
-              </div>
-            )}
+        {activeSection === "performance" && (
+          <div data-results-pane="performance" className="job-pane-tight flex flex-col gap-4 pb-6">
+            <div className="results-pane-head">
+              <p className="overview-eyebrow">Performance</p>
+              <h3 className="overview-panel-title mt-1">Inverter &amp; string performance</h3>
+              <p className="overview-panel-sub">Unit-level PR and string health for this run.</p>
+            </div>
+            <InverterComparisonPanel rows={data.kpis.inverter_pr ?? []} />
+            <SummaryInsightPanels
+              worstInverters={worstInverters}
+              stringHealth={stringHealth.rows}
+              stringHealthyNote={stringHealth.healthyNote}
+              onModule={jumpToModule}
+            />
           </div>
-        </div>
-      )}
+        )}
 
-      {activeSection === "reports" && (
-        <div data-results-pane="reports" className="job-pane-tight flex flex-col gap-3 pb-6">
-          <div className="overview-panel">
-            <p className="overview-eyebrow">Exports</p>
-            <h3 className="overview-panel-title mt-1">Reports</h3>
-            <p className="overview-panel-sub max-w-lg">
-              Excel for tables and segment detail; PDF for KPIs, faults, and loss summary.
-            </p>
-            <div className="mt-4 flex flex-wrap gap-2" data-tour="reports-downloads">
+        {activeSection === "losses" && (
+          <div
+            id="results-bridge"
+            data-tour="loss-bridge"
+            data-results-pane="losses"
+            data-results-pane-alias="bridge"
+            className="job-pane-tight pb-6"
+          >
+            <LossWaterfallBridge kpis={data.kpis} results={data.results} jobId={jobId} />
+          </div>
+        )}
+
+        {activeSection === "faults" && (
+          <div
+            id="results-faults"
+            data-tour="faults-table"
+            data-results-pane="faults"
+            className="job-pane-tight flex flex-col gap-5 pb-6"
+          >
+            {ownerActions ? (
+              <OwnerActionCenter
+                model={ownerActions}
+                onInvestigate={investigateFinding}
+                onModule={jumpToModule}
+                onSection={handleOwnerSection}
+                compact
+              />
+            ) : null}
+            <FaultsTable results={data.results} categories={faultCategories} />
+          </div>
+        )}
+
+        {activeSection === "diagnostics" && (
+          <div
+            className="flex flex-col pb-6"
+            data-tour="diagnostics"
+            data-results-pane="diagnostics"
+          >
+            <MobileDevicesPicker
+              faultModules={faultModules}
+              analysisModules={analysisModules}
+              activeModuleId={activeModuleId}
+              onSelectModule={selectModule}
+            />
+            <div className="job-pane-tight min-w-0 flex-1">
+              {!activeModule ? (
+                <div
+                  className="flex min-h-[12rem] flex-col items-center justify-center rounded-pic-lg border border-dashed border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] px-4 py-8 text-center"
+                  data-tour="diagnostics-empty"
+                >
+                  <p className="font-display text-sm font-semibold text-[color:var(--pic-text)]">
+                    Select a device module
+                  </p>
+                  <p className="mt-1 max-w-sm text-xs leading-relaxed text-[color:var(--pic-text-muted)]">
+                    {diagModules.length === 0
+                      ? "No diagnostic modules available for this run."
+                      : "Choose a fault check or box plot analysis from Devices in the sidebar."}
+                  </p>
+                </div>
+              ) : (
+                <div
+                  id={`module-${activeModule.algorithm_id}`}
+                  className={`transition ${
+                    highlightId === activeModule.algorithm_id
+                      ? "rounded-pic-lg ring-2 ring-brand-500 ring-offset-1 dark:ring-offset-stone-950"
+                      : ""
+                  }`}
+                >
+                  {activeModule.algorithm_id === "box_plot" &&
+                  activeModule.status === "ok" &&
+                  isAnalysisModule(activeModule.algorithm_id, activeModule) ? (
+                    <BoxPlotAnalysisPanel result={activeModule} />
+                  ) : (
+                    <ResultCard key={activeModule.algorithm_id} result={activeModule} standalone />
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {activeSection === "integrity" && (
+          <div data-results-pane="integrity" className="job-pane-tight flex flex-col gap-4 pb-6">
+            <div className="results-pane-head">
+              <p className="overview-eyebrow">Integrity</p>
+              <h3 className="overview-panel-title mt-1">Run integrity &amp; history</h3>
+              <p className="overview-panel-sub">
+                Parse and mapping checks for this analysis run. Re-run when inputs change.
+              </p>
+            </div>
+            <RunIntegrityPanel
+              jobId={jobId}
+              check={integrity}
+              canRerun={isSuperadmin}
+              onUpdated={setIntegrity}
+            />
+          </div>
+        )}
+
+        {activeSection === "reports" && (
+          <div data-results-pane="reports" className="job-pane-tight flex flex-col gap-3 pb-6">
+            <div className="results-pane-head">
+              <p className="overview-eyebrow">Exports</p>
+              <h3 className="overview-panel-title mt-1">Reports</h3>
+              <p className="overview-panel-sub max-w-lg">
+                Excel for tables and segment detail; PDF for KPIs, faults, and loss summary.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2" data-tour="reports-downloads">
               <a className="btn-secondary text-sm" href={reportUrl(jobId, "xlsx")}>
                 Download Excel
               </a>
@@ -600,8 +647,8 @@ export function DashboardPage() {
               </a>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {investigateRow && (
         <EvidenceInvestigateModal row={investigateRow} onClose={() => setInvestigateRow(null)} />

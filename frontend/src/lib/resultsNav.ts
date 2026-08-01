@@ -2,10 +2,10 @@
  * Shared contract between Results sidebar/tabs and the demo tour.
  * Tour activates a section first, then spotlights — no mega-page scroll thrash.
  *
- * In-page sidebar IA (ops rail — no top JobNav on Results):
- *   Summary   → Summary
- *   Analysis  → Performance, Faults, Losses, Devices (modules nest here)
- *   Output    → Reports
+ * In-page sidebar IA (full-height Results rail):
+ *   Plant     → Overview
+ *   Analysis  → Issues, Performance, Losses, Devices (modules nest here)
+ *   Output    → Integrity, Reports
  *   Tools     → Raw data, Architecture, Signal Explorer (route links)
  *
  * Nav buttons should expose:
@@ -17,7 +17,7 @@
  */
 
 export const RESULTS_SECTION_GROUPS = [
-  { id: "summary", label: "Summary" },
+  { id: "plant", label: "Plant" },
   { id: "analysis", label: "Analysis" },
   { id: "output", label: "Output" },
   { id: "tools", label: "Tools" },
@@ -26,11 +26,12 @@ export const RESULTS_SECTION_GROUPS = [
 export type ResultsSectionGroupId = (typeof RESULTS_SECTION_GROUPS)[number]["id"];
 
 export const RESULTS_SECTIONS = [
-  { id: "overview", label: "Summary", tour: "nav-summary", group: "summary" },
+  { id: "overview", label: "Overview", tour: "nav-summary", group: "plant" },
+  { id: "faults", label: "Issues", tour: "nav-faults", group: "analysis" },
   { id: "performance", label: "Performance", tour: "nav-performance", group: "analysis" },
-  { id: "faults", label: "Faults", tour: "nav-faults", group: "analysis" },
   { id: "losses", label: "Losses", tour: "nav-bridge", group: "analysis" },
   { id: "diagnostics", label: "Devices", tour: "nav-diagnostics", group: "analysis" },
+  { id: "integrity", label: "Integrity", tour: "nav-integrity", group: "output" },
   { id: "reports", label: "Reports", tour: "nav-reports", group: "output" },
 ] as const;
 
@@ -48,13 +49,16 @@ export const RESULTS_SECTION_EVENT = "pic:results-section";
 /** Legacy tour/deep-link aliases → current section ids. */
 const SECTION_ALIASES: Record<string, ResultsSectionId> = {
   summary: "overview",
-  actions: "overview",
-  "owner-actions": "overview",
-  owner_actions: "overview",
+  actions: "faults",
+  "owner-actions": "faults",
+  owner_actions: "faults",
+  issues: "faults",
   bridge: "losses",
   "loss-bridge": "losses",
-  "loss_bridge": "losses",
+  loss_bridge: "losses",
   devices: "diagnostics",
+  readiness: "diagnostics",
+  history: "integrity",
 };
 
 export function resolveResultsSectionId(v: unknown): ResultsSectionId | null {
@@ -114,4 +118,9 @@ export function isMostlyInView(el: Element, margin = 72): boolean {
   if (r.width < 2 || r.height < 2) return false;
   const vh = window.innerHeight;
   return r.bottom > margin && r.top < vh - margin;
+}
+
+/** Section titles for Results chrome when the rail is active. */
+export function resultsSectionTitle(id: ResultsSectionId): string {
+  return RESULTS_SECTIONS.find((s) => s.id === id)?.label ?? "Results";
 }

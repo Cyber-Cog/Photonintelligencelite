@@ -64,6 +64,15 @@ function IconReports() {
   );
 }
 
+function IconIntegrity() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 3l7 3v5c0 4.5-3 8.2-7 9.5-4-1.3-7-5-7-9.5V6l7-3z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9.5 12l1.8 1.8L14.8 10" />
+    </svg>
+  );
+}
+
 function IconData() {
   return (
     <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden>
@@ -110,6 +119,7 @@ const SECTION_ICONS: Record<ResultsSectionId, () => ReactNode> = {
   faults: IconFaults,
   losses: IconLosses,
   diagnostics: IconDevices,
+  integrity: IconIntegrity,
   reports: IconReports,
 };
 
@@ -132,7 +142,7 @@ function DiagStatusBadge({ result }: { result: ResultObject }) {
 }
 
 /**
- * Results ops rail — section panes + tool routes (replaces top JobNav on Results).
+ * Results app rail — full-height section panes + tool routes (replaces top JobNav on Results).
  */
 export function ResultsSidebar({
   activeSection,
@@ -145,6 +155,7 @@ export function ResultsSidebar({
   onSelectModule,
   devicesOpen,
   onToggleDevices,
+  integrityFlagCount,
 }: {
   activeSection: ResultsSectionId;
   onSelectSection: (id: ResultsSectionId) => void;
@@ -156,15 +167,22 @@ export function ResultsSidebar({
   onSelectModule?: (algorithmId: string) => void;
   devicesOpen?: boolean;
   onToggleDevices?: () => void;
+  /** Non-ok integrity findings — shown as Integrity badge when > 0. */
+  integrityFlagCount?: number;
 }) {
   const { jobId } = useParams<{ jobId: string }>();
   const modulesOpen = devicesOpen ?? activeSection === "diagnostics";
   const totalModules = faultModules.length + analysisModules.length;
 
   const badgeFor = (id: ResultsSectionId): number | null => {
-    if (id === "faults" && faultCount != null && faultCount > 0) return faultCount;
-    if (id === "overview" && issueCount > 0) return issueCount;
+    if (id === "faults") {
+      const n = Math.max(faultCount ?? 0, issueCount);
+      return n > 0 ? n : null;
+    }
     if (id === "diagnostics" && totalModules > 0) return totalModules;
+    if (id === "integrity" && integrityFlagCount != null && integrityFlagCount > 0) {
+      return integrityFlagCount;
+    }
     return null;
   };
 
@@ -199,8 +217,8 @@ export function ResultsSidebar({
           <span />
         </div>
         <div className="min-w-0">
-          <p className="results-shell-brand-title">PIC Lite</p>
-          <p className="results-shell-brand-sub">Plant overview</p>
+          <p className="results-shell-brand-title">Results</p>
+          <p className="results-shell-brand-sub">Plant analytics</p>
         </div>
       </div>
 

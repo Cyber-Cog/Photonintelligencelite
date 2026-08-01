@@ -1,6 +1,5 @@
 import { LossWaterfallBridge } from "@/components/LossWaterfallBridge";
 import { OwnerActionCenter } from "@/components/OwnerActionCenter";
-import { RunIntegrityPanel } from "@/components/RunIntegrityPanel";
 import type { OwnerActionCenterModel } from "@/lib/ownerActions";
 import { buildPlantHealth, type PlantHealthTone } from "@/lib/plantHealth";
 import type { ResultsSectionId } from "@/lib/resultsNav";
@@ -23,6 +22,13 @@ const TONE_SCORE: Record<PlantHealthTone, string> = {
   warn: "text-brand-800 dark:text-brand-300",
   bad: "text-rose-700 dark:text-rose-300",
   neutral: "text-[color:var(--pic-text-muted)]",
+};
+
+const TONE_DOT: Record<PlantHealthTone, string> = {
+  good: "bg-accent-500",
+  warn: "bg-brand-500",
+  bad: "bg-rose-500",
+  neutral: "bg-stone-300 dark:bg-stone-600",
 };
 
 function HealthRing({
@@ -64,7 +70,9 @@ function HealthRing({
       <div className="overview-health-ring-label">
         <p className={`font-display text-3xl font-bold tabular-nums tracking-tight ${TONE_SCORE[tone]}`}>
           {score == null ? "—" : fmt(score, score >= 10 ? 0 : 1)}
-          {score != null ? <span className="ml-0.5 text-sm font-semibold text-[color:var(--pic-text-muted)]">{unit}</span> : null}
+          {score != null ? (
+            <span className="ml-0.5 text-sm font-semibold text-[color:var(--pic-text-muted)]">{unit}</span>
+          ) : null}
         </p>
       </div>
     </div>
@@ -99,6 +107,55 @@ function StatPill({
   );
 }
 
+type CategoryRow = {
+  id: ResultsSectionId;
+  label: string;
+  detail: string;
+  score: string;
+  tone: PlantHealthTone;
+};
+
+function CategoryScoreList({
+  rows,
+  onOpen,
+}: {
+  rows: CategoryRow[];
+  onOpen: (id: ResultsSectionId) => void;
+}) {
+  return (
+    <section className="overview-categories" aria-label="Analysis categories">
+      <div className="overview-panel-head">
+        <div>
+          <h3 className="overview-panel-title">Categories</h3>
+          <p className="overview-panel-sub">Jump into Issues, Performance, Losses, Devices</p>
+        </div>
+      </div>
+      <ul className="overview-category-list">
+        {rows.map((row) => (
+          <li key={row.id}>
+            <button
+              type="button"
+              className="overview-category-row"
+              onClick={() => onOpen(row.id)}
+              data-tour={`overview-cat-${row.id}`}
+            >
+              <span className={`overview-category-dot ${TONE_DOT[row.tone]}`} aria-hidden />
+              <span className="min-w-0 flex-1 text-left">
+                <span className="overview-category-label">{row.label}</span>
+                <span className="overview-category-detail">{row.detail}</span>
+              </span>
+              <span className={`overview-category-score ${TONE_SCORE[row.tone]}`}>{row.score}</span>
+              <span className="overview-category-chevron" aria-hidden>
+                ›
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 function ModuleReadiness({
   results,
   onOpenDevices,
@@ -116,7 +173,7 @@ function ModuleReadiness({
     <section className="overview-panel" aria-label="Module readiness">
       <div className="overview-panel-head">
         <div>
-          <h3 className="overview-panel-title">Module readiness</h3>
+          <h3 className="overview-panel-title">Device readiness</h3>
           <p className="overview-panel-sub">Diagnostics status for this run</p>
         </div>
         <button type="button" className="overview-link-btn" onClick={onOpenDevices}>
@@ -150,8 +207,7 @@ function ModuleReadiness({
 }
 
 /**
- * Results Overview composition — health hero, prioritized issues, loss bridge, readiness.
- * Preserves existing CTAs / section navigation; restyles hierarchy only.
+ * Results Overview — hero scores, category rail targets, prioritized issues, loss bridge.
  */
 export function OverviewDashboard({
   jobId,
@@ -159,8 +215,6 @@ export function OverviewDashboard({
   results,
   ownerActions,
   integrity,
-  canRerunIntegrity,
-  onIntegrityUpdated,
   onInvestigate,
   onModule,
   onSection,
@@ -170,8 +224,8 @@ export function OverviewDashboard({
   results: ResultObject[];
   ownerActions: OwnerActionCenterModel | null;
   integrity: AiIntegrityCheck | null;
-  canRerunIntegrity: boolean;
-  onIntegrityUpdated: (next: AiIntegrityCheck) => void;
+  canRerunIntegrity?: boolean;
+  onIntegrityUpdated?: (next: AiIntegrityCheck) => void;
   onInvestigate: (algorithmId: string) => void;
   onModule: (algorithmId: string) => void;
   onSection: (id: ResultsSectionId) => void;
@@ -190,6 +244,62 @@ export function OverviewDashboard({
     onSection(id);
   };
 
+  const integrityFlags =
+    integrity?.findings?.filter((f) => f.severity !== "pass" && f.severity !== "info").length ?? 0;
+
+  const categories: CategoryRow[] = [
+    {
+      id: "faults",
+      label: "Issues",
+      detail:
+        health.issueCount > 0
+          ? `${health.issueCount} prioritized · ${health.faultCount} faults`
+          : health.faultCount > 0
+            ? `${health.faultCount} fault${health.faultCount === 1 ? "" : "s"}`
+            : "No urgent actions",
+      score: String(Math.max(health.issueCount, health.faultCount)),
+      tone: health.issueCount > 0 || health.faultCount > 0 ? "bad" : "good",
+    },
+    {
+      id: "performance",
+      label: "Performance",
+      detail:
+        health.score != null
+          ? `${health.scoreLabel} ${fmt(health.score)}${health.scoreUnit}`
+          : "Inverter & string health",
+      score: health.score != null ? `${fmt(health.score, 0)}${health.scoreUnit}` : "—",
+      tone: health.tone,
+    },
+    {
+      id: "losses",
+      label: "Losses",
+      detail:
+        health.lossKwh != null && health.lossKwh > 0
+          ? `${fmt(health.lossKwh, 0)} kWh estimated loss`
+          : "Expected → diagnosed → actual",
+      score: health.lossKwh != null && health.lossKwh > 0 ? fmt(health.lossKwh, 0) : "—",
+      tone: health.lossKwh && health.lossKwh > 0 ? "warn" : "good",
+    },
+    {
+      id: "diagnostics",
+      label: "Devices",
+      detail: `${health.okModules} ready · ${health.blockedModules} need data`,
+      score: `${health.readinessPct}%`,
+      tone:
+        health.readinessPct >= 70 ? "good" : health.readinessPct < 40 ? "bad" : "warn",
+    },
+    {
+      id: "integrity",
+      label: "Integrity",
+      detail:
+        integrityFlags > 0
+          ? `${integrityFlags} finding${integrityFlags === 1 ? "" : "s"}`
+          : integrity?.summary || "Run integrity checklist",
+      score: integrityFlags > 0 ? String(integrityFlags) : "OK",
+      tone: integrityFlags > 0 ? "warn" : "good",
+    },
+  ];
+
   return (
     <div
       id="results-actions"
@@ -197,69 +307,54 @@ export function OverviewDashboard({
       data-results-pane-alias="summary"
       className="overview-dashboard job-pane-tight pb-8"
     >
-      {/* Atmosphere + health hero */}
-      <section className="overview-hero" data-tour="overview-health" aria-label="Plant health">
-        <div className="overview-hero-glow" aria-hidden />
-        <div className="overview-hero-grid">
-          <div className="overview-hero-score">
-            <HealthRing score={health.score} unit={health.scoreUnit} tone={health.tone} />
-            <p className="overview-hero-score-caption">{health.scoreLabel}</p>
-          </div>
-
-          <div className="overview-hero-copy min-w-0">
-            <p className="overview-eyebrow">Overview</p>
-            <h2 className="overview-hero-title">{health.headline}</h2>
-            <p className="overview-hero-detail">{health.detail}</p>
-
-            <div className="overview-stat-row">
-              <StatPill
-                label="Availability"
-                value={fmt(health.availabilityPct)}
-                unit="%"
-                tone={
-                  health.availabilityPct == null
-                    ? "neutral"
-                    : health.availabilityPct >= 95
-                      ? "good"
-                      : health.availabilityPct < 85
-                        ? "bad"
-                        : "neutral"
-                }
-              />
-              <StatPill label="Yield" value={fmt(health.yieldKwhPerKwp)} unit="kWh/kWp" />
-              <StatPill
-                label="Energy loss"
-                value={fmt(health.lossKwh, 0)}
-                unit="kWh"
-                tone={health.lossKwh && health.lossKwh > 0 ? "bad" : "neutral"}
-              />
-              <StatPill
-                label="Issues"
-                value={String(health.issueCount)}
-                tone={health.issueCount > 0 ? "bad" : "good"}
-              />
+      <div className="overview-top-grid">
+        <section className="overview-hero" data-tour="overview-health" aria-label="Plant health">
+          <div className="overview-hero-grid">
+            <div className="overview-hero-score">
+              <HealthRing score={health.score} unit={health.scoreUnit} tone={health.tone} />
+              <p className="overview-hero-score-caption">{health.scoreLabel}</p>
             </div>
 
-            <div className="overview-quick-nav">
-              <button type="button" className="overview-chip" onClick={() => onSection("faults")}>
-                Faults
-                {health.faultCount > 0 ? <span>{health.faultCount}</span> : null}
-              </button>
-              <button type="button" className="overview-chip" onClick={() => onSection("losses")}>
-                Loss bridge
-              </button>
-              <button type="button" className="overview-chip" onClick={() => onSection("performance")}>
-                Performance
-              </button>
-              <button type="button" className="overview-chip" onClick={() => onSection("diagnostics")}>
-                Devices
-              </button>
+            <div className="overview-hero-copy min-w-0">
+              <p className="overview-eyebrow">Overview</p>
+              <h2 className="overview-hero-title">{health.headline}</h2>
+              <p className="overview-hero-detail">{health.detail}</p>
+
+              <div className="overview-stat-row">
+                <StatPill
+                  label="Availability"
+                  value={fmt(health.availabilityPct)}
+                  unit="%"
+                  tone={
+                    health.availabilityPct == null
+                      ? "neutral"
+                      : health.availabilityPct >= 95
+                        ? "good"
+                        : health.availabilityPct < 85
+                          ? "bad"
+                          : "neutral"
+                  }
+                />
+                <StatPill label="Yield" value={fmt(health.yieldKwhPerKwp)} unit="kWh/kWp" />
+                <StatPill
+                  label="Energy loss"
+                  value={fmt(health.lossKwh, 0)}
+                  unit="kWh"
+                  tone={health.lossKwh && health.lossKwh > 0 ? "bad" : "neutral"}
+                />
+                <StatPill
+                  label="Issues"
+                  value={String(health.issueCount)}
+                  tone={health.issueCount > 0 ? "bad" : "good"}
+                />
+              </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Issues + trends */}
+        <CategoryScoreList rows={categories} onOpen={onSection} />
+      </div>
+
       <div className="overview-main-grid">
         <div className="overview-issues-col">
           {ownerActions ? (
@@ -297,16 +392,6 @@ export function OverviewDashboard({
 
           <ModuleReadiness results={results} onOpenDevices={() => onSection("diagnostics")} />
         </div>
-      </div>
-
-      <div className="overview-integrity">
-        <RunIntegrityPanel
-          jobId={jobId}
-          check={integrity}
-          canRerun={canRerunIntegrity}
-          onUpdated={onIntegrityUpdated}
-          quiet
-        />
       </div>
     </div>
   );
