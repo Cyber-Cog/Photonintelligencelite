@@ -5,6 +5,7 @@ Only headers (+ short unmapped samples) are sent; no raw SCADA PII dumps.
 """
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any, Iterable
 
@@ -181,7 +182,7 @@ def propose_mappings_via_gemini(
         system=_PARSE_SYSTEM,
         user=(
             "Propose canonical mappings for these PIC Lite upload headers.\n\n"
-            + __import__("json").dumps(payload, default=str)[:10_000]
+            + json.dumps(payload, default=str)[:10_000]
         ),
     )
     if err or not parsed:

@@ -260,7 +260,8 @@ def test_gemini_integrity_preferred(monkeypatch):
     )
     assert out["ai_layer"] == "ok"
     assert out["provider"] == "gemini"
-    assert out["source"] == "rules+ai"
+    assert out["source"] == "rules+gemini"
+    assert "gemini" in out["source"]
     assert "Gemini: ok" in format_integrity_progress(out)
 
 
