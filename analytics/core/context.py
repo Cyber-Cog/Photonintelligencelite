@@ -88,7 +88,15 @@ class CanonicalDataAccess:
             device_type_value = d.name.split("=", 1)[1] if "=" in d.name else None
             for f in d.rglob("*.parquet"):
                 # Never request device_type from the file schema — it was stripped on write.
-                read_cols = None if cols is None else [c for c in cols if c != "device_type"]
+                # Also never ask pyarrow for columns absent from this partition (older jobs /
+                # interval-normalize historically omitted icr_id → FieldRef.Name crash).
+                if cols is None:
+                    read_cols = None
+                else:
+                    import pyarrow.parquet as pq
+
+                    schema_names = set(pq.ParquetFile(f).schema_arrow.names)
+                    read_cols = [c for c in cols if c != "device_type" and c in schema_names]
                 part = pd.read_parquet(f, columns=read_cols or None)
                 if device_type_value is not None:
                     part["device_type"] = device_type_value

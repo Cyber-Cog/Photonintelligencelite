@@ -75,7 +75,12 @@ def normalize_interval(
 
     resample_rule = f"{max(round(target), 1)}min"
     numeric_cols = [c for c in NUMERIC_CANONICAL_FIELDS if c in df.columns]
-    id_cols = [c for c in ("device_id", "device_type", "inverter_id", "scb_id", "string_id") if c in df.columns]
+    # Preserve hierarchy identity columns through resample (icr_id must survive for Explorer / KPIs).
+    id_cols = [
+        c
+        for c in ("device_id", "device_type", "inverter_id", "scb_id", "string_id", "icr_id")
+        if c in df.columns
+    ]
 
     resampled_parts: list[pd.DataFrame] = []
     for device_id, group in df.groupby("device_id", sort=False):

@@ -10,7 +10,8 @@ import {
 import { TransitionOverlay } from "@/components/transition/TransitionOverlay";
 import type { TransitionPhase } from "@/components/transition/transitionScripts";
 
-const MIN_VISIBLE_MS = 720;
+/** Keep overlay brief — real work finishes on the next page (Validate polls). */
+const MIN_VISIBLE_MS = 280;
 
 type WorkflowTransitionContextValue = {
   active: boolean;

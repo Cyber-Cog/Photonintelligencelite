@@ -179,19 +179,28 @@ function IssueRow({
   );
 }
 
-/** True once validation has produced a real summary (not empty defaults). */
+/** True while background validation is still running (Continue returns before standardize finishes). */
+function validationInProgress(state?: string | null): boolean {
+  const st = (state || "").toLowerCase();
+  return st === "validating" || st === "mapping" || st === "uploaded";
+}
+
+/** True once validation has produced a decisive result (or failed). */
 function validationSummaryReady(v: ValidationResponse | null): boolean {
   if (!v) return false;
+  const st = (v.state || "").toLowerCase();
+  if (validationInProgress(st)) return false;
+  if (st === "failed") return true;
   if ((v.blockers?.length ?? 0) > 0) return true;
   if ((v.module_readiness?.length ?? 0) > 0) return true;
   if ((v.row_count ?? 0) > 0 || (v.column_count ?? 0) > 0) return true;
   if ((v.warnings?.length ?? 0) > 0) return true;
-  const st = (v.state || "").toLowerCase();
-  // Terminal / post-validation states with an empty summary still need a decisive UI
-  // (failed with no issues is rare; treat completed/normalizing/failed as settled only
-  // when we also have can_proceed or explicit counts — otherwise keep polling).
-  if (st === "failed" && (v.blockers?.length ?? 0) === 0 && (v.row_count ?? 0) === 0) {
-    return false;
+  // Post-validation workflow states — only settle when we have a real summary payload.
+  // (State can briefly be "normalizing" before validation_summary_json is committed.)
+  if (["queued", "running", "completed"].includes(st)) return true;
+  if (st === "normalizing" && Boolean(v.can_proceed) && (v.timestamp_column || (v.row_count ?? 0) > 0)) {
+    // Prefer waiting for row_count; if summary is still empty keep polling.
+    return (v.row_count ?? 0) > 0 || (v.module_readiness?.length ?? 0) > 0 || (v.warnings?.length ?? 0) > 0;
   }
   return false;
 }
@@ -207,21 +216,20 @@ export function ValidationPage() {
   const [acking, setAcking] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [downloadingParsed, setDownloadingParsed] = useState(false);
+  const [pollKey, setPollKey] = useState(0);
 
   const reload = () => {
     if (!jobId) return;
     setLoading(true);
-    getValidation(jobId)
-      .then(setValidation)
-      .catch((err) => setError(err instanceof ApiError ? err.message : "Could not load validation results."))
-      .finally(() => setLoading(false));
+    setPollKey((k) => k + 1);
   };
 
   useEffect(() => {
     if (!jobId) return;
     let cancelled = false;
     let attempts = 0;
-    const maxAttempts = 60;
+    // Background standardize can take a while on large CSVs; keep polling while VALIDATING.
+    const maxAttempts = 180;
 
     const tick = async () => {
       try {
@@ -235,9 +243,11 @@ export function ValidationPage() {
         }
         attempts += 1;
         setLoading(true);
+        const st = (v.state || "").toLowerCase();
+        const delayMs = st === "validating" ? 750 : 500;
         window.setTimeout(() => {
           if (!cancelled) void tick();
-        }, 500);
+        }, delayMs);
       } catch (err) {
         if (cancelled) return;
         setError(err instanceof ApiError ? err.message : "Could not load validation results.");
@@ -250,15 +260,16 @@ export function ValidationPage() {
     return () => {
       cancelled = true;
     };
-  }, [jobId]);
+  }, [jobId, pollKey]);
 
   if (!jobId) return null;
 
   const summaryReady = validationSummaryReady(validation);
+  const failed = (validation?.state || "").toLowerCase() === "failed";
   const hasBlockers = (validation?.blockers.length ?? 0) > 0;
   const canDrop = Boolean(validation?.can_proceed_with_row_drops);
   const tsCol = validation?.timestamp_column;
-  const canRunAnalysis = summaryReady && !hasBlockers && Boolean(validation?.can_proceed);
+  const canRunAnalysis = summaryReady && !hasBlockers && !failed && Boolean(validation?.can_proceed);
 
   const handleContinue = async (dropBad = false) => {
     if (!jobId) return;
@@ -282,6 +293,21 @@ export function ValidationPage() {
     setError(null);
     try {
       await retryValidation(jobId, false);
+      setValidation((prev) =>
+        prev
+          ? {
+              ...prev,
+              state: "validating",
+              blockers: [],
+              warnings: [],
+              module_readiness: [],
+              row_count: 0,
+              column_count: 0,
+              can_proceed: false,
+              error_summary: null,
+            }
+          : prev,
+      );
       reload();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not retry validation.");
@@ -317,7 +343,10 @@ export function ValidationPage() {
 
       {loading && (
         <div className="flex items-center gap-2 text-sm text-stone-500">
-          <Spinner className="h-4 w-4" /> Checking your data…
+          <Spinner className="h-4 w-4" />
+          {(validation?.state || "").toLowerCase() === "validating"
+            ? "Validating uploaded data… (this can take a minute on large files)"
+            : "Checking your data…"}
         </div>
       )}
 
@@ -327,11 +356,36 @@ export function ValidationPage() {
 
       {!loading && validation && !summaryReady && (
         <InfoBanner tone="info" title="Validation still running">
-          Waiting for row counts and module readiness. This page refreshes automatically.
+          {validation.progress_message ||
+            "Waiting for row counts and module readiness. This page refreshes automatically."}
         </InfoBanner>
       )}
 
-      {!loading && validation && summaryReady && (
+      {!loading && validation && summaryReady && failed && (
+        <div className="space-y-4">
+          <InfoBanner tone="danger" title="Validation failed">
+            {validation.error_summary ||
+              validation.progress_message ||
+              "Something went wrong while validating. Fix mapping or retry."}
+          </InfoBanner>
+          {error && <p className="text-sm text-rose-600 dark:text-rose-400">{error}</p>}
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => navigate(`/jobs/${jobId}/setup#mapping`)}
+            >
+              Edit mapping / plant
+            </button>
+            <button type="button" className="btn-secondary" onClick={handleRetry} disabled={retrying}>
+              {retrying ? <Spinner className="h-4 w-4" /> : null}
+              Retry validation
+            </button>
+          </div>
+        </div>
+      )}
+
+      {!loading && validation && summaryReady && !failed && (
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
             <div className="stat-tile">

@@ -226,6 +226,8 @@ export interface ValidationResponse {
   rows_that_would_be_dropped?: number;
   rows_that_would_be_kept?: number;
   state?: string | null;
+  error_summary?: string | null;
+  progress_message?: string | null;
 }
 
 export interface SetupContextResponse {

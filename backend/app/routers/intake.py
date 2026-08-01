@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import logging
 import shutil
+import threading
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import Response
@@ -27,7 +28,7 @@ from backend.app.auth.audit import record_audit
 from backend.app.auth.job_access import load_job_authorized
 from backend.app.auth.rate_limit import client_ip
 from backend.app.config import Settings, get_settings
-from backend.app.database import get_db
+from backend.app.database import SessionLocal, get_db
 from backend.app.models import Job, User
 from backend.app.schemas import (
     AcknowledgeWarningsRequest,
@@ -258,27 +259,83 @@ def submit_mapping(
         user_agent=request.headers.get("user-agent"),
     )
 
-    # Only validate when plant_config is complete enough for PlantConfig.
-    # Pack import may store architecture early; Continue saves mapping first then plant —
-    # validating here with an incomplete plant used to raise TypeError → HTTP 500.
-    if validation_service.ready_for_validation(job):
-        try:
-            validation_service.run_validation_stage(db, job, settings)
-            record_audit(
-                db,
-                action="job.validation",
-                user_id=user.id if user else None,
-                job_id=job.id,
-                ip=client_ip(request),
-                detail={"state": job.state},
-            )
-        except Exception as exc:  # noqa: BLE001
-            logger.exception("validation after mapping failed for job=%s", job.id)
-            raise HTTPException(
-                400,
-                user_facing_message(exc, fallback=MSG_VALIDATE_FAILED),
-            ) from exc
+    # Continue always saves mapping then plant-config. Validating here when plant already
+    # exists (pack import) caused a full standardize pass, then plant-config ran it AGAIN.
+    # Validation runs once from plant-config (background) so Setup Continue stays fast.
     return {"job_id": job.id, "state": job.state, "requires_reanalysis": revised}
+
+
+def _finish_validation_job(
+    job_id: str,
+    settings: Settings,
+    *,
+    drop_unparseable_timestamps: bool = False,
+) -> None:
+    """Heavy standardize off the request thread (Lite: Continue returns in ~1s)."""
+    db = SessionLocal()
+    try:
+        job = db.get(Job, job_id)
+        if job is None:
+            return
+        if not validation_service.ready_for_validation(job):
+            return
+        validation_service.run_validation_stage(
+            db,
+            job,
+            settings,
+            drop_unparseable_timestamps=drop_unparseable_timestamps,
+        )
+        record_audit(
+            db,
+            action="job.validation",
+            user_id=None,
+            job_id=job.id,
+            detail={
+                "state": job.state,
+                "async": True,
+                "drop_unparseable_timestamps": drop_unparseable_timestamps,
+            },
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("background validation failed job=%s", job_id)
+        try:
+            job = db.get(Job, job_id)
+            if job is not None:
+                job.state = JobState.FAILED.value
+                job.error_summary = user_facing_message(exc, fallback=MSG_VALIDATE_FAILED)
+                job.progress_message = job.error_summary
+                db.add(job)
+                db.commit()
+        except Exception:  # noqa: BLE001
+            logger.exception("could not mark validation job failed job=%s", job_id)
+    finally:
+        db.close()
+
+
+def _kick_background_validation(
+    db: Session,
+    job: Job,
+    settings: Settings,
+    *,
+    drop_unparseable_timestamps: bool = False,
+) -> None:
+    """Set VALIDATING, clear stale summary, commit, then standardize on a daemon thread."""
+    job.state = JobState.VALIDATING.value
+    job.progress_message = "Validating uploaded data…"
+    job.error_summary = None
+    job.validation_summary_json = None
+    db.add(job)
+    db.commit()
+    threading.Thread(
+        target=_finish_validation_job,
+        kwargs={
+            "job_id": job.id,
+            "settings": settings,
+            "drop_unparseable_timestamps": drop_unparseable_timestamps,
+        },
+        daemon=True,
+        name=f"validate-{job.id[:8]}",
+    ).start()
 
 
 @router.post("/plant-config")
@@ -321,22 +378,7 @@ def submit_plant_config(
     )
 
     if validation_service.ready_for_validation(job):
-        try:
-            validation_service.run_validation_stage(db, job, settings)
-            record_audit(
-                db,
-                action="job.validation",
-                user_id=user.id if user else None,
-                job_id=job.id,
-                ip=client_ip(request),
-                detail={"state": job.state},
-            )
-        except Exception as exc:  # noqa: BLE001
-            logger.exception("validation after plant-config failed for job=%s", job.id)
-            raise HTTPException(
-                400,
-                user_facing_message(exc, fallback=MSG_VALIDATE_FAILED),
-            ) from exc
+        _kick_background_validation(db, job, settings)
     return {"job_id": job.id, "state": job.state, "requires_reanalysis": revised}
 
 
@@ -603,6 +645,8 @@ def get_validation(
         rows_that_would_be_dropped=summary.get("rows_that_would_be_dropped", 0),
         rows_that_would_be_kept=summary.get("rows_that_would_be_kept", 0),
         state=job.state,
+        error_summary=job.error_summary,
+        progress_message=job.progress_message,
     )
 
 
@@ -639,26 +683,20 @@ def retry_validation(
             "Fix column mapping instead.",
         )
 
-    try:
-        validation_service.run_validation_stage(
-            db,
-            job,
-            settings,
-            drop_unparseable_timestamps=payload.drop_unparseable_timestamps,
-        )
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("retry-validation failed for job=%s", job.id)
-        raise HTTPException(
-            400,
-            user_facing_message(exc, fallback=MSG_VALIDATE_FAILED),
-        ) from exc
     record_audit(
         db,
         action="job.validation",
         user_id=user.id if user else None,
         job_id=job.id,
         ip=client_ip(request),
-        detail={"retry": True, "state": job.state},
+        detail={"retry": True, "async": True, "drop_unparseable_timestamps": payload.drop_unparseable_timestamps},
+    )
+    # Same background path as plant-config — do not block the HTTP response on full standardize.
+    _kick_background_validation(
+        db,
+        job,
+        settings,
+        drop_unparseable_timestamps=payload.drop_unparseable_timestamps,
     )
     return {"job_id": job.id, "state": job.state}
 

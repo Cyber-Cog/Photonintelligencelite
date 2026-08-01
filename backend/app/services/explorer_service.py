@@ -655,7 +655,16 @@ def list_signals(canonical_dir: Path, raw_csv: Path, level: str) -> list[dict[st
             c
             for c in CANONICAL_COLUMNS
             if c in df.columns
-            and c not in ("timestamp_utc", "device_id", "device_type", "inverter_id", "scb_id", "string_id")
+            and c
+            not in (
+                "timestamp_utc",
+                "device_id",
+                "device_type",
+                "inverter_id",
+                "scb_id",
+                "string_id",
+                "icr_id",
+            )
             and df[c].notna().any()
         ]
         if level == "wms":

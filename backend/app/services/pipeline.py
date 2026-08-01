@@ -19,7 +19,7 @@ from pathlib import Path
 import pandas as pd
 
 from analytics.common.config_loader import resolve_thresholds
-from analytics.core.context import AnalysisContext, CanonicalDataAccess, JobMeta, PlantConfig, ResolvedMapping
+from analytics.core.context import AnalysisContext, CANONICAL_COLUMNS, CanonicalDataAccess, JobMeta, PlantConfig, ResolvedMapping
 from analytics.core.orchestrator import AnalysisOrchestrator, OrchestratorRun
 from analytics.preprocessing.interval_normalize import IntervalNormalizationResult, normalize_interval
 from analytics.preprocessing.standardize import standardize
@@ -206,6 +206,11 @@ def apply_interval_normalization(job_paths: JobPaths) -> IntervalNormalizationRe
     shutil.rmtree(job_paths.canonical_dir, ignore_errors=True)
     job_paths.canonical_dir.mkdir(parents=True, exist_ok=True)
     if not resampled.empty:
+        # Keep full canonical schema (including identity cols like icr_id) for Explorer reads.
+        for col in CANONICAL_COLUMNS:
+            if col not in resampled.columns:
+                resampled[col] = pd.NA
+        resampled = resampled[[c for c in CANONICAL_COLUMNS if c in resampled.columns]]
         resampled.to_parquet(job_paths.canonical_dir, engine="pyarrow", partition_cols=["device_type"], index=False)
     return result
 
