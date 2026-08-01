@@ -71,11 +71,13 @@ function ArchitectureCard({ arch, compact }: { arch: UploadArchitectureSummary; 
       ? "From Complete Analysis Pack"
       : arch.source === "saved_config"
         ? "From saved plant config"
-        : arch.source === "device_id" || arch.source === "hierarchy_columns"
-          ? "Inferred from equipment IDs"
-          : arch.detected
-            ? "Detected"
-            : "Not yet detected";
+        : arch.source === "wide_reshape" || arch.source === "wide_headers"
+          ? "From wide SCADA headers"
+          : arch.source === "device_id" || arch.source === "hierarchy_columns"
+            ? "Inferred from equipment IDs"
+            : arch.detected
+              ? "Detected"
+              : "Not yet detected";
 
   return (
     <div className={`rounded-xl border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] ${compact ? "p-3.5" : "p-4"}`}>
@@ -204,7 +206,7 @@ export function UploadIntelligencePanel({
       <div className="rounded-xl border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] p-4">
         <p className="font-display text-sm font-semibold text-[color:var(--pic-text)]">After upload you will see</p>
         <ul className="mt-3 space-y-2 text-sm text-[color:var(--pic-text-muted)]">
-          <li>Signals only at hierarchy levels that are in play (companion ID or confirmed device type)</li>
+          <li>Signals shown only at hierarchy levels present in this file</li>
           <li>Inverter, SCB, and string counts</li>
           <li>Parse integrity checklist (rules always; AI when configured)</li>
           <li>Which analyses may not run until Setup is complete</li>
@@ -229,8 +231,9 @@ export function UploadIntelligencePanel({
           <div className="rounded-xl border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] p-3.5 lg:col-span-2 lg:p-4">
             <p className="font-display text-sm font-semibold text-[color:var(--pic-text)]">Signals by hierarchy (job total)</p>
             <p className="mt-1 text-xs text-[color:var(--pic-text-muted)]">
-              A metric lights a level only when that level is in play (level ID or confirmed device type) —
-              inverter DC does not mark SCB/string. Green = confirmed; blue ≈ mapped at this level (type TBD).
+              Shown only at levels present in this file (level ID, wide header tokens, or confirmed
+              device type) — inverter DC does not mark SCB/string. Green = confirmed; blue ≈ mapped
+              at this level (type TBD).
             </p>
             <div className="mt-3">
               <SignalChips levels={hierarchy} />
@@ -256,7 +259,7 @@ export function UploadIntelligencePanel({
       <div className="rounded-xl border border-[color:var(--pic-border)] bg-[color:var(--pic-surface-raised)] p-4">
         <p className="font-display text-sm font-semibold text-[color:var(--pic-text)]">Signals by hierarchy</p>
         <p className="mt-1 text-xs text-[color:var(--pic-text-muted)]">
-          Metrics appear under a level only when that level has ID or device-type evidence.
+          Shown only at levels present in this file.
         </p>
         <div className="mt-3">
           <SignalChips levels={hierarchy} />

@@ -640,13 +640,6 @@ def _build_upload_response(
 
     plant = (job.plant_config_json or {}).get("plant") if job.plant_config_json else None
     checklist = signal_checklist(suggestions, plant_config=plant or {})
-    intelligence = build_upload_intelligence(
-        suggestions=suggestions,
-        plant_config=plant,
-        csv_path=csv_path,
-        file_inventory=file_inv,
-    )
-    file_inv = intelligence["file_inventory"]
 
     reshape_report = None
     reshape_path = paths.raw_dir / "wide_reshape_report.json"
@@ -655,6 +648,32 @@ def _build_upload_response(
             reshape_report = json.loads(reshape_path.read_text(encoding="utf-8"))
         except Exception:  # noqa: BLE001
             reshape_report = None
+
+    # Prefer live inventory from post-reshape input.csv when manifest was snapshotted pre-melt.
+    if reshape_report and reshape_report.get("reshaped") and csv_path.exists():
+        try:
+            from backend.app.services.upload_inventory import inventory_item_from_csv
+
+            live = inventory_item_from_csv(
+                csv_path, display_name=job.original_filename or csv_path.name
+            )
+            if file_inv:
+                live["filename"] = file_inv[0].get("filename") or live["filename"]
+            file_inv = [live]
+            if reshape_report.get("row_count"):
+                total_rows = int(reshape_report["row_count"]) or total_rows
+        except Exception:  # noqa: BLE001
+            logger.exception("post-reshape inventory refresh failed job=%s", job.id)
+
+    intelligence = build_upload_intelligence(
+        suggestions=suggestions,
+        plant_config=plant,
+        csv_path=csv_path,
+        file_inventory=file_inv,
+        reshape_report=reshape_report,
+        column_names=columns,
+    )
+    file_inv = intelligence["file_inventory"]
 
     assist_hints = [
         {
@@ -678,7 +697,7 @@ def _build_upload_response(
         extra_mapping_hints=assist_hints,
         parse_assist_meta={
             k: parse_assist_meta.get(k)
-            for k in ("attempted", "applied", "model", "error", "provider")
+            for k in ("attempted", "applied", "model", "error", "provider", "status")
         },
     )
     job.upload_integrity_json = upload_check

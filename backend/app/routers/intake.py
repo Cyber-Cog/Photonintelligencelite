@@ -5,6 +5,7 @@ backend/app/services/validation_service.py). See docs/PRD.md §7.3, §7.5, §7.6
 """
 from __future__ import annotations
 
+import json
 import logging
 import shutil
 
@@ -528,11 +529,22 @@ def get_setup_context(
             total_rows = 0
 
     checklist = signal_checklist(suggestions, plant_config=plant or {})
+
+    reshape_report = None
+    reshape_path = paths.raw_dir / "wide_reshape_report.json"
+    if reshape_path.exists():
+        try:
+            reshape_report = json.loads(reshape_path.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001
+            reshape_report = None
+
     intelligence = build_upload_intelligence(
         suggestions=suggestions,
         plant_config=plant,
         csv_path=csv_path,
         file_inventory=file_inv,
+        reshape_report=reshape_report,
+        column_names=columns,
     )
     file_inv = intelligence["file_inventory"]
 

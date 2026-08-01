@@ -821,7 +821,7 @@ export function SetupPage() {
                     const isAuto =
                       s.band === "auto" && !isGarbageHeader(s.column_name) && s.canonical_field !== "timestamp";
                     const levelId =
-                      inferMappingHierarchyLevel(mappedAs, companionCanonicalFields) ||
+                      inferMappingHierarchyLevel(mappedAs, companionCanonicalFields, s.column_name) ||
                       s.hierarchy_level ||
                       null;
                     const levelBadge =

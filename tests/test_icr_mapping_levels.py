@@ -115,3 +115,13 @@ def test_mapping_metric_without_companion_has_no_multi_badge():
     assert label is None
     levels = column_hierarchy_from_mapping({"Timestamp": "timestamp", "DC Current": "dc_current_a"})
     assert "DC Current" not in levels
+
+
+def test_wide_header_metric_labeled_inverter_without_companion_column():
+    level, label = infer_hierarchy_level(
+        "dc_current_a",
+        column_name="ESSP_20MW ICR1 Inverter 1 DC Current (A)",
+        companion_fields={"timestamp", "dc_current_a"},
+    )
+    assert level == "inverter"
+    assert label == "Inverter"

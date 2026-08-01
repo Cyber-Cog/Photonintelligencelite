@@ -225,7 +225,11 @@ def merge_ai_mappings_into_suggestions(
     *,
     min_confidence: float = APPLY_CONFIDENCE,
 ) -> tuple[list[ColumnMappingSuggestion], int]:
-    """Overlay high-confidence AI proposals onto heuristic suggestions. Returns (list, applied_n)."""
+    """Overlay high-confidence AI proposals onto heuristic suggestions. Returns (list, applied_n).
+
+    Never clears a medium-or-better heuristic mapping. ``ignore`` proposals only apply when
+    the heuristic left the column unmapped.
+    """
     by_col = {p["column_name"]: p for p in proposals if p.get("column_name")}
     applied = 0
     out: list[ColumnMappingSuggestion] = []
@@ -238,6 +242,10 @@ def merge_ai_mappings_into_suggestions(
         field = p.get("canonical_field")
         # Only fill gaps / weak heuristic bands — never overwrite exact alias (conf 1.0 auto).
         if s.confidence >= HIGH_CONFIDENCE and s.canonical_field and s.band == "auto":
+            out.append(s)
+            continue
+        # Never blank a usable heuristic mapping with AI ignore / junk.
+        if field in (None, "", "ignore") and s.canonical_field and s.confidence >= MEDIUM_CONFIDENCE:
             out.append(s)
             continue
         if conf < min_confidence or not field:
@@ -253,7 +261,7 @@ def merge_ai_mappings_into_suggestions(
         out.append(
             ColumnMappingSuggestion(
                 column_name=s.column_name,
-                canonical_field=field if field != "ignore" else None,
+                canonical_field=None if field == "ignore" else field,
                 confidence=conf,
                 band="manual" if field == "ignore" else band,
                 field_type=s.field_type,
@@ -274,7 +282,10 @@ def run_parse_assist(
     original_filename: str | None = None,
     force: bool = False,
 ) -> tuple[list[ColumnMappingSuggestion], dict[str, Any]]:
-    """After heuristics: optionally call Gemini and merge. Returns (suggestions, meta)."""
+    """After heuristics: optionally call Gemini and merge. Returns (suggestions, meta).
+
+    Best-effort only — on any failure, original heuristic suggestions are kept.
+    """
     meta: dict[str, Any] = {
         "attempted": False,
         "applied": 0,
@@ -282,27 +293,47 @@ def run_parse_assist(
         "model": None,
         "error": None,
         "provider": None,
+        "status": "skipped",
     }
     if not gemini_configured(settings):
+        meta["status"] = "not_configured"
         return suggestions, meta
     if not force and not needs_parse_assist(suggestions, columns):
+        meta["status"] = "not_needed"
         return suggestions, meta
 
     meta["attempted"] = True
-    proposals, model, err = propose_mappings_via_gemini(
-        settings,
-        suggestions=suggestions,
-        columns=columns,
-        original_filename=original_filename,
-    )
+    meta["status"] = "attempted"
+    try:
+        proposals, model, err = propose_mappings_via_gemini(
+            settings,
+            suggestions=suggestions,
+            columns=columns,
+            original_filename=original_filename,
+        )
+    except Exception as exc:  # noqa: BLE001
+        meta["error"] = f"{type(exc).__name__}: {exc}"[:300]
+        meta["status"] = "error"
+        logger.warning("parse-assist Gemini exception: %s", meta["error"])
+        return suggestions, meta
+
     meta["model"] = model
     meta["provider"] = "gemini"
     if err:
         meta["error"] = err
+        meta["status"] = "error"
         logger.warning("parse-assist Gemini failed: %s", err[:200])
         return suggestions, meta
 
-    merged, applied = merge_ai_mappings_into_suggestions(suggestions, proposals)
+    try:
+        merged, applied = merge_ai_mappings_into_suggestions(suggestions, proposals)
+    except Exception as exc:  # noqa: BLE001
+        meta["error"] = f"merge:{type(exc).__name__}: {exc}"[:300]
+        meta["status"] = "error"
+        logger.warning("parse-assist merge failed: %s", meta["error"])
+        return suggestions, meta
+
     meta["applied"] = applied
     meta["proposals"] = proposals
+    meta["status"] = "applied" if applied else "no_proposals"
     return merged, meta

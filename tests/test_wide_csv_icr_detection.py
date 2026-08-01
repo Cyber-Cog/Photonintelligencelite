@@ -237,9 +237,55 @@ def test_upload_integrity_flags_only_timestamp(tmp_path: Path):
 def test_real_trendreport_download_uat(tmp_path: Path):
     dst = tmp_path / "real.csv"
     dst.write_bytes(REAL_DOWNLOAD.read_bytes())
+
+    # Pre-melt: intelligence must already be non-blank from wide header provenance
+    cols_pre = read_header(dst)
+    sug_pre = suggest_mapping(cols_pre)
+    intel_pre = build_upload_intelligence(
+        suggestions=sug_pre, plant_config=None, csv_path=dst, column_names=cols_pre
+    )
+    inv_pre = next(h for h in intel_pre["hierarchy_overview"] if h["level_id"] == "inverter")
+    scb_pre = next(h for h in intel_pre["hierarchy_overview"] if h["level_id"] == "scb")
+    inv_pre_by = {s["id"]: s for s in inv_pre["signals"]}
+    assert inv_pre["detected_count"] >= 4
+    assert inv_pre_by["dc_current_a"]["present"] is True
+    assert scb_pre["detected_count"] == 0
+    assert intel_pre["architecture_summary"]["detected"] is True
+    assert intel_pre["architecture_summary"]["inverter_count"] == 12
+    assert intel_pre["architecture_summary"]["scb_count"] == 0
+
     rep = maybe_reshape_wide_csv(dst)
     assert rep.reshaped
     assert len(rep.inverters_found) == 12
     sug = suggest_mapping(read_header(dst))
     fields = {s.canonical_field for s in sug if s.canonical_field}
     assert {"timestamp", "device_id", "icr_id", "ac_power_kw", "dc_current_a", "dc_voltage_v"} <= fields
+    intel = build_upload_intelligence(
+        suggestions=sug,
+        plant_config=None,
+        csv_path=dst,
+        reshape_report=rep.to_dict(),
+        column_names=read_header(dst),
+    )
+    inv = next(h for h in intel["hierarchy_overview"] if h["level_id"] == "inverter")
+    scb = next(h for h in intel["hierarchy_overview"] if h["level_id"] == "scb")
+    assert {s["id"] for s in inv["signals"] if s["present"]} >= {
+        "inverter_id",
+        "ac_power_kw",
+        "dc_current_a",
+        "dc_voltage_v",
+    }
+    assert next(s for s in scb["signals"] if s["id"] == "dc_current_a")["present"] is False
+    assert intel["architecture_summary"]["inverter_count"] == 12
+    assert intel["architecture_summary"]["scb_count"] == 0
+    blocked = {m["algorithm_id"] for m in intel["module_impact_preview"]["blocked_modules"]}
+    assert "module_damage" in blocked
+
+
+def test_wide_column_mapping_badge_is_inverter():
+    col = "ESSP_20MW ICR1 Inverter 3 DC Current (A)"
+    sug = suggest_mapping([col, "timestamp"], pack_match=False)
+    by = {s.column_name: s for s in sug}
+    assert by[col].canonical_field == "dc_current_a"
+    assert by[col].hierarchy_level == "inverter"
+    assert by[col].hierarchy_level_label == "Inverter"

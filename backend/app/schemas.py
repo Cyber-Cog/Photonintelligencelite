@@ -88,6 +88,8 @@ class UploadFileInventoryItem(BaseModel):
     unmapped_column_count: int = 0
     date_range_start: Optional[str] = None
     date_range_end: Optional[str] = None
+    # Optional: retained for hierarchy rebuild; not shown in UI
+    column_names: list[str] = Field(default_factory=list)
 
 
 class UploadSignalCheckItem(BaseModel):

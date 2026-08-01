@@ -50,18 +50,35 @@ const MULTI_METRICS = new Set([
   "energy_kwh",
 ]);
 
+/** Best-effort wide header → hierarchy (mirrors analytics.common.wide_headers). */
+function levelFromWideColumnName(columnName: string | null | undefined): string | null {
+  if (!columnName) return null;
+  const n = columnName.trim();
+  if (!n) return null;
+  // ICR + Inverter → inverter
+  if (/ICR[\s_\-]?\d+[\s_\-]+(?:INV(?:ERTER)?[\s_\-\.]*)\d+/i.test(n)) return "inverter";
+  if (/(?:INV(?:ERTER)?[\s_\-\.]*)\d+/i.test(n) && !/(?:SCB|SMB|STR(?:ING)?)/i.test(n)) return "inverter";
+  if (/(?:SCB|SMB)[\s_\-]?\d+/i.test(n) && /STR(?:ING)?/i.test(n)) return "string";
+  if (/(?:SCB|SMB)[\s_\-]?\d+/i.test(n)) return "scb";
+  if (/^ICR[\s_\-]?\d+$/i.test(n)) return "icr";
+  return null;
+}
+
 /** Infer hierarchy badge from the live mapping dict (updates as the user edits selects). */
 export function inferMappingHierarchyLevel(
   canonicalField: string | null | undefined,
   companionFields: Set<string>,
+  columnName?: string | null,
 ): string | null {
   if (!canonicalField || canonicalField === "ignore") return null;
   if (IDENTITY_LEVEL[canonicalField]) return IDENTITY_LEVEL[canonicalField];
   if (!MULTI_METRICS.has(canonicalField)) return null;
+  const fromHeader = levelFromWideColumnName(columnName);
+  if (fromHeader) return fromHeader;
   if (companionFields.has("string_id")) return "string";
   if (companionFields.has("scb_id")) return "scb";
   if (companionFields.has("inverter_id")) return "inverter";
-  if companionFields.has("device_id")) return "equipment";
+  if (companionFields.has("device_id")) return "equipment";
   if (companionFields.has("icr_id") && canonicalField === "ac_power_kw") return "inverter";
   // No companion identity — do not claim multi-level without evidence
   return null;

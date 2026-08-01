@@ -42,6 +42,55 @@ def test_hierarchy_levels_group_by_plant_inverter_scb():
     assert _signal(scb, "dc_voltage_v")["present"] is False
 
 
+def test_hierarchy_wide_headers_without_device_id_column():
+    """Pre-melt trendreport: INV header tokens must light inverter (not SCB/string)."""
+    present = {"timestamp", "ac_power_kw", "dc_current_a", "dc_voltage_v"}
+    cols = [
+        "timestamp",
+        "ESSP_20MW ICR1 Inverter 1 Active Power (kW)",
+        "ESSP_20MW ICR1 Inverter 1 DC Current (A)",
+        "ESSP_20MW ICR1 Inverter 1 DC Bus Voltage (V)",
+        "ESSP_20MW ICR2 Inverter 2 Active Power (kW)",
+    ]
+    levels = build_hierarchy_levels(present, column_names=cols)
+    plant = next(l for l in levels if l["level_id"] == "plant_wms")
+    icr = next(l for l in levels if l["level_id"] == "icr")
+    inv = next(l for l in levels if l["level_id"] == "inverter")
+    scb = next(l for l in levels if l["level_id"] == "scb")
+    string = next(l for l in levels if l["level_id"] == "string")
+
+    assert _signal(plant, "timestamp")["present"] is True
+    # Equipment evidence from headers → plant AC must not steal inverter power
+    assert _signal(plant, "ac_power_kw")["present"] is False
+    assert _signal(icr, "icr_id")["present"] is True
+    assert _signal(icr, "icr_id")["evidence"] == "mapped_level_tbd"
+    assert _signal(inv, "inverter_id")["present"] is True
+    assert _signal(inv, "ac_power_kw")["present"] is True
+    assert _signal(inv, "dc_current_a")["present"] is True
+    assert _signal(inv, "dc_voltage_v")["present"] is True
+    assert _signal(scb, "dc_current_a")["present"] is False
+    assert _signal(string, "dc_current_a")["present"] is False
+
+    intel = build_upload_intelligence(
+        suggestions=[
+            type("S", (), {"column_name": c, "canonical_field": f})()
+            for c, f in [
+                (cols[0], "timestamp"),
+                (cols[1], "ac_power_kw"),
+                (cols[2], "dc_current_a"),
+                (cols[3], "dc_voltage_v"),
+                (cols[4], "ac_power_kw"),
+            ]
+        ],
+        plant_config={},
+        csv_path=None,
+        column_names=cols,
+    )
+    assert intel["architecture_summary"]["detected"] is True
+    assert intel["architecture_summary"]["inverter_count"] >= 2
+    assert intel["architecture_summary"]["scb_count"] == 0
+    assert intel["architecture_summary"]["source"] == "wide_headers"
+
 def test_hierarchy_scb_metrics_require_scb_id_companion():
     """With scb_id present, SCB DC may show mapped_level_tbd; inverter still OK via device_id."""
     present = {

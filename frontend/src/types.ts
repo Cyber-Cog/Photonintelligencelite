@@ -88,6 +88,7 @@ export interface UploadFileInventoryItem {
   unmapped_column_count: number;
   date_range_start?: string | null;
   date_range_end?: string | null;
+  column_names?: string[];
 }
 
 export interface UploadSignalCheckItem {

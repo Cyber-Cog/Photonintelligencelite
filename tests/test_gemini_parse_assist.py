@@ -64,6 +64,28 @@ def test_merge_high_confidence_only():
     assert by["DateTime"].canonical_field == "timestamp"  # exact heuristic kept
 
 
+def test_merge_ai_ignore_does_not_blank_heuristic():
+    sug = [
+        ColumnMappingSuggestion(
+            column_name="ESSP ICR1 Inverter 1 Active Power (kW)",
+            canonical_field="ac_power_kw",
+            confidence=0.95,
+            band="confirm",
+        ),
+    ]
+    merged, n = merge_ai_mappings_into_suggestions(
+        sug,
+        [
+            {
+                "column_name": "ESSP ICR1 Inverter 1 Active Power (kW)",
+                "canonical_field": "ignore",
+                "confidence": 0.99,
+            }
+        ],
+    )
+    assert n == 0
+    assert merged[0].canonical_field == "ac_power_kw"
+
 def test_call_gemini_json_mocked(monkeypatch):
     settings = _settings(monkeypatch, GEMINI_API_KEY="AQ.test")
 

@@ -4,13 +4,16 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Optional
 
+from analytics.common.equipment_ids import derive_level
 from analytics.common.plant_structure import DetectedStructure, infer_from_csv
 from analytics.common.prerequisites import ALGORITHM_PREREQUISITES, evaluate_prerequisites
+from analytics.common.wide_headers import parse_wide_device_column
 
 # Identity fields stay level-specific. Measurements may exist at multiple SCADA levels
 # in real plants, but the upload matrix only lights a level when that level is in play
-# (companion ID or confirmed device_type) — never because the same column exists elsewhere.
-# SCB/string IDs must not inherit device_id (false greens). ICR is optional.
+# (companion ID, wide-header provenance, or confirmed device_type) — never because the
+# same canonical column exists elsewhere. SCB/string IDs must not inherit device_id
+# (false greens). ICR is optional.
 _OPTIONAL_LEVEL_IDS = frozenset({"icr"})
 
 # Evidence kinds for matrix chips
@@ -32,6 +35,14 @@ _LEVEL_COMPANION_IDS: dict[str, tuple[str, ...]] = {
     "inverter": ("inverter_id", "device_id"),
     "scb": ("scb_id",),
     "string": ("string_id",),
+}
+
+# Wide historian headers (pre-melt) imply identity companions for matrix gating only.
+_WIDE_LEVEL_TO_COMPANION: dict[str, str] = {
+    "inverter": "device_id",
+    "scb": "scb_id",
+    "string": "string_id",
+    "icr": "icr_id",
 }
 
 _EQUIPMENT_IDENTITY_FIELDS = frozenset({"device_id", "inverter_id", "scb_id", "string_id", "icr_id"})
@@ -146,6 +157,67 @@ def _has_equipment_identity(fields: set[str]) -> bool:
     return bool(fields & _EQUIPMENT_IDENTITY_FIELDS)
 
 
+def _column_names_from_suggestions(suggestions: Iterable[Any] | None) -> list[str]:
+    cols: list[str] = []
+    for s in suggestions or []:
+        col = getattr(s, "column_name", None) or (s.get("column_name") if isinstance(s, dict) else None)
+        if col:
+            cols.append(str(col))
+    return cols
+
+
+def companion_boosts_from_wide_columns(column_names: Iterable[str] | None) -> set[str]:
+    """Synthetic identity companions implied by wide device×metric headers (pre-melt).
+
+    Example: ``ESSP_20MW ICR1 Inverter 1 DC Current (A)`` → boosts ``device_id`` + ``icr_id``
+    so inverter measurements light at upload suggestion time without waiting for melt.
+    Does **not** boost SCB/string from inverter-only headers.
+    """
+    boosts: set[str] = set()
+    for col in column_names or []:
+        parsed = parse_wide_device_column(str(col))
+        if parsed is None or not parsed.equipment_id:
+            continue
+        level = derive_level(parsed.equipment_id)
+        companion = _WIDE_LEVEL_TO_COMPANION.get(level or "")
+        if companion:
+            boosts.add(companion)
+        if parsed.icr_id:
+            boosts.add("icr_id")
+    return boosts
+
+
+def architecture_counts_from_wide_columns(
+    column_names: Iterable[str] | None,
+) -> tuple[int, int, int, list[str]]:
+    """Count unique INV/SCB/string ids encoded in wide column headers."""
+    invs: set[str] = set()
+    scbs: set[str] = set()
+    strings: set[str] = set()
+    icrs: set[str] = set()
+    for col in column_names or []:
+        parsed = parse_wide_device_column(str(col))
+        if parsed is None or not parsed.equipment_id:
+            continue
+        level = derive_level(parsed.equipment_id)
+        if level == "inverter":
+            invs.add(parsed.equipment_id)
+        elif level == "scb":
+            scbs.add(parsed.equipment_id)
+        elif level == "string":
+            strings.add(parsed.equipment_id)
+        if parsed.icr_id:
+            icrs.add(parsed.icr_id)
+    notes: list[str] = []
+    if invs:
+        notes.append(
+            f"From wide column headers: {len(invs)} inverter(s)"
+            + (f", {len(icrs)} ICR(s)" if icrs else "")
+            + "."
+        )
+    return len(invs), len(scbs), len(strings), notes
+
+
 def _measurement_in_play_at_level(
     field_id: str,
     level_id: str,
@@ -156,7 +228,7 @@ def _measurement_in_play_at_level(
 
     Evidence ladder (without claiming cross-level presence):
     - confirmed device_type rows (handled by caller), or
-    - companion level ID present (mapped_level_tbd until Validate), or
+    - companion level ID present — including wide-header boosts (mapped_level_tbd), or
     - plant-native weather fields, or
     - plant AC/DC only when plant/WMS typed OR no equipment IDs (aggregate file).
     """
@@ -181,23 +253,27 @@ def build_hierarchy_levels(
     *,
     show_empty_optional: bool = False,
     by_device_type: Mapping[str, Iterable[str]] | None = None,
+    column_names: Iterable[str] | None = None,
 ) -> list[dict[str, Any]]:
     """Per-hierarchy signal matrix from detected canonical fields.
 
     A measurement is present at a level only when that level is in play
-    (companion ID or confirmed ``device_type``), not merely because the same
-    canonical column exists on another level. ``mapped_level_tbd`` is used only
-    when a level ID companion exists but device_type is not yet confirmed.
+    (companion ID, wide-header provenance, or confirmed ``device_type``), not merely
+    because the same canonical column exists on another level. ``mapped_level_tbd``
+    is used when a level is implied but device_type is not yet confirmed.
 
     Optional levels (ICR) are omitted when none of their signals are present.
     """
     fields = {str(f) for f in present if f}
+    wide_boosts = companion_boosts_from_wide_columns(column_names)
+    play_fields = fields | wide_boosts
     typed = _normalize_by_device_type(by_device_type)
     levels: list[dict[str, Any]] = []
     for level_id, title, signals in _HIERARCHY_LEVELS:
         items: list[dict[str, Any]] = []
         for field_id, label, alts, kind in signals:
             ok, via = _field_present(field_id, alts, fields)
+            ok_play, via_play = _field_present(field_id, alts, play_fields)
             confirmed_via = _confirmed_at_level(field_id, alts, level_id, typed)
             if confirmed_via:
                 evidence = _EVIDENCE_CONFIRMED
@@ -206,10 +282,15 @@ def build_hierarchy_levels(
             elif kind == "identity" and ok:
                 evidence = _EVIDENCE_CONFIRMED
                 present_flag = True
+            elif kind == "identity" and ok_play and not ok:
+                # Wide-header implied identity (e.g. INV tokens before melt → device_id)
+                evidence = _EVIDENCE_MAPPED_TBD
+                present_flag = True
+                via = via_play or "wide_header"
             elif kind == "measurement" and ok and _measurement_in_play_at_level(
-                field_id, level_id, fields, typed
+                field_id, level_id, play_fields, typed
             ):
-                # Level companion / plant-native evidence without device_type yet
+                # Level companion / wide provenance / plant-native without device_type yet
                 evidence = _EVIDENCE_MAPPED_TBD
                 present_flag = True
             else:
@@ -304,13 +385,16 @@ def build_architecture_summary(
     plant_config: Mapping[str, Any] | None,
     csv_path: Path | None,
     suggestions: Iterable[Any],
+    reshape_report: Mapping[str, Any] | None = None,
+    column_names: Iterable[str] | None = None,
 ) -> dict[str, Any]:
-    """Architecture snapshot for Upload review — pack import preferred, else CSV inference."""
+    """Architecture snapshot for Upload review — pack import preferred, else CSV / wide headers."""
     plant = plant_config or {}
     inv_n, scb_n, str_n = _counts_from_plant_architecture(plant)
     notes: list[str] = []
     source = "not_detected"
     detected = False
+    cols = list(column_names) if column_names is not None else _column_names_from_suggestions(suggestions)
 
     if scb_n > 0 or inv_n > 0:
         detected = True
@@ -320,6 +404,20 @@ def build_architecture_summary(
             + (f", {str_n} string slot(s)" if str_n else "")
             + "."
         )
+    elif reshape_report and reshape_report.get("reshaped"):
+        invs = list(reshape_report.get("inverters_found") or [])
+        inv_n = len(invs)
+        scb_n = 0
+        str_n = 0
+        if inv_n > 0:
+            detected = True
+            source = "wide_reshape"
+            icr_n = len(reshape_report.get("icr_ids") or [])
+            notes.append(
+                f"From wide reshape: {inv_n} inverter(s)"
+                + (f", {icr_n} ICR(s)" if icr_n else "")
+                + "."
+            )
     elif csv_path and csv_path.exists():
         mapping = _suggestions_to_mapping(suggestions)
         structure = infer_from_csv(csv_path, mapping)
@@ -327,7 +425,15 @@ def build_architecture_summary(
         if structure.detected:
             detected = True
             source = structure.source or "detected_from_ids"
-        notes.extend(structure.notes or [])
+            notes.extend(structure.notes or [])
+
+    if not detected:
+        w_inv, w_scb, w_str, w_notes = architecture_counts_from_wide_columns(cols)
+        if w_inv > 0 or w_scb > 0 or w_str > 0:
+            detected = True
+            source = "wide_headers"
+            inv_n, scb_n, str_n = w_inv, w_scb, w_str
+            notes = list(w_notes)
 
     return {
         "detected": detected,
@@ -486,11 +592,14 @@ def enrich_file_inventory_item(
     item: dict[str, Any],
     *,
     by_device_type: Mapping[str, Iterable[str]] | None = None,
+    column_names: Iterable[str] | None = None,
 ) -> dict[str, Any]:
-    """Ensure per-file hierarchy matrix exists (rebuild from signals_present when missing)."""
-    if not item.get("hierarchy_levels"):
-        present = item.get("signals_present") or []
-        item["hierarchy_levels"] = build_hierarchy_levels(present, by_device_type=by_device_type)
+    """Rebuild per-file hierarchy matrix from signals_present + wide column provenance."""
+    cols = list(column_names) if column_names is not None else list(item.get("column_names") or [])
+    present = item.get("signals_present") or []
+    item["hierarchy_levels"] = build_hierarchy_levels(
+        present, by_device_type=by_device_type, column_names=cols or None
+    )
     return item
 
 
@@ -501,16 +610,22 @@ def build_upload_intelligence(
     csv_path: Path | None,
     file_inventory: list[dict[str, Any]] | None = None,
     by_device_type: Mapping[str, Iterable[str]] | None = None,
+    reshape_report: Mapping[str, Any] | None = None,
+    column_names: Iterable[str] | None = None,
 ) -> dict[str, Any]:
     """Job-level upload intelligence bundle for API responses."""
-    present = _present_from_suggestions(suggestions)
+    sug_list = list(suggestions)
+    present = _present_from_suggestions(sug_list)
+    cols = list(column_names) if column_names is not None else _column_names_from_suggestions(sug_list)
     arch = build_architecture_summary(
         plant_config=plant_config,
         csv_path=csv_path,
-        suggestions=suggestions,
+        suggestions=sug_list,
+        reshape_report=reshape_report,
+        column_names=cols,
     )
     impact = build_module_impact_preview(
-        suggestions=suggestions,
+        suggestions=sug_list,
         plant_config=plant_config,
         architecture_summary=arch,
     )
@@ -518,7 +633,9 @@ def build_upload_intelligence(
         enrich_file_inventory_item(dict(f), by_device_type=by_device_type) for f in (file_inventory or [])
     ]
     return {
-        "hierarchy_overview": build_hierarchy_levels(present, by_device_type=by_device_type),
+        "hierarchy_overview": build_hierarchy_levels(
+            present, by_device_type=by_device_type, column_names=cols
+        ),
         "architecture_summary": arch,
         "module_impact_preview": impact,
         "file_inventory": inventory,
