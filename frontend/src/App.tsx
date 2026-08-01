@@ -1,6 +1,6 @@
 import { lazy, Suspense } from "react";
 import { Route, Routes } from "react-router-dom";
-import { Layout } from "@/components/Layout";
+import { AppLayout } from "@/components/AppLayout";
 import { RequireAuth } from "@/components/RequireAuth";
 import { Spinner } from "@/components/ui/Spinner";
 import { LandingPage } from "@/pages/LandingPage";
@@ -51,7 +51,7 @@ function RouteFallback() {
 
 export default function App() {
   return (
-    <Layout>
+    <AppLayout>
       <Suspense fallback={<RouteFallback />}>
         <Routes>
           <Route path="/" element={<LandingPage />} />
@@ -81,6 +81,6 @@ export default function App() {
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </Suspense>
-    </Layout>
+    </AppLayout>
   );
 }
