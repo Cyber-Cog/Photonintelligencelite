@@ -140,6 +140,8 @@ class MappingSubmission(BaseModel):
     job_id: str
     column_to_canonical: dict[str, str]
     """Final mapping (auto + confirmed + manually assigned). "ignore" is a valid target."""
+    column_hierarchy_levels: dict[str, str] | None = None
+    """Optional per-column hierarchy overrides from Excel mapping UI (plant/icr/inverter/scb/string)."""
 
 
 class ArchitectureEntry(BaseModel):

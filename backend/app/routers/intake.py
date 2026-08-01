@@ -238,7 +238,11 @@ def submit_mapping(
     columns = list(payload.column_to_canonical.keys())
     save_template(db, columns, payload.column_to_canonical)
 
-    job.mapping_json = mapping_payload(payload.column_to_canonical, timestamp_col=ts_col)
+    job.mapping_json = mapping_payload(
+        payload.column_to_canonical,
+        timestamp_col=ts_col,
+        column_hierarchy_levels=payload.column_hierarchy_levels,
+    )
     job.state = JobState.MAPPING.value
     job.error_summary = None
     if not revised:

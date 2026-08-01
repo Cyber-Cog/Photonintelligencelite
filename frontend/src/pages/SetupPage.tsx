@@ -10,6 +10,7 @@ import {
   submitPlantConfig,
 } from "@/api/client";
 import { EquipmentStructurePanel } from "@/components/EquipmentStructurePanel";
+import { ExcelMappingModal } from "@/components/ExcelMappingModal";
 import { StepIndicator } from "@/components/StepIndicator";
 import { Badge } from "@/components/ui/Badge";
 import { InfoBanner } from "@/components/ui/InfoBanner";
@@ -19,7 +20,14 @@ import { Spinner } from "@/components/ui/Spinner";
 import { SubnavTabs } from "@/components/ui/SubnavTabs";
 import { useJob } from "@/context/JobContext";
 import { useWorkflowTransition } from "@/context/WorkflowTransitionContext";
-import { CANONICAL_FIELD_OPTIONS, HIERARCHY_LEVEL_BADGE, inferMappingHierarchyLevel, MODULE_TECHNOLOGY_OPTIONS, PLANT_TYPE_OPTIONS } from "@/lib/canonicalFields";
+import {
+  CANONICAL_FIELD_OPTIONS,
+  HIERARCHY_LEVEL_BADGE,
+  inferMappingHierarchyLevel,
+  MODULE_TECHNOLOGY_OPTIONS,
+  PLANT_TYPE_OPTIONS,
+} from "@/lib/canonicalFields";
+import { HIERARCHY_LEVEL_OPTIONS } from "@/lib/mappingExcel";
 import { checkSetupCapacityConsistency } from "@/lib/capacityConsistency";
 import {
   buildRatingsAndArchitecture,
@@ -166,6 +174,8 @@ export function SetupPage() {
   const [flashField, setFlashField] = useState<string | null>(null);
   const [activeStep, setActiveStep] = useState<SetupStep>("mapping");
   const [showAutoMapped, setShowAutoMapped] = useState(false);
+  const [excelMappingOpen, setExcelMappingOpen] = useState(false);
+  const [hierarchyLevels, setHierarchyLevels] = useState<Record<string, string>>({});
   const [architectureEditorOpen, setArchitectureEditorOpen] = useState(false);
   const [looksLikePack, setLooksLikePack] = useState<boolean | null>(
     () => uploadInfo?.looks_like_complete_pack ?? null,
@@ -581,7 +591,7 @@ export function SetupPage() {
     setFieldErrors({});
     try {
       await runWithTransition("to-validate", async () => {
-        await submitMapping(jobId, mapping);
+        await submitMapping(jobId, mapping, hierarchyLevels);
         const { modules_per_string: _mps, ...plantPayload } = plant;
         await submitPlantConfig({
           job_id: jobId,
@@ -807,6 +817,15 @@ export function SetupPage() {
                       : "")
                   : `${allColumns.length} detected column${allColumns.length === 1 ? "" : "s"}`
               }
+              actions={
+                <button
+                  type="button"
+                  className="btn-secondary text-xs"
+                  onClick={() => setExcelMappingOpen(true)}
+                >
+                  Open Excel mapping
+                </button>
+              }
             >
               {fieldErrors.timestamp && (
                 <p className="mb-3 text-xs font-medium text-amber-800 dark:text-amber-200" role="alert">
@@ -821,6 +840,7 @@ export function SetupPage() {
                     const isAuto =
                       s.band === "auto" && !isGarbageHeader(s.column_name) && s.canonical_field !== "timestamp";
                     const levelId =
+                      hierarchyLevels[s.column_name] ||
                       inferMappingHierarchyLevel(mappedAs, companionCanonicalFields, s.column_name) ||
                       s.hierarchy_level ||
                       null;
@@ -864,14 +884,49 @@ export function SetupPage() {
                             {isGarbageHeader(s.column_name) && <Badge tone="danger">Broken header</Badge>}
                           </div>
                         </div>
-                        <select
+                        <div className="flex shrink-0 flex-wrap items-center gap-2">
+                          <select
+                            className="input max-w-[7.5rem] text-xs"
+                            aria-label={`Hierarchy level for ${s.column_name}`}
+                            disabled={!mappedAs || mappedAs === "ignore"}
+                            value={levelId ?? ""}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setHierarchyLevels((lv) => {
+                                const next = { ...lv };
+                                if (!v) delete next[s.column_name];
+                                else next[s.column_name] = v;
+                                return next;
+                              });
+                            }}
+                          >
+                            <option value="">Level</option>
+                            {HIERARCHY_LEVEL_OPTIONS.map((opt) => (
+                              <option key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </option>
+                            ))}
+                          </select>
+                          <select
                           className={`input max-w-xs ${invalid ? "border-amber-500 ring-2 ring-amber-400/70" : ""}`}
                           aria-invalid={invalid}
                           value={mapping[s.column_name] ?? "ignore"}
                           onChange={(e) => {
                             autoDetectDone.current = false;
                             clearFieldError("timestamp");
-                            setMapping((m) => ({ ...m, [s.column_name]: e.target.value }));
+                            const v = e.target.value;
+                            setMapping((m) => ({ ...m, [s.column_name]: v }));
+                            const inferred = inferMappingHierarchyLevel(
+                              v,
+                              companionCanonicalFields,
+                              s.column_name,
+                            );
+                            setHierarchyLevels((lv) => {
+                              const next = { ...lv };
+                              if (!v || v === "ignore") delete next[s.column_name];
+                              else if (inferred) next[s.column_name] = inferred;
+                              return next;
+                            });
                           }}
                         >
                           {CANONICAL_FIELD_OPTIONS.map((opt) => (
@@ -880,6 +935,7 @@ export function SetupPage() {
                             </option>
                           ))}
                         </select>
+                        </div>
                       </div>
                     );
                   },
@@ -898,6 +954,20 @@ export function SetupPage() {
               ) : null}
             </SectionPanel>
           )}
+          {excelMappingOpen ? (
+            <ExcelMappingModal
+              suggestions={allColumns}
+              mapping={mapping}
+              levels={hierarchyLevels}
+              onClose={() => setExcelMappingOpen(false)}
+              onApply={({ mapping: nextMap, levels: nextLevels }) => {
+                autoDetectDone.current = false;
+                setMapping(nextMap);
+                setHierarchyLevels(nextLevels);
+                setExcelMappingOpen(false);
+              }}
+            />
+          ) : null}
         </>
       )}
 

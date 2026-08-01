@@ -466,10 +466,18 @@ export function getFaultCategories() {
   return apiFetch<import("@/types").FaultCategoriesResponse>("/api/config/fault-categories");
 }
 
-export async function submitMapping(jobId: string, columnToCanonical: Record<string, string>) {
+export async function submitMapping(
+  jobId: string,
+  columnToCanonical: Record<string, string>,
+  columnHierarchyLevels?: Record<string, string>,
+) {
   return apiFetch<{ job_id: string; state: string }>("/api/mapping", {
     method: "POST",
-    body: JSON.stringify({ job_id: jobId, column_to_canonical: columnToCanonical }),
+    body: JSON.stringify({
+      job_id: jobId,
+      column_to_canonical: columnToCanonical,
+      ...(columnHierarchyLevels ? { column_hierarchy_levels: columnHierarchyLevels } : {}),
+    }),
   });
 }
 

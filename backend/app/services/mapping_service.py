@@ -147,12 +147,22 @@ def overlay_prior_mapping(
     return suggestions
 
 
-def mapping_payload(column_to_canonical: dict[str, str], *, timestamp_col: str | None = None) -> dict:
+def mapping_payload(
+    column_to_canonical: dict[str, str],
+    *,
+    timestamp_col: str | None = None,
+    column_hierarchy_levels: dict[str, str] | None = None,
+) -> dict:
     """Build jobs.mapping_json body including optional hierarchy provenance (non-breaking)."""
     cleaned = {c: f for c, f in column_to_canonical.items() if f and f != "ignore"}
+    inferred = column_hierarchy_from_mapping(cleaned)
+    if column_hierarchy_levels:
+        for col, level in column_hierarchy_levels.items():
+            if col in cleaned and level:
+                inferred[col] = str(level)
     return {
         "column_to_canonical": cleaned,
-        "column_hierarchy_levels": column_hierarchy_from_mapping(cleaned),
+        "column_hierarchy_levels": inferred,
         "confidence_by_column": {},
         "timestamp_column": timestamp_col or timestamp_column(cleaned),
         "detected_oem_signature": None,
