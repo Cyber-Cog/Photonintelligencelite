@@ -199,8 +199,8 @@ export function ResultsSidebar({
           <span />
         </div>
         <div className="min-w-0">
-          <p className="results-shell-brand-title">Results</p>
-          <p className="results-shell-brand-sub">Plant analysis</p>
+          <p className="results-shell-brand-title">PIC Lite</p>
+          <p className="results-shell-brand-sub">Plant overview</p>
         </div>
       </div>
 
