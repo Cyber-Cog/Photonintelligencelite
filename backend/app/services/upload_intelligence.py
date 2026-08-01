@@ -1,8 +1,9 @@
 """Upload review intelligence: multi-level hierarchy signal matrix, architecture, module impact."""
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Optional
+from typing import Any
 
 from analytics.common.equipment_ids import derive_level
 from analytics.common.plant_structure import DetectedStructure, infer_from_csv
@@ -180,7 +181,87 @@ def companion_boosts_from_reshape(reshape_report: Mapping[str, Any] | None) -> s
         boosts.add("device_id")
     if reshape_report.get("icr_ids"):
         boosts.add("icr_id")
+    # WMS melt notes / columns → plant-native fields stay in play for Plant / WMS chips.
+    mapped = {str(c) for c in (reshape_report.get("columns_mapped") or [])}
+    warnings = " ".join(str(w) for w in (reshape_report.get("warnings") or []))
+    if (
+        reshape_report.get("wms_ids")
+        or "GHI (W/m2)" in mapped
+        or "Irradiance (W/m2)" in mapped
+        or "WMS" in warnings
+    ):
+        boosts.add("device_id")
     return boosts
+
+
+def infer_by_device_type_from_csv(csv_path: Path | None) -> dict[str, set[str]] | None:
+    """Partition tidy long-form columns by Equipment ID → device_type.
+
+    After wide INV+WMS melts, GHI/POA live on ``device_type=wms`` rows while AC/DC
+    live on inverters. Upload hierarchy uses this to mark Plant/WMS irradiance as
+    confirmed (not merely column-mapped).
+    """
+    if csv_path is None or not Path(csv_path).exists():
+        return None
+    try:
+        import pandas as pd
+
+        from analytics.common.complete_analysis_pack import OFFICIAL_COLUMN_TO_CANONICAL
+
+        df = pd.read_csv(csv_path, nrows=80_000, low_memory=False)
+    except Exception:
+        return None
+
+    eq_col = next(
+        (c for c in ("Equipment ID", "equipment_id", "device_id") if c in df.columns),
+        None,
+    )
+    if eq_col is None or df.empty:
+        return None
+
+    col_to_canon: dict[str, str] = {}
+    for col in df.columns:
+        if col == eq_col:
+            col_to_canon[col] = "device_id"
+        elif col in OFFICIAL_COLUMN_TO_CANONICAL:
+            col_to_canon[col] = OFFICIAL_COLUMN_TO_CANONICAL[col]
+        elif col in {"ICR ID", "icr_id"}:
+            col_to_canon[col] = "icr_id"
+        elif col in {"Timestamp", "timestamp", "timestamp_utc"}:
+            col_to_canon[col] = "timestamp"
+
+    if len(col_to_canon) <= 1:
+        return None
+
+    by_type: dict[str, set[str]] = {}
+    for eid, group in df.groupby(eq_col, sort=False):
+        level = derive_level(eid)
+        if level is None:
+            el = str(eid).strip().lower()
+            if el in {"wms", "plant"} or el.endswith("-wms") or el.startswith("wms"):
+                level = "wms"
+            else:
+                level = "inverter"
+        populated = by_type.setdefault(level, set())
+        populated.add("device_id")
+        for col, canon in col_to_canon.items():
+            if canon == "device_id":
+                continue
+            if canon == "timestamp":
+                populated.add("timestamp")
+                continue
+            if col not in group.columns:
+                continue
+            series = group[col]
+            if canon in {"icr_id", "scb_id", "string_id", "inverter_id"}:
+                if series.fillna("").astype(str).str.strip().ne("").any():
+                    populated.add(canon)
+                continue
+            numeric = pd.to_numeric(series, errors="coerce")
+            if numeric.notna().any():
+                populated.add(canon)
+
+    return by_type or None
 
 
 def companion_boosts_from_wide_columns(column_names: Iterable[str] | None) -> set[str]:
@@ -676,6 +757,18 @@ def build_upload_intelligence(
     sug_list = list(suggestions)
     present = _present_from_suggestions(sug_list)
     cols = list(column_names) if column_names is not None else _column_names_from_suggestions(sug_list)
+    typed = by_device_type
+    if typed is None:
+        typed = infer_by_device_type_from_csv(csv_path)
+    # Ensure plant/WMS weather fields from typed partitions count as present for chips.
+    if typed:
+        for dtype in ("plant", "wms"):
+            for field in typed.get(dtype) or ():
+                if field and field != "ignore":
+                    present.add(str(field))
+        if "poa_w_m2" in present or "ghi_w_m2" in present:
+            present.add("poa_w_m2")
+            present.add("ghi_w_m2")
     arch = build_architecture_summary(
         plant_config=plant_config,
         csv_path=csv_path,
@@ -690,14 +783,14 @@ def build_upload_intelligence(
     )
     inventory = [
         enrich_file_inventory_item(
-            dict(f), by_device_type=by_device_type, column_names=f.get("column_names")
+            dict(f), by_device_type=typed, column_names=f.get("column_names")
         )
         for f in (file_inventory or [])
     ]
     return {
         "hierarchy_overview": build_hierarchy_levels(
             present,
-            by_device_type=by_device_type,
+            by_device_type=typed,
             column_names=cols,
             reshape_report=reshape_report,
         ),

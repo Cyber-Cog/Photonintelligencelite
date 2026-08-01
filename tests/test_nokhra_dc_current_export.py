@@ -210,6 +210,48 @@ def test_nokhra_xlsx_parse_standardize_export_local(tmp_path: Path):
     assert not wms_exp.empty
 
 
+def test_nokhra_upload_intelligence_confirms_wms_irradiance(tmp_path: Path):
+    """Analyze hierarchy must light Plant/WMS irradiance after INV+WMS melt."""
+    from backend.app.services.mapping_service import suggest_mapping
+    from backend.app.services.upload_intelligence import build_upload_intelligence
+    from backend.app.services.upload_inventory import inventory_item_from_csv
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "NEW 300MW NOKHRA REPORT"
+    for r_i, row in enumerate(_nokhra_like_matrix(), start=1):
+        for c_i, val in enumerate(row, start=1):
+            if val != "":
+                ws.cell(r_i, c_i, val)
+    xlsx = tmp_path / "nokhra.xlsx"
+    wb.save(xlsx)
+
+    raw_csv = tmp_path / "input.csv"
+    n, report = parse_excel_to_csv(
+        xlsx, raw_csv, max_decompressed_bytes=5_000_000, max_rows=100_000
+    )
+    assert n >= 4
+    assert "WMS" in (report.warnings or [""])[0] or "GHI (W/m2)" in (report.columns_mapped or [])
+
+    suggestions = suggest_mapping(list(pd.read_csv(raw_csv, nrows=0).columns))
+    intel = build_upload_intelligence(
+        suggestions=suggestions,
+        plant_config=None,
+        csv_path=raw_csv,
+    )
+    plant = next(lvl for lvl in intel["hierarchy_overview"] if lvl["level_id"] == "plant_wms")
+    irr = next(s for s in plant["signals"] if s["id"] == "irradiance")
+    assert irr["present"] is True
+    assert irr["evidence"] == "confirmed"
+    assert irr["detected_via"] in {"poa_w_m2", "ghi_w_m2"}
+
+    inv = inventory_item_from_csv(raw_csv, display_name="nokhra.xlsx")
+    assert inv["detected_as"] in {"Inverter + WMS", "Complete Analysis Pack"}
+    plant_file = next(lvl for lvl in inv["hierarchy_levels"] if lvl["level_id"] == "plant_wms")
+    assert next(s for s in plant_file["signals"] if s["id"] == "irradiance")["present"] is True
+    assert next(s for s in plant_file["signals"] if s["id"] == "irradiance")["evidence"] == "confirmed"
+
+
 def test_format_user_facing_drops_internal_and_empty():
     df = pd.DataFrame(
         {

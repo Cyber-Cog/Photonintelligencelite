@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable, Mapping
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Optional
+from typing import Any
 
 import pandas as pd
 
@@ -11,7 +12,11 @@ from analytics.common.aliasing import score_columns
 from analytics.common.complete_analysis_pack import looks_like_complete_pack
 from backend.app.services.mapping_service import suggest_mapping
 from backend.app.services.merge_uploads import _classify, _timestamp_col
-from backend.app.services.upload_intelligence import build_hierarchy_levels, enrich_file_inventory_item
+from backend.app.services.upload_intelligence import (
+    build_hierarchy_levels,
+    enrich_file_inventory_item,
+    infer_by_device_type_from_csv,
+)
 
 # Canonical fields surfaced on the Upload “required signals” checklist.
 CHECKLIST_FIELDS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
@@ -60,13 +65,16 @@ def _detected_as_label(
     has_string = "dc_current_a" in present and (
         "string_id" in present or "scb_id" in present or "device_id" in present
     )
+    has_wms = any(f in present for f in ("poa_w_m2", "ghi_w_m2", "module_temp_c", "ambient_temp_c"))
     if has_inv_power and has_string:
         return "Inverter + string SCADA"
+    if has_inv_power and has_wms:
+        return "Inverter + WMS"
     if has_inv_power:
         return "Inverter AC/DC"
     if has_string or ("dc_current_a" in present and unmapped <= 2):
         return "String current"
-    if any(f in present for f in ("poa_w_m2", "ghi_w_m2", "module_temp_c", "ambient_temp_c")):
+    if has_wms:
         return "Irradiance / temp"
     if kind == "weather":
         return "Irradiance / temp"
@@ -109,6 +117,13 @@ def inventory_item_from_csv(
     if parse_report:
         sheet_name = sheet_name or parse_report.get("sheet_name")
     pack_like = looks_like_complete_pack(columns)
+    by_type = infer_by_device_type_from_csv(csv_path)
+    if by_type:
+        for fields in by_type.values():
+            present.update(fields)
+        if "poa_w_m2" in present or "ghi_w_m2" in present:
+            present.add("poa_w_m2")
+            present.add("ghi_w_m2")
     return enrich_file_inventory_item(
         {
             "filename": display_name,
@@ -117,11 +132,15 @@ def inventory_item_from_csv(
             "detected_as": _detected_as_label(kind, present, unmapped, pack_like=pack_like),
             "signals_present": sorted(present),
             "column_names": columns[:120],
-            "hierarchy_levels": build_hierarchy_levels(present, column_names=columns),
+            "hierarchy_levels": build_hierarchy_levels(
+                present, by_device_type=by_type, column_names=columns
+            ),
             "unmapped_column_count": unmapped,
             "date_range_start": start,
             "date_range_end": end,
-        }
+        },
+        by_device_type=by_type,
+        column_names=columns,
     )
 
 

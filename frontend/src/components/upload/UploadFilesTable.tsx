@@ -63,7 +63,9 @@ export function UploadFilesTable({ files, totalRows, fileCountLabel }: Props) {
             <th className="px-3 py-2.5 font-display">File</th>
             <th className="px-3 py-2.5 font-display">Sheet</th>
             <th className="px-3 py-2.5 font-display text-right">Rows</th>
-            <th className="px-3 py-2.5 font-display">Range (UTC)</th>
+            <th className="px-3 py-2.5 font-display" title="Timestamps as recorded in the file (plant wall clock before timezone normalize)">
+              Range (local)
+            </th>
             <th className="px-3 py-2.5 font-display">Signals</th>
             <th className="px-4 py-2.5 font-display">Detected as</th>
           </tr>
