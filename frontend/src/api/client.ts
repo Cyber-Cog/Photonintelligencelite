@@ -63,6 +63,29 @@ export function getCsrfToken(): string | null {
 const API_UNREACHABLE =
   "Can't reach the API right now. Check your connection and try again.";
 
+/** Vercel rewrite → Render timed out / unreachable (plain-text 502 body). */
+const API_PROXY_TIMEOUT =
+  "The API took too long to respond (proxy timeout). Your setup may still be saving — wait a few seconds and open Validate, or try Continue again.";
+
+function friendlyUpstreamMessage(status: number, raw: string, fallback: string): string {
+  const text = (raw || "").trim();
+  const upper = text.toUpperCase();
+  if (
+    upper.includes("ROUTER_EXTERNAL_TARGET_ERROR") ||
+    upper.includes("ROUTER_EXTERNAL") ||
+    (status === 502 && upper.includes("AN ERROR OCCURRED WITH THIS APPLICATION"))
+  ) {
+    return API_PROXY_TIMEOUT;
+  }
+  if (status === 502 || status === 504) {
+    return "The API timed out or is restarting. Wait a moment and try again.";
+  }
+  if (text && text.length < 400 && !text.startsWith("<") && !upper.includes("ROUTER_")) {
+    return text;
+  }
+  return fallback;
+}
+
 export type ConnectProgress = { attempt: number; elapsedMs: number };
 
 function sleep(ms: number): Promise<void> {
@@ -144,17 +167,18 @@ async function handle<T>(res: Response): Promise<T> {
           message = body.message.trim();
         }
       } catch {
-        const clipped = raw.trim();
-        if (clipped && clipped.length < 400 && !clipped.startsWith("<")) {
-          message = clipped;
-        }
+        message = friendlyUpstreamMessage(res.status, raw, fallback);
       }
+    } else if (res.status === 502 || res.status === 504) {
+      message = friendlyUpstreamMessage(res.status, "", fallback);
     }
-    if (res.status === 502 || res.status === 504) {
-      message =
-        message === fallback
-          ? "The API timed out or is restarting. Wait a moment and try again."
-          : message;
+    // Never surface Vercel/proxy internals even if JSON somehow included them.
+    if (/ROUTER_EXTERNAL/i.test(message)) {
+      message = API_PROXY_TIMEOUT;
+    } else if (res.status === 502 || res.status === 504) {
+      if (message === fallback || /an error occurred with this application/i.test(message)) {
+        message = friendlyUpstreamMessage(res.status, message, fallback);
+      }
     }
     throw new ApiError(res.status, message);
   }
@@ -229,9 +253,12 @@ function _postUpload(url: string, files: File[], onProgress?: (pct: number) => v
             message = body.detail.map((d: { msg?: string }) => d.msg || JSON.stringify(d)).join("; ");
           } else if (body.detail) message = String(body.detail);
         } catch {
-          if (raw && raw.length < 400 && !raw.startsWith("<")) message = raw;
+          message = friendlyUpstreamMessage(xhr.status, raw, message);
         }
-        if (xhr.status === 502 || xhr.status === 504) {
+        if (/ROUTER_EXTERNAL/i.test(message)) {
+          message =
+            "Upload timed out while reaching the API. Wait a moment and retry — large Excel files can take a minute to finish parsing after upload.";
+        } else if (xhr.status === 502 || xhr.status === 504) {
           message =
             "Upload timed out while the server was processing your file. " +
             "Large Excel workbooks can take a minute — wait a moment and retry. " +

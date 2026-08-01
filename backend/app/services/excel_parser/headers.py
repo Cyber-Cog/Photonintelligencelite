@@ -122,6 +122,29 @@ def map_metric(category: str, leaf: str) -> str | None:
         ):
             return "DC Power (kW)"
 
+    # Leaf-only DC current (no category row): DC_CURRENT, DC Current (A), Idc, …
+    if "current" in leaf_n and "ac" not in leaf_n:
+        if (
+            leaf_n.startswith("dc")
+            or "dc_current" in leaf_n
+            or "dc current" in leaf_n
+            or leaf_n in {"idc", "i_dc", "i dc", "current", "current a", "amps"}
+            or re.match(r"dc[_\s\-]?current", leaf_n)
+            or re.search(r"\bo[\s/\-_]*p[\s/\-_]*current\b", leaf_n)
+        ):
+            return "DC Current (A)"
+
+    # Leaf-only DC voltage
+    if "voltage" in leaf_n and "ac" not in leaf_n:
+        if (
+            leaf_n.startswith("dc")
+            or "dc_voltage" in leaf_n
+            or "dc voltage" in leaf_n
+            or "vdc" in leaf_n
+            or leaf_n in {"v_dc", "v dc", "voltage", "bus voltage"}
+        ):
+            return "DC Voltage (V)"
+
     if "power" in leaf_n and ("kw" in leaf_n or leaf_n == "power"):
         # SMB/SCB parameter blocks are DC-side; only treat as AC when category says so.
         if any(tok in cat for tok in ("smb", "scb", "combiner", "string", "dc")):

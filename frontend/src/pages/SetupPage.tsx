@@ -4,6 +4,7 @@ import {
   ApiError,
   detectEquipment,
   downloadAuthenticated,
+  getJobStatus,
   getSetupContext,
   parsedExcelUrl,
   submitMapping,
@@ -623,6 +624,20 @@ export function SetupPage() {
         navigate(`/jobs/${jobId}/validate`);
       });
     } catch (err) {
+      // Vercel→Render proxy can 502 while plant-config is still finishing on the API.
+      // If the job already advanced, take the user to Validate instead of a dead-end error.
+      if (err instanceof ApiError && (err.status === 502 || err.status === 504 || err.status === 0)) {
+        try {
+          const st = await getJobStatus(jobId);
+          const state = (st.state || "").toLowerCase();
+          if (["validating", "normalizing", "queued", "running", "completed"].includes(state)) {
+            navigate(`/jobs/${jobId}/validate`);
+            return;
+          }
+        } catch {
+          // fall through to error message
+        }
+      }
       const msg =
         err instanceof ApiError
           ? err.status === 409 && /running|queued|generating/i.test(err.message)
@@ -956,6 +971,7 @@ export function SetupPage() {
           )}
           {excelMappingOpen ? (
             <ExcelMappingModal
+              jobId={jobId}
               suggestions={allColumns}
               mapping={mapping}
               levels={hierarchyLevels}

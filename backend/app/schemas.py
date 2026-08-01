@@ -257,6 +257,8 @@ class ValidationResponse(BaseModel):
     rows_that_would_be_dropped: int = 0
     rows_that_would_be_kept: int = 0
     state: Optional[str] = None
+    error_summary: Optional[str] = None
+    progress_message: Optional[str] = None
 
 
 class SetupContextResponse(BaseModel):
