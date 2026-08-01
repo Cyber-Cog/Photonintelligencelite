@@ -16,7 +16,7 @@ const TONE_VALUE: Record<KpiTone, string> = {
 };
 
 /**
- * Dense plant KPI matrix — hairline cells, no bordered marketing tiles.
+ * Dense plant KPI matrix — elevated metric strip for Results chrome.
  * Fits ~10 metrics in one viewport band (5×2 on desktop; wrap ≤2 rows on mobile).
  */
 export function KpiStrip({

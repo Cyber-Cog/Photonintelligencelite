@@ -93,16 +93,16 @@ function FilterChip({
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-semibold transition ${
+      className={`inline-flex items-center gap-1.5 rounded-pic px-2.5 py-1 text-[11px] font-semibold transition ${
         active
-          ? "bg-brand-600 text-white shadow-sm dark:bg-brand-500 dark:text-stone-950"
-          : "bg-stone-100 text-stone-600 hover:bg-stone-200/80 dark:bg-stone-800 dark:text-stone-300 dark:hover:bg-stone-700"
+          ? "bg-accent-700 text-white shadow-sm dark:bg-accent-500 dark:text-stone-950"
+          : "bg-[color:var(--pic-surface-muted)] text-[color:var(--pic-text-secondary)] hover:bg-accent-50 dark:hover:bg-stone-800"
       }`}
     >
       {label}
       <span
         className={`tabular-nums rounded px-1 py-px text-[10px] font-bold ${
-          active ? "bg-white/20 text-white dark:bg-stone-950/20 dark:text-stone-950" : "bg-white/80 text-stone-500 dark:bg-stone-900 dark:text-stone-400"
+          active ? "bg-white/20 text-white dark:bg-stone-950/20 dark:text-stone-950" : "bg-[color:var(--pic-surface-raised)] text-[color:var(--pic-text-muted)]"
         }`}
       >
         {count}
@@ -130,16 +130,16 @@ function ActionListItem({
       type="button"
       onClick={onSelect}
       aria-current={selected ? "true" : undefined}
-      className={`flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2.5 text-left transition ${
+      className={`flex w-full items-start gap-2.5 rounded-pic-lg px-3 py-2.5 text-left transition ${
         selected
-          ? "bg-brand-50 ring-1 ring-brand-200/90 dark:bg-brand-950/45 dark:ring-brand-800/50"
-          : "hover:bg-stone-50 dark:hover:bg-stone-800/50"
+          ? "bg-accent-50 ring-1 ring-accent-200/90 dark:bg-accent-950/40 dark:ring-accent-800/45"
+          : "hover:bg-[color:var(--pic-surface-muted)]"
       }`}
       data-tour={card.cta.kind === "investigate" ? "owner-investigate" : undefined}
     >
       <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${TONE_DOT[card.tone]}`} aria-hidden />
       <div className="min-w-0 flex-1">
-        <p className="text-[13px] font-medium leading-snug text-stone-900 dark:text-stone-50 break-normal">
+        <p className="text-[13px] font-semibold leading-snug text-[color:var(--pic-text)] break-normal">
           {card.problem}
         </p>
         <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px]">
@@ -149,7 +149,7 @@ function ActionListItem({
           {loss ? (
             <span className="font-semibold tabular-nums text-rose-700 dark:text-rose-300">{loss}</span>
           ) : (
-            <span className="text-stone-500 dark:text-stone-400">{card.impact}</span>
+            <span className="text-[color:var(--pic-text-muted)]">{card.impact}</span>
           )}
         </div>
       </div>
@@ -291,25 +291,28 @@ export function OwnerActionCenter({
 
   return (
     <section
-      className="flex flex-col border-t border-[color:var(--pic-border-subtle)]"
+      className={`flex flex-col ${compact ? "" : "border-t border-[color:var(--pic-border-subtle)]"}`}
       role="region"
       aria-label="Owner action centre"
       data-tour="owner-actions"
     >
       <div
         className={`flex shrink-0 flex-wrap items-start justify-between gap-3 ${
-          compact ? "pb-2.5 pt-4" : "pb-3 pt-4"
+          compact ? "pb-3" : "pb-3 pt-4"
         }`}
       >
         <div className="min-w-0">
+          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-accent-700 dark:text-accent-400">
+            Prioritized issues
+          </p>
           <h3
-            className={`font-display font-semibold tracking-tight ${
-              compact ? "text-sm sm:text-base" : "text-base sm:text-lg"
+            className={`mt-1 font-display font-semibold tracking-tight ${
+              compact ? "text-base sm:text-lg" : "text-base sm:text-lg"
             } ${model.healthy ? "text-accent-800 dark:text-accent-300" : "text-[color:var(--pic-text)]"}`}
           >
             {model.headline}
           </h3>
-          <p className="mt-0.5 max-w-2xl text-xs text-[color:var(--pic-text-muted)]">{model.subline}</p>
+          <p className="mt-0.5 max-w-2xl text-xs leading-relaxed text-[color:var(--pic-text-muted)]">{model.subline}</p>
         </div>
         {summaryChip ? (
           <span

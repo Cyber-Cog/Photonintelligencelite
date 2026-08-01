@@ -8,10 +8,9 @@ import { InverterComparisonPanel } from "@/components/InverterComparisonPanel";
 import { JobStatusChip, JobWorkspace } from "@/components/JobWorkspace";
 import { KpiStrip, type KpiStripItem } from "@/components/KpiStrip";
 import { LossWaterfallBridge } from "@/components/LossWaterfallBridge";
-import { OwnerActionCenter } from "@/components/OwnerActionCenter";
+import { OverviewDashboard } from "@/components/OverviewDashboard";
 import { ResultCard } from "@/components/ResultCard";
 import { ResultsSidebar } from "@/components/ResultsSidebar";
-import { RunIntegrityPanel } from "@/components/RunIntegrityPanel";
 import { SummaryInsightPanels } from "@/components/SummaryInsightPanels";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { InfoBanner } from "@/components/ui/InfoBanner";
@@ -361,14 +360,6 @@ export function DashboardPage() {
     [faultRows, selectSection],
   );
 
-  const handleOwnerSection = useCallback(
-    (id: "faults" | "bridge" | "losses" | "diagnostics") => {
-      const resolved = resolveResultsSectionId(id) ?? (id as ResultsSectionId);
-      selectSection(resolved);
-    },
-    [selectSection],
-  );
-
   if (!jobId) return null;
 
   const handleNewAnalysis = () => {
@@ -411,12 +402,12 @@ export function DashboardPage() {
 
   return (
     <JobWorkspace
-      title="Results"
+      title="Plant overview"
       titleTour="results-welcome"
-      subtitle={`${okCount} modules ready · ${blockedCount} need data`}
+      subtitle={`${okCount} modules ready · ${blockedCount} need data · ${data.kpis.fault_count} faults`}
       documentScroll
       hideJobNav
-      className="results-shell"
+      className="results-shell results-shell-v2"
       status={
         <JobStatusChip tone={statusTone}>
           {thinResults ? "Limited coverage" : blockedCount > 0 ? "Partial mapping" : "Analysis ready"}
@@ -494,62 +485,26 @@ export function DashboardPage() {
       }
     >
       {activeSection === "overview" && (
-        <div id="results-actions" data-results-pane="overview" data-results-pane-alias="summary" className="job-pane-tight flex flex-col gap-5 pb-6">
-          {jobId ? (
-            <RunIntegrityPanel
-              jobId={jobId}
-              check={integrity}
-              canRerun={isSuperadmin}
-              onUpdated={setIntegrity}
-              quiet
-            />
-          ) : null}
-
-          <div className="border-t border-[color:var(--pic-border-subtle)] pt-4" data-tour="summary-loss-preview">
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <div>
-                <h3 className="font-display text-sm font-semibold tracking-tight text-[color:var(--pic-text)]">
-                  Losses
-                </h3>
-                <p className="mt-0.5 text-[11px] text-[color:var(--pic-text-muted)]">
-                  Expected → diagnosed losses → actual
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => selectSection("losses")}
-                className="text-xs font-medium text-[color:var(--pic-text-secondary)] underline-offset-2 hover:underline"
-              >
-                Open Losses
-              </button>
-            </div>
-          </div>
-
-          {ownerActions ? (
-            <OwnerActionCenter
-              model={ownerActions}
-              onInvestigate={investigateFinding}
-              onModule={jumpToModule}
-              onSection={handleOwnerSection}
-              compact
-            />
-          ) : (
-            <p className="border-t border-[color:var(--pic-border-subtle)] pt-4 text-sm text-[color:var(--pic-text-muted)]">
-              No owner actions for this run.
-            </p>
-          )}
-        </div>
+        <OverviewDashboard
+          jobId={jobId}
+          kpis={data.kpis}
+          results={data.results}
+          ownerActions={ownerActions}
+          integrity={integrity}
+          canRerunIntegrity={isSuperadmin}
+          onIntegrityUpdated={setIntegrity}
+          onInvestigate={investigateFinding}
+          onModule={jumpToModule}
+          onSection={selectSection}
+        />
       )}
 
       {activeSection === "performance" && (
         <div data-results-pane="performance" className="job-pane-tight flex flex-col gap-4 pb-6">
-          <div className="border-b border-[color:var(--pic-border-subtle)] pb-3">
-            <h3 className="font-display text-sm font-semibold tracking-tight text-[color:var(--pic-text)]">
-              Inverter &amp; string performance
-            </h3>
-            <p className="mt-0.5 text-[11px] text-[color:var(--pic-text-muted)]">
-              Unit-level PR and string health for this run.
-            </p>
+          <div className="overview-panel !shadow-none">
+            <p className="overview-eyebrow">Performance</p>
+            <h3 className="overview-panel-title mt-1">Inverter &amp; string performance</h3>
+            <p className="overview-panel-sub">Unit-level PR and string health for this run.</p>
           </div>
           <InverterComparisonPanel rows={data.kpis.inverter_pr ?? []} />
           <SummaryInsightPanels
@@ -630,21 +585,20 @@ export function DashboardPage() {
 
       {activeSection === "reports" && (
         <div data-results-pane="reports" className="job-pane-tight flex flex-col gap-3 pb-6">
-          <div className="border-b border-[color:var(--pic-border-subtle)] pb-3">
-            <h3 className="font-display text-base font-semibold tracking-tight text-[color:var(--pic-text)]">
-              Reports
-            </h3>
-            <p className="mt-1 max-w-lg text-xs leading-relaxed text-[color:var(--pic-text-muted)]">
+          <div className="overview-panel">
+            <p className="overview-eyebrow">Exports</p>
+            <h3 className="overview-panel-title mt-1">Reports</h3>
+            <p className="overview-panel-sub max-w-lg">
               Excel for tables and segment detail; PDF for KPIs, faults, and loss summary.
             </p>
-          </div>
-          <div className="flex flex-wrap gap-2" data-tour="reports-downloads">
-            <a className="btn-secondary text-sm" href={reportUrl(jobId, "xlsx")}>
-              Download Excel
-            </a>
-            <a className="btn-primary text-sm" href={reportUrl(jobId, "pdf")}>
-              Download PDF
-            </a>
+            <div className="mt-4 flex flex-wrap gap-2" data-tour="reports-downloads">
+              <a className="btn-secondary text-sm" href={reportUrl(jobId, "xlsx")}>
+                Download Excel
+              </a>
+              <a className="btn-primary text-sm" href={reportUrl(jobId, "pdf")}>
+                Download PDF
+              </a>
+            </div>
           </div>
         </div>
       )}
