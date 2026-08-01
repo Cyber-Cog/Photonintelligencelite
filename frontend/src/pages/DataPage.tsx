@@ -17,7 +17,7 @@ function useDebounced<T>(value: T, ms = 250): T {
   return debounced;
 }
 
-/** API stores UTC as `YYYY-MM-DDTHH:MM:SS` — datetime-local wants local-shaped string. */
+/** API returns plant-local wall times for filters when the job has a timezone. */
 function toInputValue(iso: string | null | undefined): string {
   if (!iso) return "";
   const cleaned = iso.replace(" ", "T").slice(0, 16);
@@ -26,13 +26,13 @@ function toInputValue(iso: string | null | undefined): string {
 
 function fromInputValue(local: string): string | null {
   if (!local.trim()) return null;
-  // Treat datetime-local as UTC wall time for SCADA browsing (matches canonical timestamp_utc).
+  // datetime-local is plant-local wall time (backend converts using job timezone).
   return local.length === 16 ? `${local}:00` : local;
 }
 
 function isTsCol(name: string): boolean {
   const n = name.toLowerCase();
-  return n.includes("time") || n.includes("date") || n === "timestamp_utc";
+  return n.includes("time") || n.includes("date") || n === "timestamp" || n === "timestamp_utc";
 }
 
 export function DataPage() {

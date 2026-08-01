@@ -23,6 +23,7 @@ from backend.app.services.explorer_service import (
     preview_data,
     query_timeseries,
 )
+from analytics.common.user_facing_export import plant_timezone_from_config
 from backend.app.services.parsed_export_service import export_parsed_excel
 from backend.app.services.merge_uploads import merge_csv_files
 from backend.app.services.storage import UploadTooLargeError, job_paths, sanitize_filename, save_upload_stream
@@ -30,13 +31,17 @@ from backend.app.services.storage import UploadTooLargeError, job_paths, sanitiz
 router = APIRouter(prefix="/api/jobs", tags=["explorer"])
 
 
+def _job_timezone(job: Job) -> str | None:
+    return plant_timezone_from_config(job.plant_config_json)
+
+
 @router.get("/{job_id}/data-preview")
 def data_preview(
     job_id: str,
     offset: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
-    start: str | None = Query(None, description="Inclusive start datetime (ISO / UTC)"),
-    end: str | None = Query(None, description="Inclusive end datetime (ISO / UTC)"),
+    start: str | None = Query(None, description="Inclusive start datetime (plant local when timezone set)"),
+    end: str | None = Query(None, description="Inclusive end datetime (plant local when timezone set)"),
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
     user: User | None = Depends(get_optional_user),
@@ -51,6 +56,7 @@ def data_preview(
             limit=limit,
             start=start,
             end=end,
+            timezone=_job_timezone(job),
         )
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(500, f"Could not load data preview: {exc}") from exc
@@ -71,7 +77,7 @@ def data_export_csv(
     user: User | None = Depends(get_optional_user),
 ):
     """Download dataset as CSV (optional start/end window)."""
-    _get_job_or_404(db, job_id, user)
+    job = _get_job_or_404(db, job_id, user)
     paths = job_paths(settings.job_root_path, job_id)
     try:
         content = export_data_csv_bytes(
@@ -79,6 +85,7 @@ def data_export_csv(
             paths.raw_dir / "input.csv",
             start=start,
             end=end,
+            timezone=_job_timezone(job),
         )
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(500, f"Could not export CSV: {exc}") from exc
@@ -186,13 +193,13 @@ def explorer_timeseries(
     equipment_ids: str = Query(..., description="Comma-separated equipment IDs"),
     signals: str = Query(..., description="Comma-separated canonical signal names"),
     max_points: int = Query(3000, ge=100, le=10000),
-    start: str | None = Query(None, description="Inclusive start datetime (ISO / UTC)"),
-    end: str | None = Query(None, description="Inclusive end datetime (ISO / UTC)"),
+    start: str | None = Query(None, description="Inclusive start datetime (plant local when timezone set)"),
+    end: str | None = Query(None, description="Inclusive end datetime (plant local when timezone set)"),
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
     user: User | None = Depends(get_optional_user),
 ):
-    _get_job_or_404(db, job_id, user)
+    job = _get_job_or_404(db, job_id, user)
     paths = job_paths(settings.job_root_path, job_id)
     eq = [x.strip() for x in equipment_ids.split(",") if x.strip()]
     sig = [x.strip() for x in signals.split(",") if x.strip()]
@@ -206,6 +213,7 @@ def explorer_timeseries(
         max_points=max_points,
         start=start,
         end=end,
+        timezone=_job_timezone(job),
     )
 
 

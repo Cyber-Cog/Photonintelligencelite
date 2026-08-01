@@ -51,16 +51,21 @@ def normalize_sheet(
     str_rows = pad_matrix(str_rows)
     str_rows = propagate_merged_values(str_rows, merges)
 
-    # Horizontal + vertical forward-fill for sparse header region (first 40 rows)
-    header_band = min(40, len(str_rows))
-    str_rows = _ffill_horizontal(str_rows, max_row=header_band)
-    str_rows = _ffill_vertical_header_band(str_rows, max_row=header_band)
-
     # Unicode normalize + trim
     for i, row in enumerate(str_rows):
         str_rows[i] = [_norm_text(c) for c in row]
 
-    coerced = _coerce_numeric_strings(str_rows, start_row=_guess_data_start(str_rows, analysis, sheet_name))
+    data_start = _guess_data_start(str_rows, analysis, sheet_name)
+    # Ffill equipment/category header rows only — never the metric leaf row and never
+    # data rows. Leaf ffill would invent duplicate AC_ACTIVE_POWER labels in gaps
+    # before DC_CURRENT and corrupt wide melt.
+    header_band = max(0, min(data_start, len(str_rows)))
+    leaf_row = header_band - 1 if header_band > 0 else -1
+    equip_band = max(0, leaf_row)  # rows [0, leaf_row) get full ffill; leaf stays sparse
+    str_rows = _ffill_horizontal(str_rows, max_row=equip_band)
+    str_rows = _ffill_vertical_header_band(str_rows, max_row=equip_band)
+
+    coerced = _coerce_numeric_strings(str_rows, start_row=data_start)
 
     # Drop all-blank rows/cols
     before_rows = len(str_rows)
@@ -69,7 +74,7 @@ def normalize_sheet(
     str_rows, dropped_cols = _drop_blank_columns(str_rows)
 
     logger.info(
-        "excel_onboard.normalize sheet=%s rows=%s cols=%s merges=%s dropped_rows=%s dropped_cols=%s numeric_coerced=%s",
+        "excel_onboard.normalize sheet=%s rows=%s cols=%s merges=%s dropped_rows=%s dropped_cols=%s numeric_coerced=%s header_band=%s",
         sheet_name,
         len(str_rows),
         len(str_rows[0]) if str_rows else 0,
@@ -77,6 +82,7 @@ def normalize_sheet(
         dropped_rows,
         len(dropped_cols),
         coerced,
+        header_band,
     )
     return NormalizedSheet(
         sheet_name=sheet_name,

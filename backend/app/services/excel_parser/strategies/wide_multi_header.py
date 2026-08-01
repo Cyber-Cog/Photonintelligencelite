@@ -3,6 +3,7 @@
 Handles both:
   - Timestamp leaf on the metric row (older fixtures)
   - Timestamp label on the device/group row with blank leaf under it (real plant exports)
+  - Trailing WMS / plant weather blocks (GHI, GTI/POA) beside inverter columns
 """
 from __future__ import annotations
 
@@ -16,10 +17,13 @@ from backend.app.services.excel_parser.headers import (
     inverter_id_from_label,
     looks_like_timestamp_header,
     map_metric,
-    normalize_header,
     pad_matrix,
+    wms_id_from_label,
 )
 from backend.app.services.excel_parser.types import LayoutKind, ParseReport, StrategyResult
+
+# SCADA sentinel / garbage values often seen in OEM WMS channels.
+_IRRADIANCE_METRICS = frozenset({"GHI (W/m2)", "Irradiance (W/m2)"})
 
 
 def try_wide_multi_header(matrix: list[list[str]], *, sheet_name: str) -> StrategyResult | None:
@@ -53,24 +57,37 @@ def try_wide_multi_header(matrix: list[list[str]], *, sheet_name: str) -> Strate
     if ts_col is None:
         return None
 
+    # (device_id, metric, icr_id | None)
     col_map: dict[int, tuple[str, str, str | None]] = {}
     for j in range(width):
         if j == ts_col:
             continue
         device_id = inverter_id_from_label(device_row[j]) if device_row[j] else None
+        is_wms = False
+        if device_id is None and device_row[j]:
+            device_id = wms_id_from_label(device_row[j])
+            is_wms = device_id is not None
         if device_id is None:
             continue
         metric = map_metric(category_row[j], leaf_row[j])
         if metric is None:
-            # Leaf-only AC/DC tokens when category row is the INV row (NTPC layout).
+            # Leaf-only AC/DC / GHI tokens when category row is the INV/WMS row (NTPC layout).
             metric = map_metric("", leaf_row[j])
         if metric is None:
             continue
+        # WMS blocks only keep plant weather metrics — never attach AC/DC to WMS.
+        if is_wms and metric not in _IRRADIANCE_METRICS | {
+            "Module Temp (C)",
+            "Ambient Temp (C)",
+            "GHI (W/m2)",
+            "Irradiance (W/m2)",
+        }:
+            continue
         icr_raw = icr_row[j].strip() if j < len(icr_row) else ""
         icr_id = _normalize_icr_id(icr_raw)
-        if icr_id:
+        if icr_id and not is_wms:
             device_id = f"{icr_id}-{device_id}"
-        col_map[j] = (device_id, metric, icr_id)
+        col_map[j] = (device_id, metric, None if is_wms else icr_id)
 
     if not col_map:
         return None
@@ -98,6 +115,7 @@ def try_wide_multi_header(matrix: list[list[str]], *, sheet_name: str) -> Strate
     parse_ok = 0
     parse_fail = 0
     icr_for = {d: next((icr for dd, _, icr in col_map.values() if dd == d and icr), None) for d in devices}
+    wms_devices = {d for d, _, _ in col_map.values() if d == "WMS" or d.upper().endswith("WMS")}
 
     for row in rows[leaf_idx + 1 :]:
         raw_ts = row[ts_col].strip() if ts_col < len(row) else ""
@@ -115,8 +133,15 @@ def try_wide_multi_header(matrix: list[list[str]], *, sheet_name: str) -> Strate
 
         per_device: dict[str, dict[str, str]] = {d: {} for d in devices}
         for j, (device_id, metric, _icr) in col_map.items():
+            # Keep literal zeros ("0" / "0.0") — they are valid SCADA readings.
+            # First non-empty wins so header-ffill duplicate leaf cols cannot
+            # overwrite a real value with a blank-cell "0" from interstitial gaps.
             val = row[j].strip() if j < len(row) else ""
-            if val:
+            if val == "":
+                continue
+            if metric in _IRRADIANCE_METRICS and not _usable_irradiance_value(val):
+                continue
+            if metric not in per_device[device_id]:
                 per_device[device_id][metric] = val
 
         for device_id in devices:
@@ -150,12 +175,18 @@ def try_wide_multi_header(matrix: list[list[str]], *, sheet_name: str) -> Strate
     total_ts_attempts = parse_ok + parse_fail
     ts_ratio = parse_ok / total_ts_attempts if total_ts_attempts else 0.0
     has_ac = "AC Power (kW)" in header
+    has_wms_meteo = bool(wms_devices) and bool(used_metrics & _IRRADIANCE_METRICS)
     confidence = 0.45
     confidence += 0.25 if len(devices) >= 1 else 0.0
     confidence += 0.15 if has_ac else 0.0
     confidence += 0.15 * min(ts_ratio, 1.0)
     if can_derive_dc:
         warnings.append("DC Power (kW) derived from DC Voltage × DC Current / 1000.")
+    if has_wms_meteo:
+        warnings.append(
+            f"Captured WMS/plant weather columns for {sorted(wms_devices)} "
+            f"({', '.join(sorted(used_metrics & _IRRADIANCE_METRICS))})."
+        )
 
     header_rows = [device_idx]
     if icr_idx is not None:
@@ -171,7 +202,7 @@ def try_wide_multi_header(matrix: list[list[str]], *, sheet_name: str) -> Strate
         confidence=round(min(confidence, 0.99), 3),
         header_rows=header_rows,
         timestamp_column="Timestamp",
-        inverters_found=devices,
+        inverters_found=[d for d in devices if d not in wms_devices],
         columns_mapped=header,
         row_count=data_rows,
         warnings=warnings,
@@ -197,12 +228,26 @@ def try_wide_multi_header(matrix: list[list[str]], *, sheet_name: str) -> Strate
     return StrategyResult(rows=out, report=report)
 
 
+def _usable_irradiance_value(val: str) -> bool:
+    """Drop OEM sentinels (-1) and garbage floats (e.g. 3.4e38) from WMS channels."""
+    try:
+        f = float(val.replace(",", ""))
+    except ValueError:
+        return False
+    if f < 0:
+        return False
+    if f > 2000:  # above terrestrial solar max — treat as invalid
+        return False
+    return True
+
+
 def _find_device_row(rows: list[list[str]]) -> int | None:
     best_idx: int | None = None
     best_hits = 0
     for i, row in enumerate(rows[:40]):
         hits = [inverter_id_from_label(c) for c in row if c.strip()]
         n = sum(1 for h in hits if h)
+        # Prefer INV rows; WMS alone is not enough to select the device band.
         if n > best_hits:
             best_hits = n
             best_idx = i

@@ -7,6 +7,11 @@ from typing import Any, Iterator
 
 import pandas as pd
 
+from analytics.common.user_facing_export import (
+    format_timestamp_series_local,
+    format_user_facing_frame,
+    plant_timezone_from_config,
+)
 from analytics.core.context import CANONICAL_COLUMNS, CanonicalDataAccess
 
 SIGNAL_MAP: dict[str, str] = {
@@ -107,19 +112,40 @@ RAW_TS_CANDIDATES = (
 )
 
 
-def _parse_bound(value: str | None) -> pd.Timestamp | None:
+def _parse_bound(value: str | None, timezone: str | None = None) -> pd.Timestamp | None:
+    """Parse a filter bound. Naive strings are plant-local when timezone is set, else UTC."""
     if not value or not str(value).strip():
         return None
-    ts = pd.to_datetime(value, utc=True, errors="coerce")
+    raw = str(value).strip()
+    ts = pd.to_datetime(raw, errors="coerce")
     if pd.isna(ts):
         return None
-    return pd.Timestamp(ts)
+    t = pd.Timestamp(ts)
+    tz = (timezone or "").strip() or None
+    if t.tzinfo is not None:
+        return t.tz_convert("UTC")
+    if tz:
+        try:
+            return t.tz_localize(tz, ambiguous="infer", nonexistent="shift_forward").tz_convert("UTC")
+        except (TypeError, AttributeError, ValueError):
+            pass
+    return t.tz_localize("UTC")
 
 
-def _fmt_bound(ts: pd.Timestamp | None) -> str | None:
+def _fmt_bound(ts: pd.Timestamp | None, timezone: str | None = None) -> str | None:
     if ts is None or pd.isna(ts):
         return None
-    return ts.tz_convert("UTC").strftime("%Y-%m-%dT%H:%M:%S") if ts.tzinfo else ts.strftime("%Y-%m-%dT%H:%M:%S")
+    t = pd.Timestamp(ts)
+    if t.tzinfo is None:
+        t = t.tz_localize("UTC")
+    tz = (timezone or "").strip() or None
+    if tz:
+        try:
+            t = t.tz_convert(tz)
+        except (TypeError, AttributeError, ValueError):
+            t = t.tz_convert("UTC")
+        return t.tz_localize(None).strftime("%Y-%m-%dT%H:%M:%S")
+    return t.tz_convert("UTC").strftime("%Y-%m-%dT%H:%M:%S")
 
 
 def _detect_ts_column(columns: list[str]) -> str | None:
@@ -150,14 +176,15 @@ def _apply_time_mask(
     return df.loc[mask].copy()
 
 
-def _format_preview_frame(df: pd.DataFrame) -> pd.DataFrame:
-    out = df.copy()
+def _format_preview_frame(df: pd.DataFrame, timezone: str | None = None) -> pd.DataFrame:
+    """Professional headers + plant-local timestamps for Raw Data preview."""
+    facing = format_user_facing_frame(df, timezone=timezone, drop_empty=False)
+    out = facing.copy()
     for col in out.columns:
         if pd.api.types.is_datetime64_any_dtype(out[col]):
-            series = pd.to_datetime(out[col], utc=True, errors="coerce")
-            out[col] = series.dt.strftime("%Y-%m-%d %H:%M:%S").fillna("")
-        elif col.lower() in ("timestamp_utc", "timestamp", "datetime") or "time" in col.lower():
-            series = pd.to_datetime(out[col], utc=True, errors="coerce")
+            out[col] = pd.to_datetime(out[col], errors="coerce").dt.strftime("%Y-%m-%d %H:%M:%S").fillna("")
+        elif str(col).lower() in {"timestamp", "datetime"} or "time" in str(col).lower():
+            series = pd.to_datetime(out[col], errors="coerce")
             if series.notna().any():
                 out[col] = series.dt.strftime("%Y-%m-%d %H:%M:%S").fillna(out[col].astype(str))
     return out.fillna("").astype(str)
@@ -211,6 +238,7 @@ def _preview_payload(
     start: pd.Timestamp | None,
     end: pd.Timestamp | None,
     unfiltered_rows: int | None = None,
+    timezone: str | None = None,
 ) -> dict[str, Any]:
     return {
         "source": source,
@@ -220,12 +248,13 @@ def _preview_payload(
         "offset": offset,
         "limit": limit,
         "time_column": time_column,
-        "time_min": _fmt_bound(time_min),
-        "time_max": _fmt_bound(time_max),
-        "start": _fmt_bound(start),
-        "end": _fmt_bound(end),
+        "time_min": _fmt_bound(time_min, timezone),
+        "time_max": _fmt_bound(time_max, timezone),
+        "start": _fmt_bound(start, timezone),
+        "end": _fmt_bound(end, timezone),
         "date_filtered": start is not None or end is not None,
         "unfiltered_rows": unfiltered_rows if unfiltered_rows is not None else total_rows,
+        "timezone": timezone,
     }
 
 
@@ -252,6 +281,7 @@ def _preview_canonical(
     limit: int,
     start: pd.Timestamp | None,
     end: pd.Timestamp | None,
+    timezone: str | None = None,
 ) -> dict[str, Any]:
     """Paginate canonical parquet; optional start/end filter updates totals."""
     import pyarrow.parquet as pq
@@ -270,6 +300,7 @@ def _preview_canonical(
             time_max=None,
             start=start,
             end=end,
+            timezone=timezone,
         )
 
     unfiltered = sum(pq.ParquetFile(f).metadata.num_rows for f in files)
@@ -346,13 +377,14 @@ def _preview_canonical(
             start=start,
             end=end,
             unfiltered_rows=unfiltered,
+            timezone=timezone,
         )
 
     slice_df = pd.concat(page_chunks, ignore_index=True)
     slice_df = slice_df[[c for c in columns if c in slice_df.columns]]
     # Prefer canonical column order
     slice_df = slice_df[_order_columns([str(c) for c in slice_df.columns])]
-    formatted = _format_preview_frame(slice_df)
+    formatted = _format_preview_frame(slice_df, timezone=timezone)
     return _preview_payload(
         source="canonical",
         columns=[str(c) for c in formatted.columns],
@@ -360,12 +392,13 @@ def _preview_canonical(
         total_rows=total_rows if date_filter else unfiltered,
         offset=offset,
         limit=limit,
-        time_column=time_column,
+        time_column="Timestamp" if time_column else None,
         time_min=time_min,
         time_max=time_max,
         start=start,
         end=end,
         unfiltered_rows=unfiltered,
+        timezone=timezone,
     )
 
 
@@ -375,6 +408,7 @@ def _preview_raw(
     limit: int,
     start: pd.Timestamp | None,
     end: pd.Timestamp | None,
+    timezone: str | None = None,
 ) -> dict[str, Any]:
     if not raw_csv.exists():
         return _preview_payload(
@@ -389,6 +423,7 @@ def _preview_raw(
             time_max=None,
             start=start,
             end=end,
+            timezone=timezone,
         )
 
     header = [str(c) for c in pd.read_csv(raw_csv, nrows=0).columns.tolist()]
@@ -403,7 +438,7 @@ def _preview_raw(
             nrows=limit,
             low_memory=False,
         )
-        formatted = _format_preview_frame(df)
+        formatted = _format_preview_frame(df, timezone=timezone)
         return _preview_payload(
             source="raw",
             columns=[str(c) for c in formatted.columns],
@@ -417,6 +452,7 @@ def _preview_raw(
             start=start,
             end=end,
             unfiltered_rows=unfiltered,
+            timezone=timezone,
         )
 
     matched = 0
@@ -451,10 +487,11 @@ def _preview_raw(
             start=start,
             end=end,
             unfiltered_rows=unfiltered,
+            timezone=timezone,
         )
 
     slice_df = pd.concat(page_chunks, ignore_index=True)
-    formatted = _format_preview_frame(slice_df)
+    formatted = _format_preview_frame(slice_df, timezone=timezone)
     return _preview_payload(
         source="raw",
         columns=[str(c) for c in formatted.columns],
@@ -468,6 +505,7 @@ def _preview_raw(
         start=start,
         end=end,
         unfiltered_rows=unfiltered,
+        timezone=timezone,
     )
 
 
@@ -478,17 +516,18 @@ def preview_data(
     limit: int = 100,
     start: str | None = None,
     end: str | None = None,
+    timezone: str | None = None,
 ) -> dict[str, Any]:
     limit = max(1, min(limit, 500))
     offset = max(0, offset)
-    start_ts = _parse_bound(start)
-    end_ts = _parse_bound(end)
+    start_ts = _parse_bound(start, timezone)
+    end_ts = _parse_bound(end, timezone)
     if start_ts is not None and end_ts is not None and start_ts > end_ts:
         start_ts, end_ts = end_ts, start_ts
 
     if _has_canonical(canonical_dir):
-        return _preview_canonical(canonical_dir, offset, limit, start_ts, end_ts)
-    return _preview_raw(raw_csv, offset, limit, start_ts, end_ts)
+        return _preview_canonical(canonical_dir, offset, limit, start_ts, end_ts, timezone=timezone)
+    return _preview_raw(raw_csv, offset, limit, start_ts, end_ts, timezone=timezone)
 
 
 def get_architecture_view(
@@ -693,10 +732,11 @@ def query_timeseries(
     max_points: int = 3000,
     start: str | None = None,
     end: str | None = None,
+    timezone: str | None = None,
 ) -> dict[str, Any]:
     max_points = max(100, min(max_points, 8000))
-    start_ts = _parse_bound(start)
-    end_ts = _parse_bound(end)
+    start_ts = _parse_bound(start, timezone)
+    end_ts = _parse_bound(end, timezone)
     if start_ts is not None and end_ts is not None and start_ts > end_ts:
         start_ts, end_ts = end_ts, start_ts
 
@@ -744,8 +784,8 @@ def query_timeseries(
             "series": [],
             "point_count": 0,
             "note": "No points in the selected date range.",
-            "start": _fmt_bound(start_ts),
-            "end": _fmt_bound(end_ts),
+            "start": _fmt_bound(start_ts, timezone),
+            "end": _fmt_bound(end_ts, timezone),
         }
 
     # Synthetic POA / GHI series for joined weather
@@ -765,7 +805,7 @@ def query_timeseries(
                 "name": SIGNAL_MAP.get(sig, sig),
                 "equipment_id": label,
                 "signal": sig,
-                "timestamps": sub[ts_col].dt.strftime("%Y-%m-%d %H:%M:%S").tolist(),
+                "timestamps": format_timestamp_series_local(sub[ts_col], timezone),
                 "values": pd.to_numeric(sub[sig], errors="coerce").round(4).tolist(),
             }
         )
@@ -816,8 +856,8 @@ def query_timeseries(
     return {
         "series": series_out,
         "point_count": point_count,
-        "start": _fmt_bound(start_ts),
-        "end": _fmt_bound(end_ts),
+        "start": _fmt_bound(start_ts, timezone),
+        "end": _fmt_bound(end_ts, timezone),
     }
 
 
@@ -836,10 +876,15 @@ def export_data_csv_bytes(
     start: str | None = None,
     end: str | None = None,
     max_rows: int = 200_000,
+    timezone: str | None = None,
 ) -> bytes:
-    """CSV export with optional date window (row-capped)."""
-    start_ts = _parse_bound(start)
-    end_ts = _parse_bound(end)
+    """CSV export with optional date window (row-capped).
+
+    User downloads use professional headers and plant-local timestamps when
+    ``timezone`` is provided. Internal canonical storage remains UTC.
+    """
+    start_ts = _parse_bound(start, timezone)
+    end_ts = _parse_bound(end, timezone)
     if start_ts is not None and end_ts is not None and start_ts > end_ts:
         start_ts, end_ts = end_ts, start_ts
     date_filter = start_ts is not None or end_ts is not None
@@ -859,16 +904,21 @@ def export_data_csv_bytes(
             remaining -= len(take)
         if not chunks:
             return b""
-        return pd.concat(chunks, ignore_index=True).to_csv(index=False).encode("utf-8")
+        frame = format_user_facing_frame(
+            pd.concat(chunks, ignore_index=True),
+            timezone=timezone,
+            drop_empty=True,
+        )
+        return frame.to_csv(index=False).encode("utf-8")
 
     if not raw_csv.exists():
         return b""
     header = [str(c) for c in pd.read_csv(raw_csv, nrows=0).columns.tolist()]
     ts_col = _detect_ts_column(header)
     if not date_filter or not ts_col:
-        # Full raw file (capped)
         df = pd.read_csv(raw_csv, nrows=max_rows, low_memory=False)
-        return df.to_csv(index=False).encode("utf-8")
+        frame = format_user_facing_frame(df, timezone=timezone, drop_empty=True)
+        return frame.to_csv(index=False).encode("utf-8")
 
     remaining = max_rows
     chunks: list[pd.DataFrame] = []
@@ -883,9 +933,20 @@ def export_data_csv_bytes(
         remaining -= len(take)
     if not chunks:
         return b""
-    return pd.concat(chunks, ignore_index=True).to_csv(index=False).encode("utf-8")
+    frame = format_user_facing_frame(
+        pd.concat(chunks, ignore_index=True),
+        timezone=timezone,
+        drop_empty=True,
+    )
+    return frame.to_csv(index=False).encode("utf-8")
 
 
-def export_canonical_csv_bytes(canonical_dir: Path, max_rows: int = 100_000) -> bytes:
+def export_canonical_csv_bytes(
+    canonical_dir: Path,
+    max_rows: int = 100_000,
+    timezone: str | None = None,
+) -> bytes:
     """Build a CSV export from canonical partitions (row-capped for safety)."""
-    return export_data_csv_bytes(canonical_dir, Path(), start=None, end=None, max_rows=max_rows)
+    return export_data_csv_bytes(
+        canonical_dir, Path(), start=None, end=None, max_rows=max_rows, timezone=timezone
+    )
