@@ -53,7 +53,42 @@ def test_wide_multi_header_ntpc_icr_inv_ac_dc():
     assert by["DC Power (kW)"] == "0.0"
 
 
+def test_map_metric_dc_current_leaf():
+    assert map_metric("", "DC_CURRENT") == "DC Current (A)"
+    assert map_metric("", "DC Current") == "DC Current (A)"
+    assert map_metric("", "DC Current (A)") == "DC Current (A)"
+
+
+def test_wide_multi_header_ntpc_with_dc_current_zeros():
+    # ICR01 INV1: AC, DC_CURRENT, DC_POWER | ICR01 INV2: AC, DC_CURRENT, DC_POWER
+    rows: list[list[str]] = [[""] * 10 for _ in range(11)]
+    rows[6] = ["DATE AND TIME", "", "ICR01", "", "", "", "ICR01", "", "", ""]
+    rows[7] = ["", "", "INV1", "", "", "", "INV2", "", "", ""]
+    rows[8] = [
+        "",
+        "",
+        "AC_ACTIVE_POWER_kW",
+        "DC_CURRENT",
+        "DC_POWER",
+        "",
+        "AC_ACTIVE_POWER_kW",
+        "DC_CURRENT",
+        "DC_POWER",
+        "",
+    ]
+    rows[9] = ["2026-03-01 07:01:00", "", "3.9", "0", "4.0", "", "3.3", "0", "3.0", ""]
+    rows[10] = ["2026-03-01 07:02:00", "", "3.6", "0", "3.0", "", "3.4", "1.5", "3.0", ""]
+    result = try_wide_multi_header(rows, sheet_name="REPORT")
+    assert result is not None
+    assert "DC Current (A)" in result.report.columns_mapped
+    header = result.rows[0]
+    dc_i = header.index("DC Current (A)")
+    for row in result.rows[1:]:
+        assert row[dc_i] != ""
+
+
 def test_orchestrator_prefers_multi_header_over_single_for_ntpc():
     best = _run_strategies(_ntpc_matrix(), sheet_name="REPORT")
     assert best is not None
     assert best.report.strategy == "wide_multi_header"
+

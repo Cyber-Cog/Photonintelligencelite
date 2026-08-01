@@ -131,6 +131,7 @@ poa_w_m2:
   - irradiance (w/m2)
   - poa irradiance
   - gti
+  - gti w m2
   - plane of array irradiance
   - tilted irradiance
   - irradiance poa
@@ -140,6 +141,12 @@ ghi_w_m2:
   - ghi
   - ghi w m2
   - ghi (w/m2)
+  - ghi main
+  - ghi main w m2
+  - ghi main (w/m2)
+  - ghi ref
+  - ghi ref w m2
+  - ghi ref (w/m2)
   - global horizontal irradiance
   - horizontal irradiance
   - irradiance ghi

@@ -10,11 +10,26 @@ _INVERTER_BLOCK_RE = re.compile(
     r"^\s*(?:INVERTER|INV)\s*[-_]?\s*(\d+)\s*$",
     re.IGNORECASE,
 )
+_WMS_BLOCK_RE = re.compile(
+    r"^\s*(?:WMS|WEATHER(?:\s*STATION)?|METEO|MET(?:EO)?\s*STATION|PLANT(?:\s*WMS)?)\s*$",
+    re.IGNORECASE,
+)
 _TIMESTAMP_LEAF_RE = re.compile(
     r"date\s*(and|&)?\s*time|timestamp|date\s*time|^time$|^date$",
     re.IGNORECASE,
 )
-_METRIC_TOKENS = ("power", "voltage", "current", "temp", "irradiance", "energy")
+_METRIC_TOKENS = (
+    "power",
+    "voltage",
+    "current",
+    "temp",
+    "irradiance",
+    "energy",
+    "ghi",
+    "gti",
+    "poa",
+    "w/m",
+)
 
 
 def cell_to_str(value) -> str:
@@ -43,6 +58,22 @@ def inverter_id_from_label(label: str) -> str | None:
     if not m:
         return None
     return f"INV-{int(m.group(1)):02d}"
+
+
+def wms_id_from_label(label: str) -> str | None:
+    """Return canonical WMS / plant weather equipment id, or None."""
+    raw = (label or "").strip()
+    if not raw:
+        return None
+    if _WMS_BLOCK_RE.match(raw):
+        # Normalize to a stable Explorer equipment id.
+        n = normalize_header(raw)
+        if n.startswith("plant"):
+            return "WMS"
+        if "weather" in n or n.startswith("meteo") or n.startswith("met"):
+            return "WMS"
+        return "WMS"
+    return None
 
 
 def ffill_row(values: list[str]) -> list[str]:
@@ -164,6 +195,9 @@ def map_metric(category: str, leaf: str) -> str | None:
         return "Ambient Temp (C)"
 
     # Irradiance → official pack headers (keep wide→tidy output in sync with SCADA_COLUMNS).
+    # Skip cumulative energy irradiance (kWh/m²) — not instantaneous W/m².
+    if re.search(r"k\s*w\s*h|kwhr|wh\s*/\s*m", leaf_n):
+        return None
     if "ghi" in leaf_n or ("horizontal" in leaf_n and "irradiance" in leaf_n):
         return "GHI (W/m2)"
     if any(tok in leaf_n for tok in ("irradiance", "poa", "gti")) or "irradiance" in cat:

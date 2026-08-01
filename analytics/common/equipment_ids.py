@@ -48,6 +48,12 @@ def derive_level(equipment_id) -> str | None:
     eid = _as_clean_id(equipment_id)
     if eid is None:
         return None
+    el = eid.lower()
+    # Plant / WMS weather station ids (Nokhra MCR-WMS block, standalone WMS rows).
+    if el in {"wms", "plant", "plant-wms", "mcr-wms", "weather", "weather-station", "meteo"}:
+        return "wms"
+    if el.startswith("wms") or el.endswith("-wms") or "weather" in el:
+        return "wms"
     if _STRING_STRICT.match(eid) or _STRING_STANDALONE.match(eid) or _STRING_LOOSE.match(eid):
         return "string"
     if _SCB_STRICT.match(eid) or _SCB_LOOSE.search(eid) or _SMB_STANDALONE.match(eid):
