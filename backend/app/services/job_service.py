@@ -22,6 +22,7 @@ from backend.app.database import SessionLocal
 from backend.app.models import Job
 from backend.app.services import pipeline
 from backend.app.services.storage import JobPaths, delete_job_dir, job_paths
+from backend.app.services.user_errors import MSG_PROCESS_FAILED, user_facing_message
 
 logger = logging.getLogger("pic_lite.job_service")
 
@@ -370,7 +371,8 @@ def process_job(job_id: str, settings: Settings) -> None:
             logger.exception("job=%s processing failed", job_id)
             job = db.get(Job, job_id)
             if job:
-                job.error_summary = str(exc)[:500]
+                safe = user_facing_message(exc, fallback=MSG_PROCESS_FAILED)
+                job.error_summary = safe[:500]
                 _set_state(db, job, JobState.FAILED, "This job could not be completed. See error details.")
                 try:
                     from backend.app.auth.audit import record_audit
@@ -380,7 +382,7 @@ def process_job(job_id: str, settings: Settings) -> None:
                         action="analysis.fail",
                         user_id=job.user_id,
                         job_id=job_id,
-                        detail={"error": str(exc)[:200]},
+                        detail={"error": safe[:200]},
                     )
                 except Exception:  # noqa: BLE001
                     logger.exception("audit fail for job=%s", job_id)

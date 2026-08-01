@@ -5,6 +5,7 @@ backend/app/services/validation_service.py). See docs/PRD.md §7.3, §7.5, §7.6
 """
 from __future__ import annotations
 
+import logging
 import shutil
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
@@ -63,6 +64,13 @@ from backend.app.services.mapping_service import (
     timestamp_column,
 )
 from backend.app.services.storage import job_paths
+from backend.app.services.user_errors import (
+    MSG_MISSING_RAW_UPLOAD,
+    MSG_VALIDATE_FAILED,
+    user_facing_message,
+)
+
+logger = logging.getLogger("pic_lite.intake")
 
 router = APIRouter(prefix="/api", tags=["intake"])
 
@@ -260,7 +268,11 @@ def submit_mapping(
                 detail={"state": job.state},
             )
         except Exception as exc:  # noqa: BLE001
-            raise HTTPException(400, f"Could not validate mapped data: {exc}") from exc
+            logger.exception("validation after mapping failed for job=%s", job.id)
+            raise HTTPException(
+                400,
+                user_facing_message(exc, fallback=MSG_VALIDATE_FAILED),
+            ) from exc
     return {"job_id": job.id, "state": job.state, "requires_reanalysis": revised}
 
 
@@ -315,7 +327,11 @@ def submit_plant_config(
                 detail={"state": job.state},
             )
         except Exception as exc:  # noqa: BLE001
-            raise HTTPException(400, f"Could not validate mapped data: {exc}") from exc
+            logger.exception("validation after plant-config failed for job=%s", job.id)
+            raise HTTPException(
+                400,
+                user_facing_message(exc, fallback=MSG_VALIDATE_FAILED),
+            ) from exc
     return {"job_id": job.id, "state": job.state, "requires_reanalysis": revised}
 
 
@@ -421,9 +437,9 @@ def detect_equipment(
     """Peek at mapped equipment ID columns and return inverter → SCB → string counts."""
     job = _get_job_or_404(db, payload.job_id, user)
     paths = job_paths(settings.job_root_path, job.id)
-    csv_path = paths.raw_dir / "input.csv"
-    if not csv_path.exists():
-        raise HTTPException(404, "Uploaded file not found for this job.")
+    csv_path = validation_service.resolve_raw_input_csv(paths)
+    if csv_path is None:
+        raise HTTPException(404, MSG_MISSING_RAW_UPLOAD)
 
     structure = infer_from_csv(csv_path, payload.column_to_canonical)
     api = structure.to_api_dict()
@@ -452,10 +468,10 @@ def get_setup_context(
     """Reload Setup without re-uploading — used after validation recovery / page reload."""
     job = _get_job_or_404(db, job_id, user)
     paths = job_paths(settings.job_root_path, job.id)
-    csv_path = paths.raw_dir / "input.csv"
+    csv_path = validation_service.resolve_raw_input_csv(paths)
 
     # Excel still converting in background — UI polls until state advances.
-    if job.state == JobState.PARSING.value and not csv_path.exists():
+    if job.state == JobState.PARSING.value and csv_path is None:
         return SetupContextResponse(
             job_id=job.id,
             state=job.state,
@@ -468,13 +484,16 @@ def get_setup_context(
             pack_match_ratio=0.0,
         )
 
-    if not csv_path.exists():
+    if csv_path is None:
         if job.state == JobState.FAILED.value:
             raise HTTPException(
                 404,
-                job.error_summary or "Upload parsing failed. Please upload again.",
+                user_facing_message(
+                    job.error_summary or MSG_MISSING_RAW_UPLOAD,
+                    fallback=MSG_MISSING_RAW_UPLOAD,
+                ),
             )
-        raise HTTPException(404, "Uploaded file not found for this job. Please upload again.")
+        raise HTTPException(404, MSG_MISSING_RAW_UPLOAD)
 
     columns = read_header(csv_path)
     pack_match, pack_ratio = detect_pack_match(columns)
@@ -604,12 +623,19 @@ def retry_validation(
             "Fix column mapping instead.",
         )
 
-    validation_service.run_validation_stage(
-        db,
-        job,
-        settings,
-        drop_unparseable_timestamps=payload.drop_unparseable_timestamps,
-    )
+    try:
+        validation_service.run_validation_stage(
+            db,
+            job,
+            settings,
+            drop_unparseable_timestamps=payload.drop_unparseable_timestamps,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("retry-validation failed for job=%s", job.id)
+        raise HTTPException(
+            400,
+            user_facing_message(exc, fallback=MSG_VALIDATE_FAILED),
+        ) from exc
     record_audit(
         db,
         action="job.validation",
@@ -645,9 +671,16 @@ def acknowledge_warnings(
             )
         if not validation_service.ready_for_validation(job):
             raise HTTPException(400, "Mapping and plant config are required.")
-        validation_service.run_validation_stage(
-            db, job, settings, drop_unparseable_timestamps=True
-        )
+        try:
+            validation_service.run_validation_stage(
+                db, job, settings, drop_unparseable_timestamps=True
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("validation during acknowledge failed for job=%s", job.id)
+            raise HTTPException(
+                400,
+                user_facing_message(exc, fallback=MSG_VALIDATE_FAILED),
+            ) from exc
         db.refresh(job)
         if job.state != JobState.NORMALIZING.value:
             raise HTTPException(409, "Validation still has blockers after dropping unparseable rows.")

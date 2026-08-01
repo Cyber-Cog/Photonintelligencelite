@@ -39,6 +39,7 @@ services:
       # Keep completed job results for 7 days (not 60 min). Override in dashboard if needed.
       # Note: JOB_ROOT on free tier is ephemeral — a service restart can still wipe files
       # before TTL; Neon job rows remain. Prefer a persistent disk when upgrading plans.
+      # Missing raw files are detected and return a re-upload message (no path leak).
       - key: REPORT_TTL_MINUTES
         value: "10080"
 

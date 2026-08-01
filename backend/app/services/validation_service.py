@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import logging
 import shutil
+from pathlib import Path
 
 from sqlalchemy.orm import Session
 
@@ -20,6 +21,7 @@ from backend.app.config import Settings
 from backend.app.models import Job
 from backend.app.services import pipeline
 from backend.app.services.storage import job_paths
+from backend.app.services.user_errors import MSG_MISSING_RAW_UPLOAD, MissingRawUploadError
 
 logger = logging.getLogger("pic_lite.validation_service")
 
@@ -163,6 +165,60 @@ def _clear_canonical(paths) -> None:
     paths.canonical_dir.mkdir(parents=True, exist_ok=True)
 
 
+def resolve_raw_input_csv(paths) -> Path | None:
+    """Return the job's SCADA CSV if present (``input.csv``, else sole ``part_*.csv``)."""
+    primary = paths.raw_dir / "input.csv"
+    if primary.is_file():
+        return primary
+    parts = sorted(p for p in paths.raw_dir.glob("part_*.csv") if p.is_file())
+    if len(parts) == 1:
+        return parts[0]
+    return None
+
+
+def _mark_missing_raw_upload(db: Session, job: Job) -> None:
+    """Persist a recoverable FAILED state when disk artifacts vanished under JOB_ROOT."""
+    msg = MSG_MISSING_RAW_UPLOAD
+    job.state = JobState.FAILED.value
+    job.error_summary = msg
+    job.progress_message = msg
+    job.validation_summary_json = {
+        "row_count": 0,
+        "column_count": 0,
+        "blockers": [
+            {
+                "code": "missing_raw_upload",
+                "severity": "blocker",
+                "message": msg,
+                "likely_cause": (
+                    "Temporary upload files were removed (service restart, idle disk cleanup, "
+                    "or multi-instance storage). Job metadata in the database remains."
+                ),
+                "blocks_analysis": True,
+                "affected_rows": 0,
+                "affected_columns": [],
+                "sample_values": [],
+                "remediation": "Re-upload the SCADA file for this job, or start a new upload.",
+            }
+        ],
+        "warnings": [],
+        "detected_interval_minutes": None,
+        "is_irregular_interval": False,
+        "interval_notes": [],
+        "module_readiness": [],
+        "timestamp_column": (job.mapping_json or {}).get("timestamp_column"),
+        "timestamp_parse_ok": 0,
+        "timestamp_parse_fail": 0,
+        "can_proceed_with_row_drops": False,
+        "proceed_with_drops_min_ok_ratio": PROCEED_WITH_DROPS_MIN_OK_RATIO,
+        "recovery_actions": ["replace_upload", "start_over"],
+        "rows_that_would_be_dropped": 0,
+        "rows_that_would_be_kept": 0,
+    }
+    db.add(job)
+    db.commit()
+
+
 def run_validation_stage(
     db: Session,
     job: Job,
@@ -176,6 +232,16 @@ def run_validation_stage(
     db.commit()
 
     paths = job_paths(settings.job_root_path, job.id)
+    csv_path = resolve_raw_input_csv(paths)
+    if csv_path is None:
+        logger.warning(
+            "missing raw upload for job=%s under %s (ephemeral JOB_ROOT or cleanup)",
+            job.id,
+            paths.raw_dir,
+        )
+        _mark_missing_raw_upload(db, job)
+        raise MissingRawUploadError()
+
     _clear_canonical(paths)
 
     mapping_cfg = job.mapping_json
@@ -190,7 +256,7 @@ def run_validation_stage(
     plant = build_plant_config(plant_cfg or {})
 
     inputs = pipeline.PipelineInputs(
-        csv_path=paths.raw_dir / "input.csv",
+        csv_path=csv_path,
         job_paths=paths,
         job_id=job.id,
         mapping=mapping,
@@ -199,10 +265,21 @@ def run_validation_stage(
         threshold_overrides=plant_cfg.get("threshold_overrides", {}),
     )
 
-    report, row_count = pipeline.parse_validate_standardize(
-        inputs,
-        drop_unparseable_timestamps=drop_unparseable_timestamps,
-    )
+    try:
+        report, row_count = pipeline.parse_validate_standardize(
+            inputs,
+            drop_unparseable_timestamps=drop_unparseable_timestamps,
+        )
+    except FileNotFoundError as exc:
+        logger.warning("raw upload vanished mid-validation for job=%s: %s", job.id, exc)
+        _mark_missing_raw_upload(db, job)
+        raise MissingRawUploadError() from exc
+    except OSError as exc:
+        if getattr(exc, "errno", None) == 2:
+            logger.warning("raw upload missing (errno 2) for job=%s: %s", job.id, exc)
+            _mark_missing_raw_upload(db, job)
+            raise MissingRawUploadError() from exc
+        raise
 
     # Architecture / plant-detail consistency (OI-style capacity + rating checks).
     plant_dict = plant_cfg.get("plant") or {}
